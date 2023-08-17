@@ -40,6 +40,14 @@ def create_object(adata, object_type="augur"):
     return objects
 
 
+def create_object_scanpy(file):
+    """Create object from scanpy."""
+    adata = sc.read_10x_mtx(file,  # the directory with the `.mtx` file
+    var_names='gene_symbols',                # use gene symbols for the variable names (variables-axis index)
+    cache=True)        
+    return sc.read(file)
+
+
 def normalize(adata):
     """Perform normalization on RNA and/or protein."""
     if "rna" in adata:

@@ -13,7 +13,7 @@ import warnings
 import pandas as pd
 import numpy as np
 
-# strip_strings = [".protospacer_calls", ".genes", ".matrix", ".cells", "MOLM13"]
+FILE_STRUCTURE = ["matrix", "cells", "genes"]
 
 
 def load_data(file):
@@ -83,6 +83,7 @@ def process_paths(files=None, directory_in=None):
 
 def create_subdirectories(files=None, directory_in=None, strip_strings=None, 
                           # sep="_",
+                          dir_strip = True,
                           unzip=False,
                           directory_out=None, overwrite=False):
     
@@ -99,9 +100,6 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
     files_out = dict(zip(paths, [os.path.basename(f) for f in paths]))
     if not os.path.isdir(directory_out):
         os.makedirs(directory_out)  # make output directory if need
-    elif overwrite is False:
-        raise Warning(f"Directory {directory_out} already exists.")
-        # check if any output files already in existing directory_out
             
     # File stems (without extensions, by person/sample, etc.)
     stems = dict(file=dict(zip(paths, [os.path.splitext(os.path.basename(
@@ -131,7 +129,12 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
         if not os.path.exists(d):
             os.mkdir(d)
     for f in files_out:
-        new_path = os.path.join(dir_sub[f], files_out[f])
+        if dir_strip is True:
+            new_path = os.path.join(dir_sub[f], re.sub("^_", "", re.sub(
+                "^[.]", "", re.sub(
+                os.path.basename(dir_sub[f]), "", files_out[f]))))
+        else:
+            new_path = os.path.join(dir_sub[f], files_out[f])
         if overwrite is False:
             new_path = name_path_iterative(new_path)  # new path
         os.system(f"{'cp' if overwrite is False else 'mv'} {f} {new_path}")
