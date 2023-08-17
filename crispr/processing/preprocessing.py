@@ -38,3 +38,11 @@ def create_object(adata, object_type="augur"):
             raise Warning(f"""object_type {t} invalid or not yet implemented. 
                           Options: {OPTS_OBJECT_TYPE}.""")
     return objects
+
+
+def normalize(adata):
+    """Perform normalization on RNA and/or protein."""
+    if "rna" in adata:
+        sc.pp.normalize_total(adata['rna'])
+        sc.pp.log1p(adata['rna'])
+        sc.pp.highly_variable_genes(adata['rna'], subset=True)

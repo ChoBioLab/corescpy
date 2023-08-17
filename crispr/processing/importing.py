@@ -13,8 +13,7 @@ import warnings
 import pandas as pd
 import numpy as np
 
-strip_strings = [".protospacer_calls", ".genes", ".matrix", ".cells"]
-strip_strings = [".protospacer_calls", ".genes", ".matrix", ".cells", "MOLM13"]
+# strip_strings = [".protospacer_calls", ".genes", ".matrix", ".cells", "MOLM13"]
 
 
 def load_data(file):
@@ -82,7 +81,9 @@ def process_paths(files=None, directory_in=None):
     return files
 
 
-def create_subdirectories(files=None, directory_in=None, strip_strings=None, sep="_",
+def create_subdirectories(files=None, directory_in=None, strip_strings=None, 
+                          # sep="_",
+                          unzip=False,
                           directory_out=None, overwrite=False):
     
     # Input paths & output directory
@@ -101,20 +102,19 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None, sep
     elif overwrite is False:
         raise Warning(f"Directory {directory_out} already exists.")
         # check if any output files already in existing directory_out
-        
-    # Strip any junk strings from unconventional file naming
-    if strip_strings:  
-        if isinstance(strip_strings, str): 
-            strip_strings = [strip_strings]  # ensure list if only 1
-        for i in strip_strings:
-            files_out = dict(zip(files_out, [re.sub(
-                i, "", files_out[f]) for f in files_out]))  # rm strs if need
-    # DO NOT MODIFY "paths_out" AFTER THIS POINT
             
     # File stems (without extensions, by person/sample, etc.)
     stems = dict(file=dict(zip(paths, [os.path.splitext(os.path.basename(
         files_out[f] if f[-3:] != ".gz" else files_out[f][:-3]))[0] 
                        for f in files_out])))  # w/o extensions
+    
+    # Strip any junk strings from unconventional file naming
+    if strip_strings:  
+        if isinstance(strip_strings, str): 
+            strip_strings = [strip_strings]  # ensure list if only 1
+        for i in strip_strings:
+            stems["file"] = dict(zip(stems["file"], [re.sub(
+                i, "", stems["file"][f]) for f in stems["file"]]))  # rm strs if need
     # ids = pd.unique([stems["file"][f] for f in stems["file"]])
     # non_redundant_parts = pd.DataFrame(
     #     [os.path.basename(f).split(sep) for f in stems["file"].values()],
@@ -125,7 +125,8 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None, sep
     #             list(y.dropna())), axis=1)
     
     # Create sub-directories & move or copy files
-    dir_sub = dict(zip(files_out, [os.path.join(directory_out, stems["file"][i]) for i in files_out]))
+    dir_sub = dict(zip(files_out, [os.path.join(directory_out, stems["file"][i]) 
+                                   for i in files_out]))
     for d in pd.unique(list(dir_sub.values())):
         if not os.path.exists(d):
             os.mkdir(d)
@@ -134,3 +135,5 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None, sep
         if overwrite is False:
             new_path = name_path_iterative(new_path)  # new path
         os.system(f"{'cp' if overwrite is False else 'mv'} {f} {new_path}")
+        if os.path.splitext(new_path)[-1] == ".gz" and unzip is True:
+            os.system(f"gunzip {new_path}")  # unzip if needed
