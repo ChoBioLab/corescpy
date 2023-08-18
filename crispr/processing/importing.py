@@ -149,11 +149,8 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
             new_path = os.path.join(dir_sub[f], files_out[f])
         if overwrite is False:
             new_path = name_path_iterative(new_path)  # new path
-<<<<<<< HEAD
         new_path = re.sub("cells.tsv", "barcodes.tsv", re.sub(
             "genes.tsv", "features.tsv", new_path))  # fix unconventional naming
-=======
->>>>>>> 993aaa7fcc599d59dab0af0548f2b36d1b220ac3
         os.system(f"{'cp' if overwrite is False else 'mv'} {f} {new_path}")
         if os.path.splitext(new_path)[-1] == ".gz" and unzip is True:
             os.system(f"gunzip {new_path}")  # unzip if needed
