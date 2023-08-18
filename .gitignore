@@ -1,3 +1,7 @@
+# Data
+data/
+cache/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -128,9 +132,10 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
+# Project settings
 .spyderproject
 .spyproject
+.vscode/
 
 # Rope project settings
 .ropeproject
