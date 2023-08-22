@@ -23,7 +23,7 @@ def cluster(adata, assay=None, neighbor_metric="cosine"):
         adata_pert = adata[assay] if assay else adata.copy()
         adata_pert.X = adata_pert.layers['X_pert']
         sc.pl.umap(adata[assay] if assay else adata, 
-                color=["replicate", "Phase", "perturbation"])
+                   color=["replicate", "Phase", "perturbation"])
     except Exception:
         pass
 
@@ -44,6 +44,8 @@ def calculate_targeting_efficiency(adata, assay=None, guide_rna_column="NT"):
     return fig
 
 
-def calculate_perturbations():
+def calculate_perturbations(adata, target_gene, assay=None, color="green"):
     """Calculate perturbation scores."""
-    pt.pl.ms.perturbscore(adata = mdata['rna'], labels='gene_target', target_gene='IFNGR2', color = 'orange')
+    pt.pl.ms.perturbscore(adata=adata[assay] if assay else adata, 
+                          labels='gene_target', target_gene=target_gene, 
+                          color=color)
