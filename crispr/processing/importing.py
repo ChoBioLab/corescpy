@@ -16,12 +16,6 @@ import numpy as np
 FILE_STRUCTURE = ["matrix", "cells", "genes"]
 
 
-def load_data(file):
-    """Load CRISPR data."""
-    data = pd.read_csv(file)
-    return data
-
-
 def name_path_iterative(path):
     """Check for existence of path and, if needed, make path_# 
     to avoid overwriting.
