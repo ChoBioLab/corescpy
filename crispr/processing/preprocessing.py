@@ -10,6 +10,7 @@ Preprocessing CRISPR experiment data.
 import os
 import scanpy as sc
 import pertpy as pt
+import scipy
 import pandas as pd
 import numpy as np
 
@@ -30,7 +31,7 @@ regress_out_vars = ['total_counts', 'pct_counts_mt']
 def create_object(adata, object_type="augur"):
     """Create object(s) from adata."""
     
-    # Check validity of object_type argument & modify as needed
+    # Check Validity of object_type Argument & Modify as Needed
     if isinstance(object_type, str):
         object_type = [object_type]
     if isinstance(object_type, (list, tuple, np.ndarray, set)):
@@ -41,7 +42,7 @@ def create_object(adata, object_type="augur"):
         raise ValueError("object_type must be a string or list of strings.")
     object_type = [t.lower() for t in object_type]  # convert to lowercase
     
-    # Convert/create objects
+    # Convert/Create Objects
     objects = [np.nan] * len(object_type)  # initialize empty list for output
     for i, t in enumerate(object_type):  # iterate object_types
         if t in OPTS_OBJECT_TYPE:  # if valid object type option, convert
@@ -75,6 +76,10 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
     sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
                                 subset=True)  # highly variable genes
+    try:
+        mu.prot.pp.clr(adata["adt"])
+    except Exception as err:
+        warnings.warn(f"ADT normalization failed: {err}.")
 
     
     # Filtering
@@ -114,6 +119,21 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
             sc.pp.scale(adata[assay] if assay else adata)  # scale
         else:  # if scale provided as an integer...
             sc.pp.scale(adata[assay] if assay else adata, 
-                        max_value=scale)  # ...also clip values above "scale" SDs
+                        max_value=scale)  # ...also clip values > "scale" SDs
     
     return adata
+
+def assign_guide_rna(adata, assignment_threshold=5, plot=False):
+    """Assign guide RNAs to cells (based on pertpy tutorial notebook)."""
+    gdo = adata.mod["gdo"]
+    gdo.layers["counts"] = gdo.X.copy()  # save original counts
+    sc.pp.log1p(gdo)  # log-transform data
+    if plot is True:
+        pt.pl.guide.heatmap(gdo, key_to_save_order="plot_order")  # heatmap
+    g_a = pt.pp.GuideAssignment()  # guide assignment
+    g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
+                            layer="counts")  # assignment thresholding
+    g_a.assign_to_max_guide(gdo, assignment_threshold=assignment_threshold, 
+                            layer="counts")  # assignment thresholding
+    print(gdo.obs["assigned_guide"])
+    return gdo
