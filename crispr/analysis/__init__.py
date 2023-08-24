@@ -1,2 +1,6 @@
 # from ._processing import preprocessing as pp
-# from ._clustering import cluster  # noqa: N813
+from .perturbations import (calculate_targeting_efficiency, 
+                            calculate_perturbations, 
+                            perform_augur, 
+                            perform_differential_prioritization)
+from .clustering import cluster

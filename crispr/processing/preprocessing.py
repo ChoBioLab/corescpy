@@ -64,6 +64,7 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
     """Create object from scanpy."""
     
     # Load
+    print("\n\n<<< LOADING >>>")
     # extension = os.path.splitext(file)[1]
     if os.path.isdir(file):  # if directory, assume 10x format
         adata = sc.read_10x_mtx(file, var_names='gene_symbols', cache=True)
@@ -73,6 +74,7 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
     adata.var_names_make_unique() 
     
     # Normalize
+    print("\n\n<<< NORMALIZING >>>")
     sc.pp.normalize_total(adata[assay] if assay else adata, 
                           target_sum=target_sum)  # count-normalize
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
@@ -85,6 +87,7 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
 
     
     # Filtering
+    print("\n\n<<< FILTERING >>>")
     sc.pp.filter_cells(adata[assay] if assay else adata, min_genes=min_genes)
     sc.pp.filter_genes(adata[assay] if assay else adata, min_cells=min_cells)
     
@@ -107,16 +110,19 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
         
     # Variable Genes
     if hvg_kws is not None:
+        print("\n\n<<< DETECTING VARIABLE GENES >>>")
         sc.pp.highly_variable_genes(adata, **hvg_kws)  # highly variable genes 
         adata.raw = adata  # freeze normalized & filtered adata
         adata = adata[:, adata.var.highly_variable]  # filter by HVGs
     
     # Regress Confounds
     if regress_out: 
+        print("\n\n<<< REGRESSING OUT CONFOUNDS >>>")
         sc.pp.regress_out(adata[assay] if assay else adata, regress_out)
     
     # Scaling Genes
     if scale is not None:
+        print("\n\n<<< SCALING >>>")
         if scale is True:  # if True, just scale to unit variance
             sc.pp.scale(adata[assay] if assay else adata)  # scale
         else:  # if scale provided as an integer...

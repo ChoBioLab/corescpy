@@ -1,4 +1,5 @@
 import pertpy as pt
+import scanpy as sc
 import numpy as np
 
 
@@ -119,9 +120,8 @@ def perform_augur(adata, classifier="random_forest_classifier",
         if plot is True:  # plotting
             figs["lollipop"] = pt.pl.ag.lollipop(results)
             # TODO: UMAP?
-            # sc.pp.neighbors(adata, use_rep="X")
-            # sc.tl.umap(adata)
-            # figs["umap"] = sc.pl.umap(adata=data, color="augur_score")
+            if "umap" in adata.uns:
+                figs["umap"] = sc.pl.umap(adata=data, color="augur_score")
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # feature importances
     return data, results, figs
