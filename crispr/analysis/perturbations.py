@@ -65,7 +65,7 @@ def perform_augur(adata, classifier="random_forest_classifier",
                   label_condition=None, label_treatment=None, 
                   seed=1618,
                   plot=True, **kws_augur_predict):
-    """_summary_
+    """Calculates AUC using Augur and a specified classifier.
 
     Args:
         adata (AnnData): Scanpy object.
