@@ -10,6 +10,8 @@ Preprocessing CRISPR experiment data.
 import os
 import scanpy as sc
 import pertpy as pt
+import muon
+import warnings
 import scipy
 import pandas as pd
 import numpy as np
@@ -77,7 +79,7 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
     sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
                                 subset=True)  # highly variable genes
     try:
-        mu.prot.pp.clr(adata["adt"])
+        muon.prot.pp.clr(adata["adt"])
     except Exception as err:
         warnings.warn(f"ADT normalization failed: {err}.")
 
