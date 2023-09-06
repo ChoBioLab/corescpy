@@ -1,6 +1,7 @@
 import pertpy as pt
+import muon as mu
 import scanpy as sc
-import numpy as np
+import pandas as pd
 
 
 def calculate_targeting_efficiency(adata, assay=None, guide_rna_column="NT"):
@@ -18,23 +19,36 @@ def calculate_targeting_efficiency(adata, assay=None, guide_rna_column="NT"):
     figs.update({"barplot": pt.pl.ms.barplot(adata[assay] if assay else adata, 
                             guide_rna_column=guide_rna_column)})
     return figs
+    
+    
+def perform_mixscape(adata, label_perturbation,
+                     label_control="NT",
+                     perturbation_type="KO",
+                     split_by=None,
+                     labels_target_genes="gene_target", assay=None, 
+                     layer="X_pert", min_de_genes=5, 
+                     plot=True, **kwargs):
+    figs = {}
+    mix = pt.tl.Mixscape()
+    mix.perturbation_signature(
+        adata[assay] if assay else adata, label_perturbation, label_control, split_by)
+    adata_pert = adata[assay].copy() if assay else adata.copy()
+    adata_pert.X = adata_pert.layers['X_pert']
+    mix.mixscape(adata=adata[assay] if assay else adata, 
+                 labels=labels_target_genes, control=label_control, 
+                 layer=layer, perturbation_type=perturbation_type,
+                 min_de_genes=min_de_genes, **kwargs)
+    mix.lda(adata=adata[assay] if assay else adata, labels=labels_target_genes, 
+            layer=layer)  # linear discriminant analysis (LDA)
+    if plot is True:
+        figs[""] = pt.pl.ms.barplot(adata[assay] if assay else adata, 
+                                    guide_rna_column='NT')
 
 
 def calculate_perturbations(adata, target_gene, target_gene_idents, 
-                            assay=None, control="NT", 
+                            assay=None, label_control="NT", 
                             color="green", plot=True):
     """Calculate perturbation scores (from Pertpy Mixscape tutorial)."""
-    
-    # Identify Cells without Detectible Pertubations
-    mix = pt.tl.Mixscape()  # mixscape object
-    mix.perturbation_signature(adata[assay] if assay else adata, 
-                               "perturbation", "NT", "replicate")  # signatures
-    mix.mixscape(adata=adata[assay] if assay else adata, control=control, 
-                 labels="gene_target", layer="X_pert")  # mixscape routine
-    mix.lda(adata=adata[assay] if assay else adata, labels="gene_target", 
-            layer="X_pert")  # linear discriminant analysis (LDA)
-    
-    # Cell Perturbation Scores
     figs = {}
     fig_ps = pt.pl.ms.perturbscore(adata=adata[assay] if assay else adata, 
                                    labels='gene_target', 
@@ -50,7 +64,8 @@ def calculate_perturbations(adata, target_gene, target_gene_idents,
         fig_dehm = pt.pl.ms.heatmap(adata=adata[assay] if assay else adata, 
                                     labels="gene_target", 
                                     target_gene=target_gene,
-                                    layer="X_pert", control=control)  # plot DE
+                                    layer="X_pert", 
+                                    control=label_control)  # plot DE
         figs.update({"DE_heatmap": fig_dehm})
         fig_lda = pt.pl.ms.lda(
             adata=adata[assay] if assay else adata)  # plot LDA
@@ -58,12 +73,12 @@ def calculate_perturbations(adata, target_gene, target_gene_idents,
     if plot is True:
         return figs
     
-    
+
 def perform_augur(adata, classifier="random_forest_classifier", 
                   augur_mode="default", subsample_size=20, n_threads=4, 
                   select_variance_features=False, 
                   label_col="label_col", label_cell_type="cell_type_col",
-                  label_condition=None, label_treatment=None, 
+                  label_condition=None, treatment=None, 
                   seed=1618,
                   plot=True, **kws_augur_predict):
     """Calculates AUC using Augur and a specified classifier.
@@ -80,7 +95,7 @@ def perform_augur(adata, classifier="random_forest_classifier",
         label_col (str, optional): _description_. Defaults to "label_col".
         label_cell_type (str, optional): Column name for cell type. Defaults to "cell_type_col".
         label_condition (str, optional): Column name for experimental condition. Defaults to None.
-        label_treatment (str, optional): Name of value within label_condition. Defaults to None.
+        treatment (str, optional): Name of value within label_condition. Defaults to None.
         seed (int, optional): Random state (for reproducibility). Defaults to 1618.
         plot (bool, optional): Plots? Defaults to True.
         kws_augur_predict (keywords, optional): Optional keyword arguments to pass to Augur predict.
@@ -107,7 +122,7 @@ def perform_augur(adata, classifier="random_forest_classifier",
         ag_rfc = pt.tl.Augur(classifier)
         loaded_data = ag_rfc.load(
             adata, condition_label=label_condition, 
-            treatment_label=label_treatment,
+            treatment_label=treatment,
             cell_type_col=label_cell_type,
             label_col=label_col
             )  # add dummy variables, rename cell type & label columns

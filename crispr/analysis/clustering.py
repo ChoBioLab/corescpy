@@ -22,7 +22,7 @@ def cluster(adata, assay=None, plot=True, colors=None,
     figs = {}  # for figures
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
-            kws_pca, kws_neighbors, kws_umap, kws_cluster]]c
+            kws_pca, kws_neighbors, kws_umap, kws_cluster]]
     if plot is True:
         try:
             figs["highest_counts_per_cell"] = sc.pl.highest_expr_genes(
@@ -33,7 +33,7 @@ def cluster(adata, assay=None, plot=True, colors=None,
     if len(kws_pca) > 0:
         print(kws_pca)
     sc.pp.pca(adata[assay] if assay else adata)
-    print("\n\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>")
+    print("\n\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n\n")
     if len(kws_neighbors) > 0:
         print(kws_neighbors)
     sc.pp.neighbors(adata[assay] if assay else adata, 
@@ -54,7 +54,7 @@ def cluster(adata, assay=None, plot=True, colors=None,
         sc.tl.louvain(adata[assay] if assay else adata, **kws_cluster)
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
-    print(f"\n\n<<< CREATING UMAP PLOTS >>>")
+    print(f"\n\n<<< CREATING UMAP PLOTS >>>\n\n")
     if plot is True:
         try:
             figs["pca_variance_ratio"] = sc.pl.pca_variance_ratio(
@@ -76,19 +76,13 @@ def cluster(adata, assay=None, plot=True, colors=None,
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
         return figs
     return figs
-   
-
-    # try:
-    #     adata_pert = adata[assay] if assay else adata.copy()
-    #     adata_pert.X = adata_pert.layers['X_pert']
-    # except Exception:
-    #     pass
 
 
 def find_markers(adata, assay=None, plot=True, n_genes=25, method="wilcoxon"):
+    """Find cluster gene markers."""
     figs = {}
     sc.tl.rank_genes_groups(adata, 'leiden', method=method)
     if plot is True:
         figs["marker_rankings"] = sc.pl.rank_genes_groups(
             adata, n_genes=n_genes, sharey=False)
-    return adata.uns['rank_genes_groups']
+    return adata.uns['rank_genes_groups'], figs
