@@ -1,3 +1,3 @@
-from .preprocessing import (create_object, 
-                            create_object_scanpy,
+from .preprocessing import (create_object,
+                            process_data,
                             assign_guide_rna)

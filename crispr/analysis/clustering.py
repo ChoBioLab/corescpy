@@ -29,16 +29,16 @@ def cluster(adata, assay=None, plot=True, colors=None,
                 adata, n_top=20)
         except Exception as err:
             warnings.warn(f"Error plotting highest counts per cell: {err}")
-    print("\n\n\n<<< PERFORMING PCA >>>\n\n")
+    print("\n\n<<< PERFORMING PCA >>>")
     if len(kws_pca) > 0:
         print(kws_pca)
     sc.pp.pca(adata[assay] if assay else adata)
-    print("\n\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n\n")
+    print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>")
     if len(kws_neighbors) > 0:
         print(kws_neighbors)
     sc.pp.neighbors(adata[assay] if assay else adata, 
                     **kws_neighbors)
-    print(f"\n\n\n<<< EMBEDDING WITH UMAP >>>\n\n")
+    print(f"\n\n<<< EMBEDDING WITH UMAP >>>")
     if len(kws_umap) > 0:
         print(kws_umap)
     if paga is True:
@@ -47,14 +47,14 @@ def cluster(adata, assay=None, plot=True, colors=None,
         sc.tl.umap(adata, init_pos='paga', **kws_umap)
     else:
         sc.tl.umap(adata[assay] if assay else adata, **kws_umap)
-    print(f"\n\n\n<<< CLUSTERING using {method_cluster.upper()} METHOD >>>\n\n")
+    print(f"\n\n<<< CLUSTERING using {method_cluster.upper()} METHOD >>>")
     if str(method_cluster).lower() == "leiden":
         sc.tl.leiden(adata[assay] if assay else adata, **kws_cluster)  # leiden
     elif str(method_cluster).lower() == "leiden":  # louvain
         sc.tl.louvain(adata[assay] if assay else adata, **kws_cluster)
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
-    print(f"\n\n<<< CREATING UMAP PLOTS >>>\n\n")
+    print(f"\n\n<<< CREATING UMAP PLOTS >>>")
     if plot is True:
         try:
             figs["pca_variance_ratio"] = sc.pl.pca_variance_ratio(

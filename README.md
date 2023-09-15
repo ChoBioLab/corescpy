@@ -1,7 +1,9 @@
 # CRISPR Pipeline
 
 Developer: Elizabeth Aslinger (easlinger)
-Correspondance: elizabeth.aslinger@aya.yale.edu
+
+Correspondence: elizabeth.aslinger@aya.yale.edu
+
 [Jira Epic](https://mssm-ipm.atlassian.net/browse/CHOLAB-676)
 
 ---

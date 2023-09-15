@@ -2,79 +2,135 @@ import pertpy as pt
 import muon as mu
 import scanpy as sc
 import pandas as pd
-
-
-def calculate_targeting_efficiency(adata, assay=None, guide_rna_column="NT"):
-    """_summary_
-
-    Args:
-        adata (_type_): _description_
-        assay (_type_, optional): _description_. Defaults to None.
-        guide_rna_column (str, optional): _description_. Defaults to "NT".
-
-    Returns:
-        _type_: _description_
-    """
-    figs = {}  # for figures
-    figs.update({"barplot": pt.pl.ms.barplot(adata[assay] if assay else adata, 
-                            guide_rna_column=guide_rna_column)})
-    return figs
     
     
 def perform_mixscape(adata, label_perturbation,
-                     label_control="NT",
+                     assay=None, 
+                     key_control="NT",
                      perturbation_type="KO",
                      split_by=None,
-                     labels_target_genes="gene_target", assay=None, 
-                     layer="X_pert", min_de_genes=5, 
-                     plot=True, **kwargs):
+                     label_target_genes="gene_target", 
+                     layer="X_pert", iter_num=10,
+                     min_de_genes=5, pval_cutoff=5e-2, logfc_threshold=0.25,
+                     n_comps_lda=None, 
+                     plot=True, 
+                     assay_protein=None,
+                     protein_of_interest=None,
+                     target_gene_idents=None):
+    """Identify perturbed cells based on target genes (`adata.obs['mixscape_class']`,
+    `adata.obs['mixscape_class_global']`) and calculate posterior probabilities
+    (`adata.obs['mixscape_class_p_<perturbation_type>']`, e.g., KO) and
+    perturbation scores. 
+    Optionally, perform LDA to cluster cells based on perturbation response.
+    Optionally, create figures related to differential gene 
+    (and protein, if available) expression, perturbation scores, 
+    and perturbation response-based clusters. 
+
+    Args:
+        adata (AnnData): Scanpy data object.
+        label_perturbation (str): Perturbation category column  of `adata.obs` 
+            (should contain key_control).
+        key_control (str, optional): Control category key
+            (`adata.obs[label_perturbation]` entries).Defaults to "NT".
+        perturbation_type (str, optional): CRISPR perturbation type 
+            to be expected by Mixscape classification labeling process. 
+            Defaults to "KO".
+        split_by (str, optional): `adata.obs` column name of replicates 
+            to calculate them separately. Defaults to None.
+        label_target_genes (str, optional): Name of column with target genes. 
+            Defaults to "gene_target".
+        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+            Defaults to None (works if only one assay).
+        assay_protein (str, optional): Protein assay slot name (if available).
+            Defaults to None.
+        protein_of_interest (str, optional): If assay_protein is not None 
+            and plot is True, will allow creation of violin plot of 
+            protein expression (y) by 
+            <target_gene_idents> perturbation category (x),
+            split/color-coded by Mixscape classification 
+            (`adata.obs['mixscape_class_global']`). Defaults to None.
+        target_gene_idents (list, optional): List of names of genes 
+            whose perturbations will determine cell grouping 
+            for the above-described violin plot and/or
+            whose differential expression posterior probabilities 
+            will be plotted in a heatmap. Defaults to None.
+        layer (str, optional): `adata.layers` slot name. Defaults to "X_pert".
+        min_de_genes (int, optional): Minimum number of genes a cell has 
+            to express differentially to be labeled 'perturbed'. 
+            For Mixscape and LDA (if applicable). Defaults to 5.
+        pval_cutoff (float, optional): Threshold for significance 
+            to identify differentially-expressed genes. 
+            For Mixscape and LDA (if applicable). Defaults to 5e-2.
+        logfc_threshold (float, optional): Will only test genes whose average 
+            logfold change across the two cell groups is at least this number. 
+            For Mixscape and LDA (if applicable). Defaults to 0.25.
+        n_comps_lda (int, optional): Number of principal components (e.g., 10)
+            for PCA performed as part of LDA for pooled CRISPR screen data. 
+            Defaults to None (no LDA performed).
+        iter_num (float, optional): Iterations to run to converge if needed.
+        plot (bool, optional): Make plots? Defaults to True.
+    """
     figs = {}
     mix = pt.tl.Mixscape()
     mix.perturbation_signature(
-        adata[assay] if assay else adata, label_perturbation, label_control, split_by)
+        adata[assay] if assay else adata, label_perturbation, 
+        key_control, split_by=split_by)  # perturbation signature
     adata_pert = adata[assay].copy() if assay else adata.copy()
     adata_pert.X = adata_pert.layers['X_pert']
     mix.mixscape(adata=adata[assay] if assay else adata, 
-                 labels=labels_target_genes, control=label_control, 
+                 labels=label_target_genes, control=key_control, 
                  layer=layer, perturbation_type=perturbation_type,
-                 min_de_genes=min_de_genes, **kwargs)
-    mix.lda(adata=adata[assay] if assay else adata, labels=labels_target_genes, 
-            layer=layer)  # linear discriminant analysis (LDA)
+                 min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
+                 iter_num=iter_num)  # Mixscape classification
+    if n_comps_lda is not None:
+        mix.lda(adata=adata[assay] if assay else adata, 
+                labels=label_target_genes, 
+                layer=layer, control=key_control, min_de_genes=min_de_genes,
+                split_by=split_by, perturbation_type=perturbation_type,
+                mixscape_class_global="mixscape_class_global",
+                n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
+                pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA) 
     if plot is True:
-        figs[""] = pt.pl.ms.barplot(adata[assay] if assay else adata, 
-                                    guide_rna_column='NT')
+        figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
+            adata[assay] if assay else adata, 
+            guide_rna_column=key_control)  # targeting efficiency by condition 
+        if n_comps_lda is not None:  # LDA clusters
+            figs["cluster_perturbation_response"] = pt.pl.ms.lda(
+                adata=adata[assay] if assay else adata, 
+                control=key_control)  # perturbation response
+        if target_gene_idents is not None:  # G/P EX
+            figs["mixscape_de_ordered_by_ppp_heat"] = {}
+            figs["mixscape_ppp_violin"] = {}
+            figs["mixscape_perturb_score"] = {}
+            for g in target_gene_idents:  # iterate target genes of interest
+                figs["mixscape_perturb_score"][g] = pt.pl.ms.perturbscore(
+                    adata = adata[assay] if assay else adata, 
+                    labels=label_target_genes, target_gene=g, color="red")
+                figs["mixscape_de_ordered_by_ppp_heat"][g] = pt.pl.ms.heatmap(
+                    adata=adata[assay] if assay else adata, 
+                    labels=label_target_genes, target_gene=g, 
+                    layer=layer, control=key_control)  # DE heatmap
+                tg_conds = [key_control, f"{g} NP", 
+                            f"{g} {perturbation_type}"]  # conditions: gene g
+                figs["mixscape_ppp_violin"][g] = pt.pl.ms.violin(
+                    adata=adata[assay], 
+                    target_gene_idents=tg_conds, 
+                    groupby="mixscape_class")  # gene: perturbed, NP, control
+                figs["mixscape_ppp_violin"][f"{g}_global"] = pt.pl.ms.violin(
+                    adata=adata[assay], target_gene_idents=[
+                        key_control, "NP", perturbation_type], 
+                    groupby="mixscape_class_global")  # global: P, NP, control 
+        if assay_protein is not None and target_gene_idents is not None:
+            figs[f"mixscape_protein_{protein_of_interest}"] = pt.pl.ms.violin( 
+                adata=adata[assay_protein], 
+                target_gene_idents=target_gene_idents,
+                keys=protein_of_interest, groupby=label_target_genes,
+                hue="mixscape_class_global")
+    return figs
 
 
-def calculate_perturbations(adata, target_gene, target_gene_idents, 
-                            assay=None, label_control="NT", 
-                            color="green", plot=True):
-    """Calculate perturbation scores (from Pertpy Mixscape tutorial)."""
-    figs = {}
-    fig_ps = pt.pl.ms.perturbscore(adata=adata[assay] if assay else adata, 
-                                   labels='gene_target', 
-                                   target_gene=target_gene,
-                                   color=color)  # plot perturbation scores
-    if plot is True: 
-        figs.update({"perturbation_scores": fig_ps})
-    if plot is True:
-        fig_ppp = pt.pl.ms.violin(adata=adata[assay] if assay else adata, 
-                                  target_gene_idents=target_gene_idents,
-                                  groupby="mixscape_class")  # plot PPPs
-        figs.update({"PPP": fig_ppp})
-        fig_dehm = pt.pl.ms.heatmap(adata=adata[assay] if assay else adata, 
-                                    labels="gene_target", 
-                                    target_gene=target_gene,
-                                    layer="X_pert", 
-                                    control=label_control)  # plot DE
-        figs.update({"DE_heatmap": fig_dehm})
-        fig_lda = pt.pl.ms.lda(
-            adata=adata[assay] if assay else adata)  # plot LDA
-        figs.update({"lda": fig_lda})
-    if plot is True:
-        return figs
-    
-
-def perform_augur(adata, classifier="random_forest_classifier", 
+def perform_augur(adata, assay=None, 
+                  classifier="random_forest_classifier", 
                   augur_mode="default", subsample_size=20, n_threads=4, 
                   select_variance_features=False, 
                   label_col="label_col", label_cell_type="cell_type_col",
@@ -85,20 +141,28 @@ def perform_augur(adata, classifier="random_forest_classifier",
 
     Args:
         adata (AnnData): Scanpy object.
+        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+            Defaults to None (works if only one assay).
         classifier (str, optional): Classifier. Defaults to "random_forest_classifier".
         augur_mode (str, optional): Augur or permute? Defaults to "default".
         subsample_size (int, optional): Per Pertpy code: 
-            "number of cells to subsample randomly per type from each experimental condition"
+            "number of cells to subsample randomly per type 
+            from each experimental condition"
         n_threads (int, optional): _description_. Defaults to 4.
         select_variance_features (bool, optional): Use Augur to select genes (True), or 
             Scanpy's  highly_variable_genes (False). Defaults to False.
         label_col (str, optional): _description_. Defaults to "label_col".
-        label_cell_type (str, optional): Column name for cell type. Defaults to "cell_type_col".
-        label_condition (str, optional): Column name for experimental condition. Defaults to None.
-        treatment (str, optional): Name of value within label_condition. Defaults to None.
-        seed (int, optional): Random state (for reproducibility). Defaults to 1618.
+        label_cell_type (str, optional): Column name for cell type. 
+            Defaults to "cell_type_col".
+        label_condition (str, optional): Column name for experimental condition. 
+            Defaults to None.
+        treatment (str, optional): Name of value within label_condition. 
+            Defaults to None.
+        seed (int, optional): Random state (for reproducibility). 
+            Defaults to 1618.
         plot (bool, optional): Plots? Defaults to True.
-        kws_augur_predict (keywords, optional): Optional keyword arguments to pass to Augur predict.
+        kws_augur_predict (keywords, optional): Optional additional keyword 
+            arguments to pass to Augur predict.
 
     Returns:
         _type_: _description_
@@ -111,7 +175,8 @@ def perform_augur(adata, classifier="random_forest_classifier",
         data, results, figs = [[None, None]] * 3  # to store results
         for i, x in enumerate([True, False]):  # iterate over methods
             data[i], results[i], figs[i] = perform_augur(
-                adata, subsample_size=subsample_size, 
+                adata[assay] if assay else adata, 
+                subsample_size=subsample_size, 
                 select_variance_features=x, 
                 n_threads=n_threads,
                 **kws_augur_predict)  # recursive -- run function both ways
@@ -121,7 +186,8 @@ def perform_augur(adata, classifier="random_forest_classifier",
     else:
         ag_rfc = pt.tl.Augur(classifier)
         loaded_data = ag_rfc.load(
-            adata, condition_label=label_condition, 
+            adata[assay] if assay else adata, 
+            condition_label=label_condition, 
             treatment_label=treatment,
             cell_type_col=label_cell_type,
             label_col=label_col
@@ -135,14 +201,20 @@ def perform_augur(adata, classifier="random_forest_classifier",
         if plot is True:  # plotting
             figs["lollipop"] = pt.pl.ag.lollipop(results)
             # TODO: UMAP?
-            if "umap" in adata.uns:
-                figs["umap"] = sc.pl.umap(adata=data, color="augur_score")
+            if ("umap" in adata[assay].uns) if assay else ("umap" in adata.uns):
+                figs["umap_augur_score"] = sc.pl.umap(adata=data, 
+                                                      color="augur_score")
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # feature importances
     return data, results, figs
 
 
 def perform_differential_prioritization(adata, label_condition, labels_treatments,
+                                        label_col="label",
+                                        assay=None,
+                                        n_permutations=1000,
+                                        n_subsamples=50,
+                                        label_cell_type="cell_type",
                                         classifier="random_forest_classifier", 
                                         plot=True, **kws_augur_predict):
     """Determine which cell types were most/least perturbed (ranking).
@@ -150,8 +222,25 @@ def perform_differential_prioritization(adata, label_condition, labels_treatment
     Args:
         adata (AnnData): Scanpy object.
         label_condition (str): Column used to indicate experimental condition.
-        labels_treatments (str): List of two conditions (values in label_condition).
-        classifier (str, optional): Classifier. Defaults to "random_forest_classifier".
+        labels_treatments (str): List of two conditions 
+            (values in label_condition).
+        label_col (str, optional): _description_. Defaults to "label_col".
+        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+            Defaults to None (works if only one assay).
+        n_permutations (int, optional): According to Pertpy: 
+            'the total number of mean augur scores to calculate 
+            from a background distribution.'
+            Defaults to 1000.
+        n_subsamples (int, optional): According to Pertpy: 
+            'number of subsamples to pool when calculating the 
+            mean augur score for each permutation.'
+            Defaults to 50.
+        label_cell_type (str, optional): Column name for cell type. 
+            Defaults to "cell_type_col".
+        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+            Defaults to None (works if only one assay).
+        classifier (str, optional): Classifier. 
+            Defaults to "random_forest_classifier".
         plot (bool, optional): Plots? Defaults to True.
 
     Returns:
@@ -159,21 +248,36 @@ def perform_differential_prioritization(adata, label_condition, labels_treatment
     """
     figs = {}
     augur_results, permuted_results = [], []  # to hold results
+    if plot is True:
+        figs["umap_augur"] = {}
     for x in labels_treatments:
         ag_rfc = pt.tl.Augur(classifier)
-        ddd = ag_rfc.load(adata, condition_label=label_condition, treatment_label=x)
+        ddd = ag_rfc.load(
+            adata[assay] if assay else adata, 
+            condition_label=label_condition, 
+            treatment_label=x,
+            cell_type_col=label_cell_type,
+            label_col=label_col
+            )  # add dummy variables, rename cell type & label columns
+        ddd = ag_rfc.load(adata[assay] if assay else adata, 
+                          condition_label=label_condition, treatment_label=x)
         dff_a, res_a = ag_rfc.predict(ddd, augur_mode="augur", 
                                       **kws_augur_predict)  # augur
         dff_p, res_p = ag_rfc.predict(ddd, augur_mode="permute", 
                                       **kws_augur_predict)  # permute
+        if plot is True and (
+            ("umap" in adata[assay].uns) if assay else ("umap" in adata.uns)): 
+            figs["umap_augur_score_differential"][x] = sc.pl.umap(
+                adata=adata[assay] if assay else adata, color="augur_score")
         augur_results.append([res_a])
         permuted_results.append([res_p])
     pvals = ag_rfc.predict_differential_prioritization(
         augur_results1=augur_results[0],
         augur_results2=augur_results[1],
         permuted_results1=permuted_results[0],
-        permuted_results2=permuted_results[1]
+        permuted_results2=permuted_results[1],
+        n_subsamples=n_subsamples, n_permutations=n_permutations,
         )
     if plot is True:
-        figs["diff"] = pt.pl.ag.dp_scatter(pvals)
+        figs["diff_pvals"] = pt.pl.ag.dp_scatter(pvals)
     return pvals, figs

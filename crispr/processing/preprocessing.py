@@ -16,62 +16,31 @@ import scipy
 import pandas as pd
 import numpy as np
 
-OPTS_OBJECT_TYPE = ["augur"]
 regress_out_vars = ['total_counts', 'pct_counts_mt']
 
-# hvg_kws = dict(min_mean=0.0125, max_mean=3, min_disp=0.5)
-# target_sum=1e4
-# max_genes_by_counts=2500
-# max_pct_mt=5
-# min_genes=200
-# min_cells=3
-# scale=10
-# assay=None
-# regress_out=regress_out_vars
-
-
-def create_object(adata, object_type="augur"):
-    """Create object(s) from adata."""
-    
-    # Check Validity of object_type Argument & Modify as Needed
-    if isinstance(object_type, str):
-        object_type = [object_type]
-    if isinstance(object_type, (list, tuple, np.ndarray, set)):
-        for i, j in enumerate(object_type):
-            if not isinstance(j, str):
-                raise ValueError(f"""object_type elements must be strings.""")
-    else:
-        raise ValueError("object_type must be a string or list of strings.")
-    object_type = [t.lower() for t in object_type]  # convert to lowercase
-    
-    # Convert/Create Objects
-    objects = [np.nan] * len(object_type)  # initialize empty list for output
-    for i, t in enumerate(object_type):  # iterate object_types
-        if t in OPTS_OBJECT_TYPE:  # if valid object type option, convert
-            obj = adata
-            objects[i] = obj
-        else:  # if invalid object type option, warn & leave as nan in list
-            raise Warning(f"""object_type {t} invalid or not yet implemented. 
-                          Options: {OPTS_OBJECT_TYPE}.""")
-    return objects
-
-
-def create_object_scanpy(file, assay=None, target_sum=1e4, 
-                         max_genes_by_counts=2500, max_pct_mt=5,
-                         min_genes=200, min_cells=3, 
-                         scale=10,  # or scale=True for no clipping
-                         regress_out=regress_out_vars, hvg_kws=None):
-    """Create object from scanpy."""
-    
-    # Load
-    print("\n<<< LOADING >>>")
+def create_object(file, col_gene_symbol="gene_symbols", assay=None):
+    """Create object from Scanpy-compatible file."""
     # extension = os.path.splitext(file)[1]
     if os.path.isdir(file):  # if directory, assume 10x format
-        adata = sc.read_10x_mtx(file, var_names='gene_symbols', cache=True)
+        print(f"\n<<< LOADING 10X FILE {file}>>>")
+        adata = sc.read_10x_mtx(file, var_names=col_gene_symbol, 
+                                cache=True)  # 
     else:
+        print(f"\n<<< LOADING FILE {file} with sc.read()>>>")
         adata = sc.read(file)
     # TODO: Flesh this out, generalize, test, etc.
-    adata.var_names_make_unique() 
+    adata.var_names_make_unique()
+    if assay is not None:
+        adata = adata[assay]  # subset by assay if desired
+    return adata
+
+
+def process_data(adata, assay=None, target_sum=1e4, 
+                 max_genes_by_counts=2500, max_pct_mt=5,
+                 min_genes=200, min_cells=3, 
+                 scale=10,  # or scale=True for no clipping
+                 regress_out=regress_out_vars, hvg_kws=None):
+    """Preprocess adata."""
     
     # Normalize
     print("\n<<< NORMALIZING >>>")
@@ -92,28 +61,51 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
     sc.pp.filter_genes(adata[assay] if assay else adata, min_cells=min_cells)
     
     # QC
-    adata.var['mt'] = adata.var_names.str.startswith(
-        'MT-')  # annotate mitochondrial genes
-    sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                               qc_vars=['mt'], percent_top=None, 
-                               log1p=False, inplace=True)
+    no_mt = False
+    if assay is None:
+        adata.var['mt'] = adata.var_names.str.startswith(
+            'MT-')  # annotate mitochondrial genes
+    else:
+        try:
+            adata[assay].var['mt'] = adata[assay].var_names.str.startswith(
+                'MT-')  # annotate mitochondrial genes
+        except TypeError as err_mt:
+            warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign MT: {err_mt}")
+            no_mt = True
+    if no_mt is False:
+        sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
+                                qc_vars=['mt'], percent_top=None, 
+                                log1p=False, inplace=True)
     
     # More Filtering
-    if assay is None:
-        adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts, :]
-        adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
-    else:
-        adata[assay] = adata[assay][
-            adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
-        adata[assay] = adata[assay][adata[assay].obs.pct_counts_mt < max_pct_mt, :]
-    adata.raw = adata  # freeze normalized & filtered adata
+    try:
+        if assay is None:
+            adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts, :]
+            adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
+            adata.raw = adata  # freeze normalized & filtered adata
+        else:
+            adata[assay] = adata[assay][
+                adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
+            adata[assay] = adata[assay][
+                adata[assay].obs.pct_counts_mt < max_pct_mt, :]  # MT counts
+            adata[assay].raw = adata[assay]  # freeze normalized, filtered data
+    except TypeError as err_f:
+            warnings.warn(f"\n\n{'=' * 80}\n\nCould not filter: {err_f}")
         
     # Variable Genes
     if hvg_kws is not None:
         print("\n<<< DETECTING VARIABLE GENES >>>")
-        sc.pp.highly_variable_genes(adata, **hvg_kws)  # highly variable genes 
-        adata.raw = adata  # freeze normalized & filtered adata
-        adata = adata[:, adata.var.highly_variable]  # filter by HVGs
+        sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
+                                    **hvg_kws)  # highly variable genes 
+        try:
+            if assay is None:
+                adata= adata[:, adata.var.highly_variable]  # filter by HVGs
+            else:
+                adata[assay]= adata[:, adata[
+                    assay].var.highly_variable]  # filter by HVGs
+        except (TypeError, IndexError) as err_h:
+                warnings.warn(f"""\n\n{'=' * 80}\n\n Could not subset 
+                              by highly variable genes: {err_h}""")
     
     # Regress Confounds
     if regress_out: 
@@ -132,17 +124,20 @@ def create_object_scanpy(file, assay=None, target_sum=1e4,
     print("\n\n")
     return adata
 
-def assign_guide_rna(adata, assignment_threshold=5, plot=False):
+
+def assign_guide_rna(adata, assignment_threshold=5, layer="counts",
+                     plot=False, **kwargs):
     """Assign guide RNAs to cells (based on pertpy tutorial notebook)."""
     gdo = adata.mod["gdo"]
     gdo.layers["counts"] = gdo.X.copy()  # save original counts
     sc.pp.log1p(gdo)  # log-transform data
     if plot is True:
-        pt.pl.guide.heatmap(gdo, key_to_save_order="plot_order")  # heatmap
+        pt.pl.guide.heatmap(gdo, key_to_save_order="plot_order", 
+                            **kwargs)  # heatmap
     g_a = pt.pp.GuideAssignment()  # guide assignment
     g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
-                            layer="counts")  # assignment thresholding
+                            layer=layer)  # assignment thresholding
     g_a.assign_to_max_guide(gdo, assignment_threshold=assignment_threshold, 
-                            layer="counts")  # assignment thresholding
+                            layer=layer)  # assignment thresholding
     print(gdo.obs["assigned_guide"])
     return gdo
