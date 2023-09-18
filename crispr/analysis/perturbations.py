@@ -1,6 +1,10 @@
 import pertpy as pt
-import muon as mu
+import muon
+import mudata
+import arviz as az
 import scanpy as sc
+import functools
+import matplotlib.pyplot as plt
 import pandas as pd
     
     
@@ -117,9 +121,17 @@ def perform_mixscape(adata, label_perturbation,
                     target_gene_idents=tg_conds, 
                     groupby="mixscape_class")  # gene: perturbed, NP, control
                 figs["mixscape_ppp_violin"][f"{g}_global"] = pt.pl.ms.violin(
-                    adata=adata[assay], target_gene_idents=[
-                        key_control, "NP", perturbation_type], 
+                    adata=adata[assay] if assay else adata, 
+                    target_gene_idents=[key_control, "NP", perturbation_type], 
                     groupby="mixscape_class_global")  # global: P, NP, control 
+            tg_conds = [key_control] + functools.reduce(
+                lambda i, j: i + j, [[f"{g} NP", 
+                        f"{g} {perturbation_type}"] 
+                for g in target_gene_idents])  # conditions: all genes
+            figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
+                adata=adata[assay] if assay else adata, 
+                target_gene_idents=tg_conds, 
+                groupby="mixscape_class")  # gene: perturbed, NP, control
         if assay_protein is not None and target_gene_idents is not None:
             figs[f"mixscape_protein_{protein_of_interest}"] = pt.pl.ms.violin( 
                 adata=adata[assay_protein], 
@@ -281,3 +293,84 @@ def perform_differential_prioritization(adata, label_condition, labels_treatment
     if plot is True:
         figs["diff_pvals"] = pt.pl.ag.dp_scatter(pvals)
     return pvals, figs
+
+
+def analyze_composition(adata, reference_cell_type,
+                        analysis_type="cell_level",
+                        generate_sample_level=True, 
+                        label_cell_type="cell_type",
+                        sample_identifier="batch",
+                        modality_key="coda",
+                        label_condition="condition",
+                        est_fdr=0.05,
+                        plot=True,
+                        out_file=None
+                        ):
+    """Perform SCCoda compositional analysis."""
+    figs, results = {}, {}
+    sccoda_model = pt.tl.Sccoda()
+    sccoda_data = sccoda_model.load(
+        adata, type=analysis_type, 
+        generate_sample_level=generate_sample_level,
+        cell_type_identifier=label_cell_type, 
+        sample_identifier=sample_identifier, 
+        covariate_obs=["condition"])  # load data
+    print(sccoda_data)
+    print(sccoda_data["coda"].X)
+    print(sccoda_data["coda"].obs)
+    if plot is True:
+        figs[
+            "find_reference"] = pt.pl.coda.rel_abundance_dispersion_plot(
+                sccoda_data, modality_key=modality_key, 
+                abundant_threshold=0.9)  # helps choose rference cell type
+        figs["proportions"] = pt.pl.coda.boxplots(
+            sccoda_data, modality_key=modality_key, 
+            feature_name=label_condition, add_dots=True)
+    sccoda_data = sccoda_model.prepare(
+        sccoda_data, modality_key=modality_key, formula=label_condition,
+        reference_cell_type=reference_cell_type)  # setup model
+    sccoda_model.run_nuts(sccoda_data, 
+                          modality_key=modality_key)  # no-U-turn HMV sampling 
+    sccoda_model.summary(sccoda_data, modality_key=modality_key)  # result
+    results["original"]["effects_credible"] = sccoda_model.credible_effects(
+        sccoda_data, modality_key=modality_key)  # filter credible effects
+    results["original"]["intercept"] = sccoda_model.get_intercept_df(
+        sccoda_data, modality_key=modality_key)  # intercept df
+    results["original"]["effects"] = sccoda_model.get_effect_df(
+        sccoda_data, modality_key=modality_key)  # effects df
+    if out_file is not None:
+        sccoda_data.write_h5mu(out_file)
+    if est_fdr is not None:
+        sccoda_model.set_fdr(sccoda_data, modality_key=modality_key, 
+                            est_fdr=est_fdr)  # adjust for expected FDR
+        sccoda_model.summary(sccoda_data, modality_key=modality_key)
+        results[f"fdr_{est_fdr}"]["intercept"] = sccoda_model.get_intercept_df(
+            sccoda_data, modality_key=modality_key)  # intercept df
+        results[f"fdr_{est_fdr}"]["effects"] = sccoda_model.get_effect_df(
+            sccoda_data, modality_key=modality_key)  # effects df
+        results[f"fdr_{est_fdr}"][
+            "effects_credible"] = sccoda_model.credible_effects(
+                sccoda_data, 
+                modality_key=modality_key)  # filter credible effects 
+        if out_file is not None:
+            sccoda_data.write_h5mu(f"{out_file}_{est_fdr}_fdr")
+    else:
+        res_intercept_fdr, res_effects_fdr = None, None
+    if plot is True:
+        figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
+            sccoda_data, modality_key=modality_key, 
+            feature_name=label_condition)
+        plt.show()
+        figs["effects"] = pt.pl.coda.effects_barplot(
+            sccoda_data, modality_key=modality_key, 
+            parameter="Final Parameter")
+        data_arviz = sccoda_model.make_arviz(sccoda_data, 
+                                             modality_key="coda_salm")
+        figs["mcmc_diagnostics"] = az.plot_trace(
+            data_arviz, divergences=False,
+            var_names=["alpha", "beta"],
+            coords={"cell_type": data_arviz.posterior.coords["cell_type_nb"]},
+        )
+        plt.tight_layout()
+        plt.show()
+    return (results, figs)

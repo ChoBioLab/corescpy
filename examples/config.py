@@ -11,34 +11,39 @@ DIR = os.path.join(DIR, "data")
 
 files_data = {
     "CRISPRi_scr": f"{DIR}/filtered_feature_bc_matrix_HH03",
-    "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",
-    "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",
-    "pool": f"{DIR}/data_pertpy_norman_2019_raw.h5ad",
+    "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS) 
+    "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq
+    "pool": f"{DIR}/norman_2019_raw.h5ad",
     "bulk": f"{DIR}/burczynski_crohn.h5ad",
     "screen": f"{DIR}/dixit_2016_raw.h5ad",
     "perturb-seq": f"{DIR}/adamson_2016_upr_perturb_seq.h5ad",
     "ECCITE": f"{DIR}/papalexi_2021.h5ad",
+    "coda": f"{DIR}/haber_2017_regions.h5ad",
+    "CRISPRa": f"{DIR}/tian_2021_crispra.h5ad",  # CROP-seq CRISPRa
     "augur_ex": f"{DIR}/bhattacherjee.h5ad"
     }
 label_cell_type_data = {
-    "CRISPRi_scr": "",
-    "CRISPRi_wgs": "",
-    "CRISPRi_ess": "",
+    "CRISPRi_scr": "leiden",  # because unannotated
+    "CRISPRi_wgs": "leiden",
+    "CRISPRi_ess": "leiden",
     "pool": "",
     "bulk": None,
     "screen": None,
+    "perturb-seq": "cell_label",
     "ECCITE": "leiden",
-    "augur_ex": "cell_type"
+    "coda": "cell_label",
+    "augur_ex": "cell_type"  # "subtype" also
     }
 gene_symbols_data = {
     "CRISPRi_scr": "gene_symbols",
-    "CRISPRi_wgs": "gene",
-    "CRISPRi_ess": "gene",
+    "CRISPRi_wgs": "gene",  # ?
+    "CRISPRi_ess": "gene_symbols",
     "pool": "gene_symbols",
     "bulk": None,
     "screen": None,
     "ECCITE": None,
-    "augur_ex": "data/bhattacherjee.h5ad"
+    "coda": "gene",
+    "augur_ex": "name"
     }
 assays_data = {
     "CRISPRi_scr": None,
@@ -48,25 +53,28 @@ assays_data = {
     "bulk": None,
     "screen": None,
     "ECCITE": ["rna", "adt"],  # RNA, protein
+    "coda": None,
     "augur_ex": None
     }
 label_perturbation_data = {
     "CRISPRi_scr": np.nan,
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": np.nan,
+    "CRISPRi_ess": "guide_identity",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
     "ECCITE": "perturbation",
+    "coda": "condition",
     "augur_ex": "label"
     }
 key_control_data = {
     "CRISPRi_scr": np.nan,
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": np.nan,
+    "CRISPRi_ess": "NegCtrl0_NegCtrl0__NegCtrl0_NegCtrl0", 
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "coda": "Control",
     "ECCITE": "NT",
     "augur_ex": "Maintenance_Cocaine"
     }
@@ -78,26 +86,29 @@ perturbation_type_data = {
     "bulk": np.nan,
     "screen": np.nan,
     "ECCITE": "KO",
+    "coda": "Salmonella",
     "augur_ex": "Withdraw_48h_Cocaine"
     }
 target_genes_data = {
-    "CRISPRi_scr": None,
-    "CRISPRi_wgs": None,
-    "CRISPRi_ess": None,
-    "pool": None,
-    "bulk": None,
-    "screen": None,
+    "CRISPRi_scr": np.nan,
+    "CRISPRi_wgs": np.nan,
+    "CRISPRi_ess": np.nan,
+    "pool": np.nan,
+    "bulk": np.nan,
+    "screen": np.nan,
     "ECCITE": "gene_target",
-    "augur_ex": None
+    "coda": np.nan,
+    "augur_ex": np.nan
     }
 layer_perturbation_data = {
-    "CRISPRi_scr": None,
-    "CRISPRi_wgs": None,
-    "CRISPRi_ess": None,
-    "pool": None,
-    "bulk": None,
-    "screen": None,
-    "ECCITE": "X_pert", 
+    "CRISPRi_scr": np.nan,
+    "CRISPRi_wgs": np.nan,
+    "CRISPRi_ess": np.nan,
+    "pool": np.nan,
+    "bulk": np.nan,
+    "screen": np.nan,
+    "ECCITE": "gene_target",
+    "coda": None, 
     "augur_ex": None,
     }
 
@@ -129,11 +140,13 @@ def load_example_data(file, col_gene_symbol, write_public=False):
     if adata is None:  # if file doesn't exist or failed to load
         if file in files_data:
             print(f"\n\nLooking for downloadable files for: {file}.")
-            if file == "CRISPRi":  # CRISPRi Perturb-seq Pertpy data
+            if file == "CRISPRi_wgs":  # CRISPRi Perturb-seq Pertpy data
                 adata = pertpy.data.replogle_2022_k562_gwps()  # HJ design
                 # adata = pertpy.data.replogle_2022_k562_essential()  # ~1 hr.
                 # adata = pertpy.data.replogle_2022_rpe1()
                 # adata = pertpy.data.adamson_2016_upr_perturb_seq()  # ~8 min.
+            elif file == "CRISPRi_ess":
+                pertpy.data.replogle_2022_k562_essential()  # HJ design
             elif file == "screen":  # Perturb-seq CRISPR screen Pertpy data
                 adata = pertpy.data.dixit_2016_raw()
             elif file == "bulk":  # bulk RNA-seq data
@@ -144,6 +157,12 @@ def load_example_data(file, col_gene_symbol, write_public=False):
                 adata = pertpy.data.papalexi_2021()  # sc CRISPR screen+protein
             elif file == "augur_ex":  # Pertpy's AUGUR example dataset
                 adata = pertpy.data.bhattacherjee()
+            elif file == "coda":
+                adata = pertpy.data.haber_2017_regions()
+            elif file == "CRISPRa":
+                adata = pertpy.data.tian_2021_crispra()
+            elif file == "perturb-seq":
+                adata = pertpy.data.adamson_2016_upr_perturb_seq()
             else:
                 if err:
                     raise ValueError(f"{file} error:\n\n{err}.")
