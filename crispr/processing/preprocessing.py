@@ -13,10 +13,12 @@ import pertpy as pt
 import muon
 import warnings
 import scipy
+import scipy.sparse as sp_sparse
+import h5py
 import pandas as pd
 import numpy as np
 
-regress_out_vars = ['total_counts', 'pct_counts_mt']
+regress_out_vars = ["total_counts", "pct_counts_mt"]
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
     """Create object from Scanpy-compatible file."""
@@ -27,6 +29,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
                                 **kwargs)  # 10x matrix, barcodes, features
     elif os.path.splitext(file)[1] == ".h5":
         print(f"\n<<< LOADING 10X .h5 FILE {file}>>>")
+        print(f"H5 File Format ({file})\n\n")
+        explore_h5_file(file, "\n\n\n")
         adata = sc.read_10x_h5(file, **kwargs)
     else:
         print(f"\n<<< LOADING FILE {file} with sc.read()>>>")
@@ -34,7 +38,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
     # TODO: Flesh this out, generalize, test, etc.
     adata.var_names_make_unique()
     if assay is not None:
-        adata = adata[assay]  # subset by assay if desired
+        adata = adata[assay]  # subset by assay if desired 
+    print(adata)
     return adata
 
 
@@ -64,18 +69,18 @@ def process_data(adata, assay=None, assay_protein=None,
     # QC
     no_mt = False
     if assay is None:
-        adata.var['mt'] = adata.var_names.str.startswith(
-            'MT-')  # annotate mitochondrial genes
+        adata.var["mt"] = adata.var_names.str.startswith(
+            "MT-")  # annotate mitochondrial genes
     else:
         try:
-            adata[assay].var['mt'] = adata[assay].var_names.str.startswith(
-                'MT-')  # annotate mitochondrial genes
+            adata[assay].var["mt"] = adata[assay].var_names.str.startswith(
+                "MT-")  # annotate mitochondrial genes
         except TypeError as err_mt:
             warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign MT: {err_mt}")
             no_mt = True
     if no_mt is False:
         sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                                qc_vars=['mt'], percent_top=None, 
+                                qc_vars=["mt"], percent_top=None, 
                                 log1p=False, inplace=True)
     
     # More Filtering
@@ -124,6 +129,60 @@ def process_data(adata, assay=None, assay_protein=None,
             
     print("\n\n")
     return adata
+
+
+def explore_h5_file(file):
+    """Explore an H5 file's format (thanks to ChatGPT)."""
+    with h5py.File(file, "r") as h5_file:
+        # List all top-level groups in the HDF5 file
+        top_level_groups = list(h5_file.keys())
+        # Explore the groups and datasets within each group
+        for group_name in top_level_groups:
+            group = h5_file[group_name]
+            print(f"Group: {group_name}")
+            # List datasets within the group
+            datasets = list(group.keys())
+            for dataset_name in datasets:
+                print(f"  Dataset: {dataset_name}")
+
+
+def get_matrix_from_h5(file, gex_genes_return=None):
+    """Get matrix from 10X h5 file (modified from 10x code)."""
+    FeatureBCMatrix = collections.namedtuple('FeatureBCMatrix', [
+        'feature_ids', 'feature_names', 'barcodes', 'matrix'])
+    with h5py.File(file) as f:
+        if u'version' in f.attrs:
+            version = f.attrs["version"]
+            if version > 2:
+                print(f"Version = {version}")
+                raise ValueError(f"HDF5 format version version too new.")
+        else:
+            raise ValueError(f"HDF5 format version ({version}) too old.")
+        feature_ids = [x.decode("ascii", "ignore") 
+                       for x in f["matrix"]["features"]["id"]]
+        feature_names = [x.decode("ascii", "ignore") 
+                         for x in f["matrix"]["features"]["name"]]        
+        barcodes = list(f["matrix"]["barcodes"][:])
+        matrix = sp_sparse.csr_matrix((f["matrix"]["data"], 
+                                       f["matrix"]["indices"], 
+                                       f["matrix"]["indptr"]), 
+                                      shape=f["matrix"]["shape"])
+        fbm = FeatureBCMatrix(feature_ids, feature_names, barcodes, matrix)
+        if gex_genes_return is not None:
+            gex = {}
+            for g in gex_genes_return:
+                try:
+                    gene_index = fbm.feature_names.index(g)
+                except ValueError:
+                    raise Exception(f"{g} not found in list of gene names.")
+                gex.update({g: fbm.matrix[gene_index, :].toarray(
+                    ).squeeze()})  # gene expression
+        else:
+            gex = None
+        barcodes = [x.tostring().decode() for x in fbm.barcodes]
+        genes = pd.Series(fbm.feature_names).to_frame("gene").join(
+            pd.Series(fbm.feature_ids).to_frame("gene_ids"))
+    return fbm, gex, barcodes, genes
 
 
 def assign_guide_rna(adata, assignment_threshold=5, layer="counts",

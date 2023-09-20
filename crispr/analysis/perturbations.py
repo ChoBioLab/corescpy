@@ -62,7 +62,8 @@ def perform_mixscape(adata, col_perturbation,
             whose differential expression posterior probabilities 
             will be plotted in a heatmap. Defaults to None.
             True to plot all in `adata.uns["mixscape"]`.
-        layer (str, optional): `adata.layers` slot name. Defaults to "X_pert".
+        layer_perturbation (str, optional): `adata.layers` slot name. 
+            Defaults to None.
         min_de_genes (int, optional): Minimum number of genes a cell has 
             to express differentially to be labeled 'perturbed'. 
             For Mixscape and LDA (if applicable). Defaults to 5.

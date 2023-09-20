@@ -11,7 +11,7 @@ DIR = pathlib.Path(__file__).parent.resolve()
 DIR = os.path.join(DIR, "data")
 
 files_data = {
-    "CRISPRi_scr": f"{DIR}/crispr-screening/filtered_feature_bc_matrix_HH04.h5",
+    "CRISPRi_scr": f"{DIR}/crispr-screening/filtered_feature_bc_matrix_HH06.h5",
     "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS) 
     "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq
     "pool": f"{DIR}/norman_2019_raw.h5ad",
