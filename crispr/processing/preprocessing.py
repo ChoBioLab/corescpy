@@ -18,13 +18,16 @@ import numpy as np
 
 regress_out_vars = ['total_counts', 'pct_counts_mt']
 
-def create_object(file, col_gene_symbol="gene_symbols", assay=None):
+def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
     """Create object from Scanpy-compatible file."""
     # extension = os.path.splitext(file)[1]
     if os.path.isdir(file):  # if directory, assume 10x format
         print(f"\n<<< LOADING 10X FILE {file}>>>")
-        adata = sc.read_10x_mtx(file, var_names=col_gene_symbol, 
-                                cache=True)  # 
+        adata = sc.read_10x_mtx(file, var_names=col_gene_symbols, cache=True,
+                                **kwargs)  # 10x matrix, barcodes, features
+    elif os.path.splitext(file)[1] == ".h5":
+        print(f"\n<<< LOADING 10X .h5 FILE {file}>>>")
+        adata = sc.read_10x_h5(file, **kwargs)
     else:
         print(f"\n<<< LOADING FILE {file} with sc.read()>>>")
         adata = sc.read(file)
@@ -35,8 +38,8 @@ def create_object(file, col_gene_symbol="gene_symbols", assay=None):
     return adata
 
 
-def process_data(adata, assay=None, target_sum=1e4, 
-                 max_genes_by_counts=2500, max_pct_mt=5,
+def process_data(adata, assay=None, assay_protein=None,
+                 target_sum=1e4,  max_genes_by_counts=2500, max_pct_mt=5,
                  min_genes=200, min_cells=3, 
                  scale=10,  # or scale=True for no clipping
                  regress_out=regress_out_vars, hvg_kws=None):
@@ -49,10 +52,8 @@ def process_data(adata, assay=None, target_sum=1e4,
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
     sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
                                 subset=True)  # highly variable genes
-    try:
-        muon.prot.pp.clr(adata["adt"])
-    except Exception as err:
-        warnings.warn(f"ADT normalization failed: {err}.")
+    if assay_protein is not None:  # if includes protein assay
+        muon.prot.pp.clr(adata[assay_protein])
 
     
     # Filtering
@@ -139,5 +140,5 @@ def assign_guide_rna(adata, assignment_threshold=5, layer="counts",
                             layer=layer)  # assignment thresholding
     g_a.assign_to_max_guide(gdo, assignment_threshold=assignment_threshold, 
                             layer=layer)  # assignment thresholding
-    print(gdo.obs["assigned_guide"])
+    print(gdo.obs["assigned_guide"])  # creates layer "assigned_guides"
     return gdo

@@ -47,7 +47,7 @@ def cluster(adata, assay=None, plot=True, colors=None,
         sc.tl.umap(adata, init_pos='paga', **kws_umap)
     else:
         sc.tl.umap(adata[assay] if assay else adata, **kws_umap)
-    print(f"\n\n<<< CLUSTERING using {method_cluster.upper()} METHOD >>>")
+    print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
     if str(method_cluster).lower() == "leiden":
         sc.tl.leiden(adata[assay] if assay else adata, **kws_cluster)  # leiden
     elif str(method_cluster).lower() == "leiden":  # louvain
