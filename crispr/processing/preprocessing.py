@@ -55,12 +55,11 @@ def process_data(adata, assay=None, assay_protein=None,
     sc.pp.normalize_total(adata[assay] if assay else adata, 
                           target_sum=target_sum)  # count-normalize
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
-    sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-                                subset=True)  # highly variable genes
+    # sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
+    #                             subset=True)  # highly variable genes
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
 
-    
     # Filtering
     print("\n<<< FILTERING >>>")
     sc.pp.filter_cells(adata[assay] if assay else adata, min_genes=min_genes)
@@ -80,8 +79,8 @@ def process_data(adata, assay=None, assay_protein=None,
             no_mt = True
     if no_mt is False:
         sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                                qc_vars=["mt"], percent_top=None, 
-                                log1p=False, inplace=True)
+                                   qc_vars=["mt"], percent_top=None, 
+                                   log1p=False, inplace=True)
     
     # More Filtering
     try:
@@ -148,10 +147,10 @@ def explore_h5_file(file):
 
 def get_matrix_from_h5(file, gex_genes_return=None):
     """Get matrix from 10X h5 file (modified from 10x code)."""
-    FeatureBCMatrix = collections.namedtuple('FeatureBCMatrix', [
-        'feature_ids', 'feature_names', 'barcodes', 'matrix'])
+    FeatureBCMatrix = collections.namedtuple("FeatureBCMatrix", [
+        "feature_ids", "feature_names", "barcodes", "matrix"])
     with h5py.File(file) as f:
-        if u'version' in f.attrs:
+        if u"version" in f.attrs:
             version = f.attrs["version"]
             if version > 2:
                 print(f"Version = {version}")
@@ -201,3 +200,22 @@ def assign_guide_rna(adata, assignment_threshold=5, layer="counts",
                             layer=layer)  # assignment thresholding
     print(gdo.obs["assigned_guide"])  # creates layer "assigned_guides"
     return gdo
+
+
+def remove_batch_effects(col_cell_type="leiden", col_batch="batch"):
+    """Remove batch effects (IN PROGRESS)."""
+    if plot is True:
+        sc.pl.umap(adata, color=[col_batch, col_cell_type], 
+                   wspace=.5, frameon=False)
+    pt.tl.SCGEN.setup_anndata(adata, batch_key=col_batch, 
+                              labels_key=col_cell_type)
+    model = pt.tl.SCGEN(adata)
+    model.train(max_epochs=100, batch_size=32, 
+                early_stopping=True, early_stopping_patience=25)
+    corrected_adata = model.batch_removal()
+    if plot is True:
+        sc.pp.neighbors(corrected_adata)
+        sc.tl.umap(corrected_adata)
+        sc.pl.umap(corrected_adata, color=[col_batch, col_cell_type], 
+                   wspace=0.4, frameon=False)
+    return corrected_adata

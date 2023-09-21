@@ -2,5 +2,6 @@
 from .perturbations import (perform_mixscape,
                             perform_augur, 
                             perform_differential_prioritization,
-                            analyze_composition)
+                            analyze_composition,
+                            compute_distance)
 from .clustering import cluster

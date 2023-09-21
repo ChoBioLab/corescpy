@@ -5,6 +5,8 @@ import arviz as az
 import scanpy as sc
 import functools
 import matplotlib.pyplot as plt
+from seaborn import clustermap
+from scipy.cluster.hierarchy import linkage, dendrogram
 import pandas as pd
     
     
@@ -102,7 +104,10 @@ def perform_mixscape(adata, col_perturbation,
                 perturbation_type=label_perturbation_type,
                 mixscape_class_global="mixscape_class_global",
                 n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
-                pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA) 
+                pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
+        if plot is True:
+            figs["perturbation_clusters"] = pt.pl.ms.lda(
+                adata=adata[assay] if assay else adata)  # perturb clusters
     if target_gene_idents is True:  # to plot all target genes
         target_gene_idents = list(adata[assay].uns[
             "mixscape"].keys()) if assay else list(
@@ -213,7 +218,7 @@ def perform_augur(adata, assay=None,
                 n_threads=n_threads,
                 **kws_augur_predict)  # recursive -- run function both ways
             if plot is True:
-                figs["vs_select_variance_features"] = pt.pl.ag.scatterplot(
+                figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
                     results[0], results[1])  # compare  methods (diagonal=same)
     else:
         ag_rfc = pt.tl.Augur(classifier)
@@ -382,8 +387,6 @@ def analyze_composition(adata, reference_cell_type,
                 modality_key=assay)  # filter credible effects 
         if out_file is not None:
             sccoda_data.write_h5mu(f"{out_file}_{est_fdr}_fdr")
-    else:
-        res_intercept_fdr, res_effects_fdr = None, None
     if plot is True:
         figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
             sccoda_data, modality_key=assay, 
@@ -402,3 +405,39 @@ def analyze_composition(adata, reference_cell_type,
         plt.tight_layout()
         plt.show()
     return (results, figs)
+
+
+def compute_distance(col_perturbation, col_cell_type="leiden",
+                     distance_type="edistance", method="X_pca",
+                     kwargs_plot=None, highlight_real_range=False, plot=True):
+    """Compute distance and hierarchies and (optionally) make heatmaps."""
+    figs = {}
+    distance = {}
+    if kwargs_plot is None:
+        kwargs_plot = dict(robust=True, figsize=(10, 10))
+    # Distance Metrics
+    distance = pt.tl.Distance(distance_type, method)
+    data = distance.pairwise(adata, groupby=col_perturbation, verbose=True)
+    if plot is True:  # cluster heatmaps
+        if highlight_real_range is True:
+            vmin = np.min(np.ravel(data.values)[np.ravel(data.values) != 0])
+            if "vmin" in kwargs_plot:
+                warnings.warn(
+                    f"""
+                    vmin already set in kwargs plot: {kwargs_plot['vmin']}
+                    Setting to {vmin} because highlight_real_range is True.""")
+            kwargs_plot.update(dict(vmin=vmin))
+        figs[f"distance_heat_{distance_type}"] = clustermap(data, **kwargs_plot)
+        plt.show()
+    # Cluster Hierarchies
+    dff = distance.pairwise(adata, groupby=col_cell_type, verbose=True)
+    mat = linkage(dff, method="ward")
+    if plot is True:  # cluster hierarchies
+        hierarchy = dendrogram(mat, labels=dff.index, orientation='left', 
+                               color_threshold=0)
+        plt.xlabel('E-distance')
+        plt.ylabel('Leiden clusters')
+        plt.gca().yaxis.set_label_position("right")
+        plt.show()
+        figs[f"distance_cluster_hierarchies_{distance_type}"] = plt.gcf()
+    return distance, data, dff, mat, figs

@@ -64,7 +64,7 @@ assays_data = {
 col_split_by_data = {
     "CRISPRi_scr": None,
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": np.nan,
+    "CRISPRi_ess": None,
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -89,7 +89,7 @@ col_perturbation_data = {
 key_control_data = {
     "CRISPRi_scr": "Non-Targeting",
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "Control",  # must modify NaNs in guide_ids column
+    "CRISPRi_ess": "NT",  # must modify NaNs in guide_ids column
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -101,7 +101,7 @@ key_control_data = {
 key_treatment_data = {
     "CRISPRi_scr": np.nan,
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": np.nan,
+    "CRISPRi_ess": "Perturbed",  # must modify NaNs in guide_ids column
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -149,7 +149,7 @@ col_guide_rna_data = {
 layer_perturbation_data = {
     "CRISPRi_scr": np.nan,
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": None,
+    "CRISPRi_ess": "X_pert",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -209,19 +209,8 @@ def load_example_data(file, col_gene_symbols, write_public=False):
                 # adata = pertpy.data.replogle_2022_rpe1()
                 # adata = pertpy.data.adamson_2016_upr_perturb_seq()  # ~8 min.
             elif file == "CRISPRi_ess":
+                print(f"Setting {col_perturbation_data}")
                 adata = pertpy.data.replogle_2022_k562_essential()  # HJ design
-                col_target_genes = col_target_genes_data[file]
-                adata.obs[col_perturbation_data[file]] = adata.obs.apply(
-                            lambda x: key_control_data[file] if str(
-                                x["guide_ids"]) == key_control_data[
-                                    file] or pd.isnull(
-                                        x["guide_ids"]) else x[
-                                            "guide_identities"], axis=1)
-                adata.obs[col_target_genes] = adata.obs[
-                    col_target_genes].str.strip(" ").replace(
-                        "", np.nan).apply(
-                            lambda x: key_control_data[file] if pd.isnull(
-                                x) else x)
             elif file == "screen":  # Perturb-seq CRISPR screen Pertpy data
                 adata = pertpy.data.dixit_2016_raw()
             elif file == "bulk":  # bulk RNA-seq data
@@ -248,4 +237,15 @@ def load_example_data(file, col_gene_symbols, write_public=False):
                 adata.write(file_path)
         else:
             raise ValueError(f"{file_path} does not exist.")
+    if file == "CRISPRi_ess":
+        col_target_genes = col_target_genes_data[file]
+        adata.obs[col_perturbation_data[file]] = adata.obs[
+            col_target_genes].str.strip(" ").replace(
+                "", np.nan).apply(
+                    lambda x: key_control_data[file] if pd.isnull(
+                        x) or x == "" else x)
+        adata.obs[col_target_genes] = adata.obs[
+            col_target_genes].astype(str).str.strip(" ").replace(
+                "", key_control_data[file]).replace(
+                    np.nan, key_control_data[file])
     return adata
