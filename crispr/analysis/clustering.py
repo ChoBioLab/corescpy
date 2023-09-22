@@ -31,16 +31,20 @@ def cluster(adata, assay=None, plot=True, colors=None,
             warnings.warn(f"Error plotting highest counts per cell: {err}")
     print("\n\n<<< PERFORMING PCA >>>")
     if len(kws_pca) > 0:
-        print(kws_pca)
-    sc.pp.pca(adata[assay] if assay else adata)
+        print("\n", kws_pca)
+    if "use_highly_variable" in kws_pca and "highly_variable" not in adata.var:
+        warnings.warn("""use_highly_variable set to True, 
+                      but 'highly_variable' not found in `adata.var`""")
+        kws_pca["use_highly_variable"] = False
+    sc.pp.pca(adata[assay] if assay else adata, **kws_pca)
     print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>")
     if len(kws_neighbors) > 0:
-        print(kws_neighbors)
+        print("\n", kws_neighbors)
     sc.pp.neighbors(adata[assay] if assay else adata, 
                     **kws_neighbors)
     print(f"\n\n<<< EMBEDDING WITH UMAP >>>")
     if len(kws_umap) > 0:
-        print(kws_umap)
+        print("\n", kws_umap)
     if paga is True:
         sc.tl.paga(adata)
         sc.pl.paga(adata, plot=False)  # plot=True for coarse-grained graph
@@ -70,8 +74,9 @@ def cluster(adata, assay=None, plot=True, colors=None,
             warnings.warn(f"Failed to plot UMAP: {err}")
         if colors is not None:  # plot UMAP + extra color coding subplots
             try:
-                figs["umap_extra"] = sc.pl.umap(adata[assay] if assay else adata, color=list(
-                    pd.unique([method_cluster] + list(colors))))
+                figs["umap_extra"] = sc.pl.umap(
+                    adata[assay] if assay else adata, color=list(
+                        pd.unique([method_cluster] + list(colors))))
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
         return figs

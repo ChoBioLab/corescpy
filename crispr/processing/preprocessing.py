@@ -13,6 +13,8 @@ import pertpy as pt
 import muon
 import warnings
 import scipy
+import seaborn
+import collections      
 import scipy.sparse as sp_sparse
 import h5py
 import pandas as pd
@@ -39,33 +41,34 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
     adata.var_names_make_unique()
     if assay is not None:
         adata = adata[assay]  # subset by assay if desired 
-    print(adata)
+    print("\n\n", adata)
     return adata
 
 
 def process_data(adata, assay=None, assay_protein=None,
+                 col_gene_symbols=None,
                  target_sum=1e4,  max_genes_by_counts=2500, max_pct_mt=5,
                  min_genes=200, min_cells=3, 
                  scale=10,  # or scale=True for no clipping
-                 regress_out=regress_out_vars, hvg_kws=None):
+                 regress_out=regress_out_vars, kws_hvg=None, **kwargs):
     """Preprocess adata."""
     
-    # Normalize
-    print("\n<<< NORMALIZING >>>")
-    sc.pp.normalize_total(adata[assay] if assay else adata, 
-                          target_sum=target_sum)  # count-normalize
-    sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
-    # sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-    #                             subset=True)  # highly variable genes
-    if assay_protein is not None:  # if includes protein assay
-        muon.prot.pp.clr(adata[assay_protein])
+    # Initial Information
+    print(adata)
+    figs = {}
+    n_top = kwargs["n_top"] if "n_top" in kwargs else 20
+    print(f"Un-used Keyword Arguments: {kwargs}")
+    figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
+        adata[assay] if assay else adata, n_top=n_top,
+        gene_symbols=col_gene_symbols)
 
     # Filtering
     print("\n<<< FILTERING >>>")
     sc.pp.filter_cells(adata[assay] if assay else adata, min_genes=min_genes)
     sc.pp.filter_genes(adata[assay] if assay else adata, min_cells=min_cells)
     
-    # QC
+    # Mitochondrial Count QC
+    print("\n<<< DETECTING MITOCHONDRIAL GENES >>>")
     no_mt = False
     if assay is None:
         adata.var["mt"] = adata.var_names.str.startswith(
@@ -77,11 +80,25 @@ def process_data(adata, assay=None, assay_protein=None,
         except TypeError as err_mt:
             warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign MT: {err_mt}")
             no_mt = True
+    
+    # Quality Control
+    print("\n<<< PERFORMING QUALITY CONTROL >>>")
     if no_mt is False:
         sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                                   qc_vars=["mt"], percent_top=None, 
-                                   log1p=False, inplace=True)
-    
+                                    qc_vars=["mt"], percent_top=None, 
+                                    log1p=True, inplace=True)
+        figs["qc_pct_counts_mt_hist"] = seaborn.histplot(
+            adata.obs["pct_counts_mt"])
+        figs["qc_metrics_violin"] = sc.pl.violin(adata, [
+            "n_genes_by_counts", "total_counts", "pct_counts_mt"],
+             jitter=0.4, multi_panel=True)
+        for v in ["pct_counts_mt", ""]:
+            figs[f"qc_{v}_scatter"] = sc.pl.scatter(
+                adata[assay] if assay else adata, x="total_counts", y=v)
+    figs["qc_log"] = seaborn.jointplot(
+        data=adata[assay].obs if assay else adata.obs,
+        x="log1p_total_counts", y="log1p_n_genes_by_counts", kind="hex")
+        
     # More Filtering
     try:
         if assay is None:
@@ -96,12 +113,24 @@ def process_data(adata, assay=None, assay_protein=None,
             adata[assay].raw = adata[assay]  # freeze normalized, filtered data
     except TypeError as err_f:
             warnings.warn(f"\n\n{'=' * 80}\n\nCould not filter: {err_f}")
+    
+    # Normalize
+    print("\n<<< NORMALIZING >>>")
+    sc.pp.normalize_total(adata[assay] if assay else adata, 
+                          target_sum=target_sum)  # count-normalize
+    sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
+    # sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
+    #                             subset=True)  # highly variable genes
+    if assay_protein is not None:  # if includes protein assay
+        muon.prot.pp.clr(adata[assay_protein])
         
     # Variable Genes
-    if hvg_kws is not None:
+    if kws_hvg is not None:
         print("\n<<< DETECTING VARIABLE GENES >>>")
+        if kws_hvg is True:
+            kws_hvg = {}
         sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-                                    **hvg_kws)  # highly variable genes 
+                                    **kws_hvg)  # highly variable genes 
         try:
             if assay is None:
                 adata= adata[:, adata.var.highly_variable]  # filter by HVGs
@@ -127,7 +156,7 @@ def process_data(adata, assay=None, assay_protein=None,
                         max_value=scale)  # ...also clip values > "scale" SDs
             
     print("\n\n")
-    return adata
+    return adata, figs
 
 
 def explore_h5_file(file):

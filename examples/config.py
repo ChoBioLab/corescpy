@@ -77,7 +77,7 @@ col_split_by_data = {
 col_perturbation_data = {
     "CRISPRi_scr": "name",
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "Condition",
+    "CRISPRi_ess": "guide_ids",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -170,6 +170,18 @@ col_sample_id_data = {
     "augur_ex": "orig.idents"
 }
 
+col_batch_data = {
+    "CRISPRi_scr": np.nan,
+    "CRISPRi_wgs": np.nan,
+    "CRISPRi_ess": "gemgroup",
+    "pool": np.nan,
+    "bulk": np.nan,
+    "screen": np.nan,
+    "ECCITE": np.nan,
+    "coda": np.nan, 
+    "augur_ex": np.nan
+}
+
 
 def load_example_data(file, col_gene_symbols, write_public=False):
     """(Down)load data for examples/vignettes.
@@ -239,13 +251,10 @@ def load_example_data(file, col_gene_symbols, write_public=False):
             raise ValueError(f"{file_path} does not exist.")
     if file == "CRISPRi_ess":
         col_target_genes = col_target_genes_data[file]
-        adata.obs[col_perturbation_data[file]] = adata.obs[
-            col_target_genes].str.strip(" ").replace(
-                "", np.nan).apply(
-                    lambda x: key_control_data[file] if pd.isnull(
-                        x) or x == "" else x)
         adata.obs[col_target_genes] = adata.obs[
             col_target_genes].astype(str).str.strip(" ").replace(
                 "", key_control_data[file]).replace(
                     np.nan, key_control_data[file])
+        adata.obs[col_perturbation_data[file]] = adata.obs[
+            col_target_genes]
     return adata
