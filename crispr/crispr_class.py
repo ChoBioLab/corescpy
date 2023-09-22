@@ -7,9 +7,10 @@
 
 import scanpy as sc
 import subprocess
-import crispr as cr
+import os
 import pandas as pd
 import numpy as np
+import crispr as cr
 
 
 class Crispr(object):
@@ -24,7 +25,7 @@ class Crispr(object):
                  col_perturbation="perturbation",
                  col_target_genes="guide_ids",
                  col_guide_rna="guide_ids",
-                 key_control="control", key_treatment="NT", **kwargs):
+                 key_control="NT", key_treatment="perturbed", **kwargs):
         """CRISPR class initialization."""
         self._assay = assay
         self._assay_protein = assay_protein
@@ -40,7 +41,7 @@ class Crispr(object):
         self._keys = dict(key_control=key_control, key_treatment=key_treatment)
         self._file_path = file_path
         self.adata = file_path
-        self.figures = {}
+        self.figures = {"main": {}}
 
     @property
     def adata(self):
@@ -56,14 +57,18 @@ class Crispr(object):
                 value, assay=None, col_gene_symbols=self._columns[
                     "col_gene_symbols"])
     
-    def preprocess(self, assay_subset=None, assay_protein=None, 
+    def preprocess(self, assay=None, assay_protein=None, 
                    clustering=False, run_label="main", **kwargs):
         """Preprocess data."""
         if assay_protein is None:
             assay_protein = self._assay_protein
+        if assay is None:
+            assay = self._assay
         _, figs = cr.pp.process_data(
-            self.adata, assay=assay_subset, **self._columns,
+            self.adata, assay=assay, **self._columns,
             assay_protein=assay_protein, **kwargs)  # preprocess
+        if run_label not in self.figures:
+            self.figures[run_label] = {}
         self.figures[run_label]["preprocessing"] = figs
         if clustering not in [None, False]:
             if clustering is True:
@@ -81,16 +86,17 @@ class Crispr(object):
                 plot=True, colors=None, paga=False, 
                 kws_pca=None, kws_neighbors=None, 
                 kws_umap=None, kws_cluster=None, 
-                run_label="main", test=False):
+                run_label="main", test=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
         figs_cl = cr.ax.cluster(
             self.adata.copy() if test is True else self.adata, 
-            assay=None, method_cluster=method_cluster,
+            assay=assay, method_cluster=method_cluster,
+            **self._columns, **self._keys,
             plot=plot, colors=colors, paga=paga, 
             kws_pca=kws_pca, kws_neighbors=kws_neighbors,
-            kws_umap=kws_umap, kws_cluster=kws_cluster)
+            kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
         if test is False:
             if run_label not in self.figures:
                 self.figures[run_label] = {}
@@ -98,7 +104,8 @@ class Crispr(object):
         return figs_cl
         
         
-    def run_mixscape(self, assay=None, target_gene_idents=True, 
+    def run_mixscape(self, 
+                     assay=None, target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
                      label_perturbation_type=None, run_label="main", 
                      test=False, plot=True):
@@ -109,7 +116,8 @@ class Crispr(object):
             label_perturbation_type=self._label_perturbation_type
         figs_mix = cr.ax.perform_mixscape(
             self.adata.copy() if test is True else self.adata, assay=assay,
-            **self._columns, **self._keys,
+            **self._columns,
+            key_control=self._keys["key_control"],
             label_perturbation_type=self._label_perturbation_type, 
             layer_perturbation=self._layer_perturbation, 
             target_gene_idents=target_gene_idents,
@@ -120,7 +128,7 @@ class Crispr(object):
             self.figures[run_label].update({"mixscape": figs_mix})
         return figs_mix
     
-    def run_augur(self, assay=None, 
+    def run_augur(self, assay=None, key_treatment=None,
                   augur_mode="default", classifier="random_forest_classifier", 
                   subsample_size=20, n_threads=True, 
                   select_variance_features=False, 
@@ -128,6 +136,8 @@ class Crispr(object):
         """Run Augur."""
         if test is True:
             annd = self.adata.copy()
+        if key_treatment is None:
+            key_treatment = self._keys["key_treatment"]
         if n_threads is True:
             n_threads = os.cpu_count() - 1 # use available CPUs - 1
         data, results, figs_aug = cr.ax.perform_augur(
@@ -135,7 +145,9 @@ class Crispr(object):
             assay=assay, classifier=classifier, 
             augur_mode=augur_mode, subsample_size=subsample_size,
             select_variance_features=select_variance_features, 
-            **self._columns, **self._keys,
+            **self._columns, 
+            key_control=self._keys["key_control"], key_treatment=key_treatment,
+            layer=self._layer_perturbation,
             seed=seed, n_threads=n_threads, plot=plot)
         if test is False:
             if run_label not in self.results:
@@ -149,7 +161,7 @@ class Crispr(object):
     
     def compute_distance(self, distance_type="edistance", method="X_pca", 
                          kws_plot=None, highlight_real_range=False,
-                         plot=True):
+                         run_label="main", plot=True):
         """Compute edistance."""
         output = cr.ax.compute_distance(
             self.adata, **self._columns, **self.keys,

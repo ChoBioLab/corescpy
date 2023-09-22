@@ -101,7 +101,7 @@ key_control_data = {
 key_treatment_data = {
     "CRISPRi_scr": np.nan,
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "Perturbed",  # must modify NaNs in guide_ids column
+    "CRISPRi_ess": None,
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,

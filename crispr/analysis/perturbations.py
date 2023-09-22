@@ -24,7 +24,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                      plot=True, 
                      assay_protein=None,
                      protein_of_interest=None,
-                     target_gene_idents=None):
+                     target_gene_idents=None, **kwargs):
     """
     Identify perturbed cells based on target genes (`adata.obs['mixscape_class']`,
     `adata.obs['mixscape_class_global']`) and calculate posterior probabilities
@@ -87,7 +87,8 @@ def perform_mixscape(adata, col_perturbation="perturbation",
         plot (bool, optional): Make plots? Defaults to True.
     """
     figs = {}
-    print(f"Un-used Keyword Arguments: {kwargs}")
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
     mix = pt.tl.Mixscape()
     mix.perturbation_signature(
         adata[assay] if assay else adata, col_perturbation, 
@@ -170,15 +171,12 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     return figs
 
 
-def perform_augur(adata, assay=None, 
+def perform_augur(adata, assay=None, layer_perturbation=None,
                   classifier="random_forest_classifier", 
                   augur_mode="default", subsample_size=20, n_threads=4, 
                   select_variance_features=False, 
                   col_cell_type="leiden",
                   col_perturbation=None, 
-                  col_guide_rna="guide_ID",
-                  col_split_by=None,
-                  col_target_genes="gene_target",
                   key_control="NT", key_treatment=None,
                   seed=1618, plot=True, kws_augur_predict=None, **kwargs):
     """Calculates AUC using Augur and a specified classifier.
@@ -212,10 +210,23 @@ def perform_augur(adata, assay=None,
     Returns:
         _type_: _description_
     """
+    # Setup
     figs = {}
-    print(f"Un-used Keyword Arguments: {kwargs}")
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
     if kws_augur_predict is None:
         kws_augur_predict = {}
+    adata_pert = adata[assay].copy() if assay else adata.copy()
+    if layer_perturbation is not None:
+        adata_pert.X = adata_pert.layers[layer_perturbation]
+    
+    # Unfortunately, Augur renames columns INPLACE
+    # Prevent this from overwriting existing column names
+    col_pert_new, col_cell_new = "label", "cell_type"
+    adata_pert.obs[col_pert_new] = adata_pert.obs[col_perturbation].copy()
+    adata_pert.obs[col_cell_new] = adata_pert.obs[col_cell_type].copy()
+    
+    # Run Augur
     if select_variance_features == "both":  
         # both methods: select genes based on...
         # - original Augur (True)
@@ -223,7 +234,7 @@ def perform_augur(adata, assay=None,
         data, results, figs = [[None, None]] * 3  # to store results
         for i, x in enumerate([True, False]):  # iterate over methods
             data[i], results[i], figs[i] = perform_augur(
-                adata[assay] if assay else adata, 
+                adata_pert[assay] if assay else adata_pert, 
                 subsample_size=subsample_size, 
                 select_variance_features=x, 
                 n_threads=n_threads,
@@ -234,11 +245,11 @@ def perform_augur(adata, assay=None,
     else:
         ag_rfc = pt.tl.Augur(classifier)
         loaded_data = ag_rfc.load(
-            adata[assay] if assay else adata, 
+            adata_pert[assay] if assay else adata_pert, 
             condition_label=key_control, 
             treatment_label=key_treatment,
-            cell_type_col=col_cell_type,
-            label_col=col_perturbation
+            cell_type_col=col_cell_new,
+            label_col=col_pert_new
             )  # add dummy variables, rename cell type & label columns
         data, results = ag_rfc.predict(
             loaded_data, subsample_size=subsample_size, augur_mode=augur_mode, 
@@ -253,7 +264,7 @@ def perform_augur(adata, assay=None,
             sc.pp.neighbors(data)
             sc.tl.umap(data)
             figs["perturbation_effect_umap"] = sc.pl.umap(
-                adata=data, color=[
+                adata_pert=data, color=[
                     "augur_score", 
                     col_cell_type, col_perturbation])  # UMAP scores
             figs["important_features"] = pt.pl.ag.important_features(
@@ -305,13 +316,14 @@ def perform_differential_prioritization(adata, col_perturbation="perturbation",
         _type_: _description_
     """
     figs = {}
-    print(f"Un-used Keyword Arguments: {kwargs}")
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
     if kws_augur_predict is None:
         kws_augur_predict = {}
     augur_results, permuted_results = [], []  # to hold results
     if plot is True:
         figs["umap_augur"] = {}
-    for x in labels_treatments:
+    for x in label_treatments:
         ag_rfc = pt.tl.Augur(classifier)
         ddd = ag_rfc.load(
             adata[assay] if assay else adata, 
@@ -356,7 +368,8 @@ def analyze_composition(adata, reference_cell_type,
                         out_file=None, **kwargs):
     """Perform SCCoda compositional analysis."""
     figs, results = {}, {}
-    print(f"Un-used Keyword Arguments: {kwargs}")
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
     sccoda_model = pt.tl.Sccoda()
     sccoda_data = sccoda_model.load(
         adata, type=analysis_type, 
@@ -431,7 +444,8 @@ def compute_distance(adata, col_perturbation="perturbation",
     """Compute distance and hierarchies and (optionally) make heatmaps."""
     figs = {}
     distance = {}
-    print(f"Un-used Keyword Arguments: {kwargs}")
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
     if kws_plot is None:
         kws_plot = dict(robust=True, figsize=(10, 10))
     # Distance Metrics

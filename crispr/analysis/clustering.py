@@ -17,16 +17,25 @@ import scanpy as sc
 def cluster(adata, assay=None, plot=True, colors=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden",
-            kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None):
+            kws_pca=None, kws_neighbors=None, 
+            kws_umap=None, kws_cluster=None, **kwargs):
     """Perform PCA, UMAP, etc."""
     figs = {}  # for figures
+    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
+    if "col_gene_symbols" in kwargs:
+        col_gene_symbols = kwargs.pop("col_gene_symbols")
+    else:
+        col_gene_symbols = None
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
             kws_pca, kws_neighbors, kws_umap, kws_cluster]]
     if plot is True:
         try:
             figs["highest_counts_per_cell"] = sc.pl.highest_expr_genes(
-                adata, n_top=20)
+                adata[assay] if assay else adata, 
+                n_top=n_top, gene_symbols=col_gene_symbols)
         except Exception as err:
             warnings.warn(f"Error plotting highest counts per cell: {err}")
     print("\n\n<<< PERFORMING PCA >>>")
@@ -62,7 +71,8 @@ def cluster(adata, assay=None, plot=True, colors=None,
     if plot is True:
         try:
             figs["pca_variance_ratio"] = sc.pl.pca_variance_ratio(
-                adata, log=True)  # scree-like plot for PCA components
+                adata[assay] if assay else adata, 
+                log=True)  # scree-like plot for PCA components
         except Exception as err:
             warnings.warn(f"Failed to plot PCA variance ratio: {err}")
         try:

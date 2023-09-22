@@ -17,6 +17,7 @@ import seaborn
 import collections      
 import scipy.sparse as sp_sparse
 import h5py
+import anndata
 import pandas as pd
 import numpy as np
 
@@ -25,7 +26,10 @@ regress_out_vars = ["total_counts", "pct_counts_mt"]
 def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
     """Create object from Scanpy-compatible file."""
     # extension = os.path.splitext(file)[1]
-    if os.path.isdir(file):  # if directory, assume 10x format
+    if not isinstance(file, (str, os.PathLike)):
+        print(f"\n<<< LOADING OBJECT>>>")
+        adata = file.copy()
+    elif os.path.isdir(file):  # if directory, assume 10x format
         print(f"\n<<< LOADING 10X FILE {file}>>>")
         adata = sc.read_10x_mtx(file, var_names=col_gene_symbols, cache=True,
                                 **kwargs)  # 10x matrix, barcodes, features
@@ -47,20 +51,31 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
 
 def process_data(adata, assay=None, assay_protein=None,
                  col_gene_symbols=None,
+                 col_cell_type=None,
+                 layer=None,
                  target_sum=1e4,  max_genes_by_counts=2500, max_pct_mt=5,
                  min_genes=200, min_cells=3, 
                  scale=10,  # or scale=True for no clipping
-                 regress_out=regress_out_vars, kws_hvg=None, **kwargs):
+                 regress_out=regress_out_vars, 
+                 kws_hvg=None, kws_scale=None, **kwargs):
     """Preprocess adata."""
     
     # Initial Information
     print(adata)
+    print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
+    if col_cell_type is not None and col_cell_type in adata.obs:
+        print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
+        print(adata.obs[col_cell_type].value_counts())
     figs = {}
-    n_top = kwargs["n_top"] if "n_top" in kwargs else 20
-    print(f"Un-used Keyword Arguments: {kwargs}")
+    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
+    if kwargs:
+        print(f"Un-used Keyword Arguments: {kwargs}")
+    print(col_gene_symbols, assay, n_top)
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
         adata[assay] if assay else adata, n_top=n_top,
         gene_symbols=col_gene_symbols)
+    if kws_scale is None:
+        kws_scale = {}
 
     # Filtering
     print("\n<<< FILTERING >>>")
@@ -85,16 +100,27 @@ def process_data(adata, assay=None, assay_protein=None,
     print("\n<<< PERFORMING QUALITY CONTROL >>>")
     if no_mt is False:
         sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                                    qc_vars=["mt"], percent_top=None, 
-                                    log1p=True, inplace=True)
-        figs["qc_pct_counts_mt_hist"] = seaborn.histplot(
-            adata.obs["pct_counts_mt"])
-        figs["qc_metrics_violin"] = sc.pl.violin(adata, [
-            "n_genes_by_counts", "total_counts", "pct_counts_mt"],
-             jitter=0.4, multi_panel=True)
-        for v in ["pct_counts_mt", ""]:
-            figs[f"qc_{v}_scatter"] = sc.pl.scatter(
-                adata[assay] if assay else adata, x="total_counts", y=v)
+                                   qc_vars=["mt"], percent_top=None, 
+                                   log1p=True, inplace=True)
+        try:
+            figs["qc_pct_counts_mt_hist"] = seaborn.histplot(
+                adata[assay].obs["pct_counts_mt"] if assay else adata.obs[
+                    "pct_counts_mt"])
+        except Exception as err:
+            print(err)
+        try:
+            figs["qc_metrics_violin"] = sc.pl.violin(
+                adata[assay] if assay else adata, 
+                ["n_genes_by_counts", "total_counts", "pct_counts_mt"],
+                jitter=0.4, multi_panel=True)
+        except Exception as err:
+            print(err)
+        for v in ["pct_counts_mt", "n_genes_by_counts"]:
+            try:
+                figs[f"qc_{v}_scatter"] = sc.pl.scatter(
+                    adata[assay] if assay else adata, x="total_counts", y=v)
+            except Exception as err:
+                print(err)
     figs["qc_log"] = seaborn.jointplot(
         data=adata[assay].obs if assay else adata.obs,
         x="log1p_total_counts", y="log1p_n_genes_by_counts", kind="hex")
@@ -129,8 +155,9 @@ def process_data(adata, assay=None, assay_protein=None,
         print("\n<<< DETECTING VARIABLE GENES >>>")
         if kws_hvg is True:
             kws_hvg = {}
-        sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-                                    **kws_hvg)  # highly variable genes 
+        figs["highly_variable_genes"] = sc.pp.highly_variable_genes(
+            adata[assay] if assay else adata, 
+            **kws_hvg)  # highly variable genes 
         try:
             if assay is None:
                 adata= adata[:, adata.var.highly_variable]  # filter by HVGs
@@ -150,10 +177,17 @@ def process_data(adata, assay=None, assay_protein=None,
     if scale is not None:
         print("\n<<< SCALING >>>")
         if scale is True:  # if True, just scale to unit variance
-            sc.pp.scale(adata[assay] if assay else adata)  # scale
+            sc.pp.scale(adata[assay] if assay else adata, layer=layer,
+                        **kws_scale)  # scale
         else:  # if scale provided as an integer...
-            sc.pp.scale(adata[assay] if assay else adata, 
-                        max_value=scale)  # ...also clip values > "scale" SDs
+            sc.pp.scale(adata[assay] if assay else adata, max_value=scale,
+                        layer=layer,
+                        **kws_scale)  # ...also clip values > "scale" SDs
+            
+    # Cell Counts (Post-Processing)
+    if col_cell_type is not None and col_cell_type in adata.obs:
+        print(f"\n\n{'=' * 80}\nCell Counts (Post-Processing)\n{'=' * 80}\n\n")
+        print(adata.obs[col_cell_type].value_counts())
             
     print("\n\n")
     return adata, figs
