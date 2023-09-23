@@ -20,8 +20,10 @@ files_data = {
     "perturb-seq": f"{DIR}/adamson_2016_upr_perturb_seq.h5ad",
     "ECCITE": f"{DIR}/papalexi_2021.h5ad",
     "coda": f"{DIR}/haber_2017_regions.h5ad",
-    "CRISPRa": f"{DIR}/tian_2021_crispra.h5ad",  # CROP-seq CRISPRa
-    "augur_ex": f"{DIR}/bhattacherjee.h5ad"
+    # "CRISPRa": f"{DIR}/tian_2021_crispra.h5ad",  # CROP-seq CRISPRa
+    "CRISPRa": f"{DIR}/tian_2021_crispra.h5ad",  # Perturb-seq CRISPRa
+    "augur_ex": f"{DIR}/bhattacherjee.h5ad",
+    "adamson": f"{DIR}/adamson_2016_upr_perturb_seq.h5ad"
 }
 
 col_cell_type_data = {
@@ -31,10 +33,11 @@ col_cell_type_data = {
     "pool": "",
     "bulk": None,
     "screen": None,
-    "perturb-seq": "cell_label",
+    "perturb-seq": "celltype",
     "ECCITE": "leiden",
     "coda": "cell_label",
-    "augur_ex": "cell_type"  # "subtype" also
+    "augur_ex": "cell_type",  # "subtype" also,
+    "adamson": "leiden"
 }
 
 col_gene_symbols_data = {
@@ -44,9 +47,11 @@ col_gene_symbols_data = {
     "pool": "gene_symbols",
     "bulk": None,
     "screen": None,
-    "ECCITE": None,
-    "coda": "gene",
-    "augur_ex": "name"
+    "perturb-seq": "gene_symbol",
+    "ECCITE": "name",
+    "coda": "index",
+    "augur_ex": "name",
+    "adamson": "leiden"
 }
 
 assays_data = {
@@ -56,9 +61,11 @@ assays_data = {
     "pool": None,
     "bulk": None,
     "screen": None,
+    "perturb-seq": None,
     "ECCITE": ["rna", "adt"],  # RNA, protein
     "coda": None,
-    "augur_ex": None
+    "augur_ex": None,
+    "adamson": None
 }
 
 col_split_by_data = {
@@ -68,9 +75,10 @@ col_split_by_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": None,
     "ECCITE": "replicate",
     "coda": np.nan,
-    "augur_ex": np.nan
+    "augur_ex": "nan"
     
 }
 
@@ -81,6 +89,7 @@ col_perturbation_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": "perturbation",
     "ECCITE": "perturbation",
     "coda": "condition",
     "augur_ex": "label"
@@ -94,6 +103,7 @@ key_control_data = {
     "bulk": np.nan,
     "screen": np.nan,
     "coda": "Control",
+    "perturb-seq": "Control",  # must modify NaNs in perturbation column
     "ECCITE": "NT",
     "augur_ex": "Maintenance_Cocaine"
 }
@@ -106,6 +116,7 @@ key_treatment_data = {
     "bulk": np.nan,
     "screen": np.nan,
     "ECCITE": "Perturbed",
+    "perturb-seq": "63(mod)_pBA580",
     "coda": "Salmonella",
     "augur_ex": "Withdraw_48h_Cocaine"
 }
@@ -117,6 +128,7 @@ label_perturbation_type_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": "CRISPR",
     "ECCITE": "KO",
     "coda": "Salmonella",
     "augur_ex": "Cocaine_Withdrawal"
@@ -129,9 +141,10 @@ col_target_genes_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": "perturbation",
     "ECCITE": "gene_target",
     "coda": np.nan,
-    "augur_ex": np.nan
+    "augur_ex": None
 }
 
 col_guide_rna_data = {
@@ -141,9 +154,10 @@ col_guide_rna_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": None,
     "ECCITE": "guide_ID",
     "coda": np.nan,
-    "augur_ex": np.nan
+    "augur_ex": None
 }
 
 layer_perturbation_data = {
@@ -153,6 +167,7 @@ layer_perturbation_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": None,
     "ECCITE": "X_pert",
     "coda": None, 
     "augur_ex": None
@@ -165,9 +180,10 @@ col_sample_id_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
+    "perturb-seq": None,
     "ECCITE": "orig.ident",
     "coda": np.nan, 
-    "augur_ex": "orig.idents"
+    "augur_ex": "orig.ident"
 }
 
 col_batch_data = {
@@ -177,9 +193,10 @@ col_batch_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
-    "ECCITE": np.nan,
-    "coda": np.nan, 
-    "augur_ex": np.nan
+    "perturb-seq": None,
+    "ECCITE": "MULTI_ID",
+    "coda": "batch", 
+    "augur_ex": None
 }
 
 

@@ -62,14 +62,13 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # Initial Information
     print(adata)
-    print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
     if col_cell_type is not None and col_cell_type in adata.obs:
         print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
         print(adata.obs[col_cell_type].value_counts())
     figs = {}
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
     print(col_gene_symbols, assay, n_top)
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
         adata[assay] if assay else adata, n_top=n_top,

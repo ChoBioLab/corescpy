@@ -6,8 +6,11 @@ import scanpy as sc
 import functools
 import matplotlib.pyplot as plt
 from seaborn import clustermap
+import warnings
+import decoupler
 from scipy.cluster.hierarchy import linkage, dendrogram
 import pandas as pd
+import numpy as np
     
     
 def perform_mixscape(adata, col_perturbation="perturbation",
@@ -88,21 +91,23 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     """
     figs = {}
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
     mix = pt.tl.Mixscape()
     mix.perturbation_signature(
         adata[assay] if assay else adata, col_perturbation, 
         key_control, split_by=col_split_by)  # perturbation signature
-    adata_pert = adata[assay].copy() if assay else adata.copy()
-    if layer_perturbation is not None:
-        adata_pert.X = adata_pert.layers[layer_perturbation]
+    # adata_pert = adata[assay].copy() if assay else adata.copy()
+    # if layer_perturbation is not None:
+    #     adata_pert.X = adata_pert.layers[layer_perturbation]
     mix.mixscape(adata=adata[assay] if assay else adata, 
+                 # adata=adata_pert,
                  labels=col_target_genes, control=key_control, 
                  layer=layer_perturbation, 
                  perturbation_type=label_perturbation_type,
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
     mix.lda(adata=adata[assay] if assay else adata, 
+            # adata=adata_pert,
             labels=col_target_genes, 
             layer=layer_perturbation, control=key_control, 
             min_de_genes=min_de_genes,
@@ -113,32 +118,42 @@ def perform_mixscape(adata, col_perturbation="perturbation",
             pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
     if plot is True:
         figs["perturbation_clusters"] = pt.pl.ms.lda(
-            adata=adata[assay] if assay else adata)  # cluster perturbation
+            adata=adata[assay] if assay else adata, 
+            control=key_control)  # cluster perturbation
     if target_gene_idents is True:  # to plot all target genes
         target_gene_idents = list(adata[assay].uns[
             "mixscape"].keys()) if assay else list(
                 adata.uns["mixscape"].keys())  # target genes
     if plot is True:
         figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
-            adata[assay] if assay else adata, 
+            adata[assay] if assay else adata,
+            # adata_pert, 
             guide_rna_column=key_control)  # targeting efficiency by condition 
         if n_comps_lda is not None:  # LDA clusters
             figs["cluster_perturbation_response"] = pt.pl.ms.lda(
-                adata=adata[assay] if assay else adata, 
+                adata[assay] if assay else adata,
+                # adata=adata_pert, 
                 control=key_control)  # perturbation response
         if target_gene_idents is not None:  # G/P EX
-            figs["mixscape_de_ordered_by_ppp_heat"] = {}
+            figs["mixscape_DEX_ordered_by_ppp_heat"] = {}
             figs["mixscape_ppp_violin"] = {}
             figs["mixscape_perturb_score"] = {}
             figs["mixscape_targeting_efficacy"] = pt.pl.ms.barplot(
-                adata[assay] if assay else adata, 
+                adata[assay] if assay else adata,
+                # adata_pert, 
                 guide_rna_column=col_guide_rna)
             for g in target_gene_idents:  # iterate target genes of interest
+                if g not in list(adata[assay].obs["mixscape_class"] 
+                                 if assay else adata.obs["mixscape_class"]):
+                    print(f"\n\nTarget gene {g} not in mixscape_class!")
+                    continue  # skip to next target gene if missing
                 figs["mixscape_perturb_score"][g] = pt.pl.ms.perturbscore(
-                    adata = adata[assay] if assay else adata, 
+                    adata=adata[assay] if assay else adata,
+                    # adata=adata_pert, 
                     labels=col_target_genes, target_gene=g, color="red")
                 figs["mixscape_DEX_ordered_by_ppp_heat"][g] = pt.pl.ms.heatmap(
-                    adata=adata[assay] if assay else adata, 
+                    adata=adata[assay] if assay else adata,
+                    # adata=adata_pert, 
                     labels=col_target_genes, target_gene=g, 
                     layer=layer_perturbation, control=key_control
                     )  # differential expression heatmap ordered by PPs
@@ -146,11 +161,13 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                     key_control, f"{g} NP", 
                     f"{g} {label_perturbation_type}"]  # conditions: gene g
                 figs["mixscape_ppp_violin"][g] = pt.pl.ms.violin(
-                    adata=adata[assay], 
+                    adata=adata[assay] if assay else adata,
+                    # adata=adata_pert, 
                     target_gene_idents=tg_conds, 
                     groupby="mixscape_class")  # gene: perturbed, NP, control
                 figs["mixscape_ppp_violin"][f"{g}_global"] = pt.pl.ms.violin(
-                    adata=adata[assay] if assay else adata, 
+                    adata=adata[assay] if assay else adata,
+                    # adata=adata_pert, 
                     target_gene_idents=[key_control, "NP", 
                                         label_perturbation_type], 
                     groupby="mixscape_class_global")  # global: P, NP, control 
@@ -159,12 +176,14 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                         f"{g} {label_perturbation_type}"] 
                 for g in target_gene_idents])  # conditions: all genes
             figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
-                adata=adata[assay] if assay else adata, 
+                adata=adata[assay] if assay else adata,
+                # adata=adata_pert, 
                 target_gene_idents=tg_conds, 
                 groupby="mixscape_class")  # gene: perturbed, NP, control
         if assay_protein is not None and target_gene_idents is not None:
             figs[f"mixscape_protein_{protein_of_interest}"] = pt.pl.ms.violin( 
-                adata=adata[assay_protein], 
+                adata=adata[assay] if assay else adata,
+                # adata=adata_pert, 
                 target_gene_idents=target_gene_idents,
                 keys=protein_of_interest, groupby=col_target_genes,
                 hue="mixscape_class_global")
@@ -173,7 +192,8 @@ def perform_mixscape(adata, col_perturbation="perturbation",
 
 def perform_augur(adata, assay=None, layer_perturbation=None,
                   classifier="random_forest_classifier", 
-                  augur_mode="default", subsample_size=20, n_threads=4, 
+                  augur_mode="default", 
+                  subsample_size=20, n_threads=4, n_folds=3,
                   select_variance_features=False, 
                   col_cell_type="leiden",
                   col_perturbation=None, 
@@ -189,7 +209,8 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         augur_mode (str, optional): Augur or permute? Defaults to "default".
         subsample_size (int, optional): Per Pertpy code: 
             "number of cells to subsample randomly per type 
-            from each experimental condition"
+            from each experimental condition."
+        n_folds (int, optional): Number of folds for cross-validation. Defaults to 3.
         n_threads (int, optional): _description_. Defaults to 4.
         select_variance_features (bool, optional): Use Augur to select genes (True), or 
             Scanpy's  highly_variable_genes (False). Defaults to False.
@@ -213,7 +234,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
     # Setup
     figs = {}
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_augur_predict is None:
         kws_augur_predict = {}
     adata_pert = adata[assay].copy() if assay else adata.copy()
@@ -234,10 +255,10 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         data, results, figs = [[None, None]] * 3  # to store results
         for i, x in enumerate([True, False]):  # iterate over methods
             data[i], results[i], figs[i] = perform_augur(
-                adata_pert[assay] if assay else adata_pert, 
+                adata_pert, 
                 subsample_size=subsample_size, 
                 select_variance_features=x, 
-                n_threads=n_threads,
+                n_threads=n_threads, folds=n_folds,
                 **kws_augur_predict)  # recursive -- run function both ways
             if plot is True:
                 figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
@@ -245,8 +266,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
     else:
         ag_rfc = pt.tl.Augur(classifier)
         loaded_data = ag_rfc.load(
-            adata_pert[assay] if assay else adata_pert, 
-            condition_label=key_control, 
+            adata_pert, condition_label=key_control, 
             treatment_label=key_treatment,
             cell_type_col=col_cell_new,
             label_col=col_pert_new
@@ -264,8 +284,8 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             sc.pp.neighbors(data)
             sc.tl.umap(data)
             figs["perturbation_effect_umap"] = sc.pl.umap(
-                adata_pert=data, color=[
-                    "augur_score", 
+                adata_pert, color=[
+                    "augur_score",
                     col_cell_type, col_perturbation])  # UMAP scores
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # most important genes for prioritization
@@ -317,7 +337,7 @@ def perform_differential_prioritization(adata, col_perturbation="perturbation",
     """
     figs = {}
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_augur_predict is None:
         kws_augur_predict = {}
     augur_results, permuted_results = [], []  # to hold results
@@ -369,7 +389,7 @@ def analyze_composition(adata, reference_cell_type,
     """Perform SCCoda compositional analysis."""
     figs, results = {}, {}
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
     sccoda_model = pt.tl.Sccoda()
     sccoda_data = sccoda_model.load(
         adata, type=analysis_type, 
@@ -445,7 +465,7 @@ def compute_distance(adata, col_perturbation="perturbation",
     figs = {}
     distance = {}
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_plot is None:
         kws_plot = dict(robust=True, figsize=(10, 10))
     # Distance Metrics
@@ -474,3 +494,57 @@ def compute_distance(adata, col_perturbation="perturbation",
         plt.show()
         figs[f"distance_cluster_hierarchies_{distance_type}"] = plt.gcf()
     return distance, data, dff, mat, figs
+
+
+def perform_gsea(adata, label_condition):
+    """Perform a gene set enrichment analysis (adapted from SC Best Practices)."""
+    
+    # Extract DEGs
+    if filter_by_highly_variable is True:
+        t_stats = (
+            # Get dataframe of DE results for condition vs. rest
+            sc.get.rank_genes_groups_df(adata, label_condition, key="t-test")
+            .set_index("names")
+            # Subset to highly variable genes
+            .loc[adata.var["highly_variable"]]
+            # Sort by absolute score
+            .sort_values("scores", key=np.abs, ascending=False)
+            # Format for decoupler
+            [["scores"]]
+            .rename_axis([label_condition], axis=1)
+        )
+    else:
+        t_stats = (
+            # Get dataframe of DE results for condition vs. rest
+            sc.get.rank_genes_groups_df(adata, label_condition, key="t-test")
+            .set_index("names")
+            # Sort by absolute score
+            .sort_values("scores", key=np.abs, ascending=False)
+            # Format for decoupler
+            [["scores"]]
+            .rename_axis([label_condition], axis=1)
+        )
+    print(t_stats)
+    
+    # Retrieve Reactome Pathways
+    msigdb = decoupler.get_resource("MSigDB")
+    reactome = msigdb.query("collection == 'reactome_pathways'")
+    reactome = reactome[~reactome.duplicated((
+        "geneset", "genesymbol"))]  # filter duplicates
+    
+    # Filter Gene Sets for Compatibility
+    geneset_size = reactome.groupby("geneset").size()
+    gsea_genesets = geneset_size.index[(
+        geneset_size > 15) & (geneset_size < 500)]
+    scores, norm, pvals = decoupler.run_gsea(
+        t_stats.T, reactome[reactome["geneset"].isin(gsea_genesets)], 
+        source="geneset", target="genesymbol")
+
+    # Rank Genes by T-Statistics
+    gsea_results = (
+        pd.concat({"score": scores.T, "norm": norm.T, "pval": pvals.T}, 
+                axis=1).droplevel(level=1, axis=1).sort_values("pval"))
+    # fig[] = so.Plot(data=(gsea_results.head(20).assign(
+    #     **{"-log10(pval)": lambda x: -np.log10(x["pval"])})),
+    #                 x="-log10(pval)", y="source").add(so.Bar())
+

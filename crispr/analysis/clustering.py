@@ -31,13 +31,6 @@ def cluster(adata, assay=None, plot=True, colors=None,
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
             kws_pca, kws_neighbors, kws_umap, kws_cluster]]
-    if plot is True:
-        try:
-            figs["highest_counts_per_cell"] = sc.pl.highest_expr_genes(
-                adata[assay] if assay else adata, 
-                n_top=n_top, gene_symbols=col_gene_symbols)
-        except Exception as err:
-            warnings.warn(f"Error plotting highest counts per cell: {err}")
     print("\n\n<<< PERFORMING PCA >>>")
     if len(kws_pca) > 0:
         print("\n", kws_pca)
@@ -51,7 +44,7 @@ def cluster(adata, assay=None, plot=True, colors=None,
         print("\n", kws_neighbors)
     sc.pp.neighbors(adata[assay] if assay else adata, 
                     **kws_neighbors)
-    print(f"\n\n<<< EMBEDDING WITH UMAP >>>")
+    print(f"\n\n<<< EMBEDDING: UMAP >>>")
     if len(kws_umap) > 0:
         print("\n", kws_umap)
     if paga is True:

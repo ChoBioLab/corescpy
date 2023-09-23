@@ -42,6 +42,7 @@ class Crispr(object):
         self._file_path = file_path
         self.adata = file_path
         self.figures = {"main": {}}
+        self.results = {"main": {}}
 
     @property
     def adata(self):
@@ -53,9 +54,12 @@ class Crispr(object):
         """Set file path and load object."""
         self._file_path = value
         if not isinstance(value, sc.AnnData):
+            print("<<<CREATING OBJECT>>>")
             self._adata = cr.pp.create_object(
                 value, assay=None, col_gene_symbols=self._columns[
                     "col_gene_symbols"])
+        else:
+            self._adata = value
     
     def preprocess(self, assay=None, assay_protein=None, 
                    clustering=False, run_label="main", **kwargs):
@@ -128,8 +132,10 @@ class Crispr(object):
             self.figures[run_label].update({"mixscape": figs_mix})
         return figs_mix
     
-    def run_augur(self, assay=None, key_treatment=None,
+    def run_augur(self, assay=None, 
+                  col_perturbation=None, key_treatment=None,
                   augur_mode="default", classifier="random_forest_classifier", 
+                  kws_augur_predict=None, n_folds=3,
                   subsample_size=20, n_threads=True, 
                   select_variance_features=False, 
                   seed=1618, plot=True, run_label="main", test=False):
@@ -138,14 +144,20 @@ class Crispr(object):
             annd = self.adata.copy()
         if key_treatment is None:
             key_treatment = self._keys["key_treatment"]
+        if col_perturbation is None:
+            col_perturbation = self._columns["col_perturbation"]
         if n_threads is True:
             n_threads = os.cpu_count() - 1 # use available CPUs - 1
+        if assay is None:
+            assay = self._assay
         data, results, figs_aug = cr.ax.perform_augur(
             self.adata.copy() if test is True else self.adata, 
             assay=assay, classifier=classifier, 
             augur_mode=augur_mode, subsample_size=subsample_size,
             select_variance_features=select_variance_features, 
-            **self._columns, 
+            n_folds=n_folds,
+            **{**self._columns, "col_perturbation": col_perturbation},  
+            kws_augur_predict=kws_augur_predict,
             key_control=self._keys["key_control"], key_treatment=key_treatment,
             layer=self._layer_perturbation,
             seed=seed, n_threads=n_threads, plot=plot)
@@ -162,9 +174,31 @@ class Crispr(object):
     def compute_distance(self, distance_type="edistance", method="X_pca", 
                          kws_plot=None, highlight_real_range=False,
                          run_label="main", plot=True):
-        """Compute edistance."""
+        """Compute and visualize distance metrics."""
         output = cr.ax.compute_distance(
-            self.adata, **self._columns, **self.keys,
+            self.adata, **self._columns, **self._keys,
+            distance_type=distance_type, method=method,
+            kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
+            plot=plot)
+        if plot is True:
+            if run_label not in self.figures:
+                self.figures[run_label] = {}
+            self.figures[run_label]["distances"] = {}
+            self.figures[run_label]["distances"].update(
+                {f"{distance_type}_{method}": output[-1]})
+            if run_label not in self.results:
+                self.results[run_label] = {}
+            self.results[run_label]["distances"] = {}
+            self.results[run_label]["distances"].update(
+                {f"{distance_type}_{method}": output})
+        return output
+    
+    def compute_distance(self, distance_type="edistance", method="X_pca", 
+                         kws_plot=None, highlight_real_range=False,
+                         run_label="main", plot=True):
+        """Analyze cell type composition changes."""
+        output = cr.ax.compute_distance(
+            self.adata, **self._columns, **self._keys,
             distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
             plot=plot)
