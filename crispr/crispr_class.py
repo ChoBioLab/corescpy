@@ -10,6 +10,7 @@ import scanpy as sc
 import os
 import warnings
 import matplotlib.pyplot as plt
+import re
 import pandas as pd
 import numpy as np
 import crispr as cr
@@ -91,7 +92,10 @@ class Crispr(object):
         if "scaled" not in self.adata.layers:
             self.adata.layers['scaled'] = sc.pp.scale(
                 self.adata, copy=True).X  # scaling (Z-scores)
-        layers = [None] + list(self.adata.layers)
+        if layers == "all":  # to include all layers
+            layers = list(self.adata.layers.copy())
+        if None in layers:
+            layers.remove(None)
             
         # Pre-Processing
         print("\n<<< PLOTTING PRE-PROCESSING >>>")
@@ -104,7 +108,11 @@ class Crispr(object):
         if "cmap" not in kws_gex:
             kws_gex.update({"cmap": cmap_continuous})
         print("\n<<< PLOTTING GEX (Heatmap) >>>")
-        for i in layers:
+        rows, cols = cr.pl.square_grid(len([None] + list(layers)))
+        figs["gene_expression"], axes_gex = plt.subplots(
+            rows, cols, figsize=(20 * rows, int(4 * cols / 3)), 
+            gridspec_kw={'wspace': 0.9})
+        for j, i in enumerate([None] + list(layers)):
             lab = f"gene_expression_{i}" if i else "gene_expression"
             if i is None:
                 hm_title = "Gene Expression"
@@ -113,15 +121,17 @@ class Crispr(object):
             else:
                 hm_title = f"Gene Expression ({i})"
             try:
-                figs[lab] = sc.pl.heatmap(
+                sc.pl.heatmap(
                     self.adata[assay] if assay else self.adata, names,
                     self._columns["col_cell_type"], layer=i,
+                    ax=axes_gex[j],
                     gene_symbols=self._columns["col_gene_symbols"], 
                     show=False)  # GEX heatmap
-                figs[lab] = plt.gcf(), figs[lab]
-                figs[lab][0].suptitle(title if title else hm_title)
+                axes_gex[j].set_title("Raw" if i is None else i.capitalize())
+                # figs[lab] = plt.gcf(), figs[lab]
+                # figs[lab][0].suptitle(title if title else hm_title)
                 # figs[lab][0].supxlabel("Gene")
-                figs[lab][0].show()
+                # figs[lab][0].show()
             except Exception as err:
                 warnings.warn(
                     f"{err}\n\nCould not plot GEX heatmap ('{hm_title}').")
@@ -144,7 +154,7 @@ class Crispr(object):
             if i[0] not in kws_gex_violin:  # add default arguments
                 kws_gex_violin.update({i[0]: i[1]})
         print("\n<<< PLOTTING GEX (Violin) >>>")
-        for i in [None] + list(self.adata.layers):
+        for i in [None] + list(layers):
             try:
                 lab = f"gene_expression_violin"
                 title_gexv = title if title else "Gene Expression"
@@ -264,12 +274,17 @@ class Crispr(object):
             
     
     def preprocess(self, assay=None, assay_protein=None, 
+                   kws_process_guide_rna=None,
                    clustering=False, run_label="main", **kwargs):
         """Preprocess data."""
         if assay_protein is None:
             assay_protein = self._assay_protein
         if assay is None:
             assay = self._assay
+        if kws_process_guide_rna is not None:  # process perturbation columns
+            assay_gr = kws_process_guide_rna.pop(
+                "assay") if "assay" in kws_process_guide_rna else assay
+            self.process_guide_rna(assay=assay_gr, **kws_process_guide_rna)
         _, figs = cr.pp.process_data(
             self.adata, assay=assay, **self._columns,
             assay_protein=assay_protein, **kwargs)  # preprocess
@@ -286,7 +301,59 @@ class Crispr(object):
                 raise TypeError(
                     "'clustering' must be dict (keyword arguments) or bool.")
         return figs
-            
+    
+    
+    def process_guide_rna(self, assay=None, feature_split="|", guide_split="-",
+                          key_control_patterns="CTRL"):
+        """
+        Convert specific guide RNA entries to general gene targets,
+        including dummy-coded columns for each gene target (if no counts) 
+        or count columns for each target, plus a column of gene target 
+        categories stripped of specific guide ID suffixes (e.g., -1, -2-1).
+        """
+        if isinstance(key_control_patterns, str):
+            key_control_patterns = [key_control_patterns]
+        targets = self.adata.obs[self._columns["col_guide_rna"]].str.strip(
+            " ").replace("", np.nan)
+        if np.nan in key_control_patterns:
+            key_control_patterns = list(pd.Series(key_control_patterns).dropna())
+            targets = targets.replace(
+                np.nan, key_control_patterns[0])  # NaNs replaced w/ control key
+        targets = targets.apply(
+            lambda x: [re.sub(f"{guide_split}.*", "", i) for i in x.split(
+                feature_split)])  # each entry -> list of target genes
+        targets = targets.apply(lambda x: [
+            self._keys["key_control"] if any(
+                (k in i for k in key_control_patterns)) else i 
+                for i in x])  # find control keys among targets
+        binary = targets.apply(
+            lambda x: any(np.array(x) != self._keys["key_control"])).to_frame(
+                self._columns["col_perturbation"])  # binary perturbed/not
+        if assay: 
+            self.adata[assay].obs = self.adata[assay].obs.join(
+                targets.to_frame(self._columns["col_target_genes"]), 
+                lsuffix="_original")
+            self.adata[assay].obs = self.adata[assay].obs.join(
+                binary, lsuffix="_original")
+        else:
+            self.adata.obs = self.adata.obs.join(
+                targets.to_frame(self._columns["col_target_genes"]), 
+                lsuffix="_original")
+            self.adata.obs = self.adata.obs.join(binary, lsuffix="_original")
+        for t in targets.explode().unique():
+            if assay:
+                self.adata[assay].obs[
+                    f"{self._keys['key_treatment']}_{t}"] = targets.apply(
+                        lambda x: self._keys['key_treatment'] if t in x else 
+                        self._keys['key_control']
+                        )  # treatment or control key for each target
+            else:
+                self.adata.obs[
+                    f"{self._keys['key_treatment']}_{t}"] = targets.apply(
+                        lambda x: self._keys['key_treatment'] if t in x else 
+                        self._keys['key_control']
+                        )  # treatment or control key for each target
+                
                     
     def cluster(self, assay=None, method_cluster="leiden", 
                 plot=True, colors=None, paga=False, 

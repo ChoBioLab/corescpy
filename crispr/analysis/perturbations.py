@@ -257,7 +257,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
                 **kws_augur_predict)  # recursive -- run function both ways
         figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
             results[0], results[1])  # compare  methods (diagonal=same)
-    else:x
+    else:
         # Setup
         figs = {}
         if kws_augur_predict is None:
@@ -302,9 +302,9 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             sc.pp.neighbors(data)
             sc.tl.umap(data)
             figs["perturbation_effect_umap"] = sc.pl.umap(
-                data, color=[
-                    "augur_score",
-                    col_cell_type, col_perturbation])  # UMAP scores
+                data, color=["augur_score", col_cell_type, col_perturbation],
+                palette=str(kwargs["palette"] if "palette" in kwargs 
+                            else "bright"))  # scores super-imposed on UMAP
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # most important genes for prioritization
             figs["perturbation_scores"] = {}

@@ -23,10 +23,15 @@ import numpy as np
 
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
-def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
+def create_object(file, col_gene_symbols="gene_symbols", assay=None,
+                  col_barcode=None, **kwargs):
     """Create object from Scanpy-compatible file."""
     # extension = os.path.splitext(file)[1]
-    if not isinstance(file, (str, os.PathLike)):
+    if isinstance(file, dict):
+        adata = combine_matrix_protospacer(
+            **file, col_gene_symbols=col_gene_symbols, col_barcode=col_barcode,
+            **kwargs)  # when perturbation info not in mtx
+    elif not isinstance(file, (str, os.PathLike)):
         print(f"\n<<< LOADING OBJECT>>>")
         adata = file.copy()
     elif os.path.isdir(file):  # if directory, assume 10x format
@@ -43,9 +48,47 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None, **kwargs):
         adata = sc.read(file)
     # TODO: Flesh this out, generalize, test, etc.
     adata.var_names_make_unique()
+    adata.obs_names_make_unique()
     if assay is not None:
         adata = adata[assay]  # subset by assay if desired 
     print("\n\n", adata)
+    return adata
+
+
+def combine_matrix_protospacer(
+    directory="", subdirectory_mtx="filtered_feature_bc_matrix", 
+    col_gene_symbols="gene_symbols", 
+    file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
+    col_barcode="cell_barcode", **kwargs):
+    """
+    Combine CellRanger directory-derived AnnData `.obs` & perturbation data.
+    
+    Example
+    -------
+    >>> adata = combine_matrix_protospacer(
+    ... "/home/asline01/projects/crispr/examples/data/crispr-screening/HH03, 
+    ... "filtered_feature_bc_matrix", col_gene_symbols="gene_symbols", 
+    ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
+    ... col_barcode="cell_barcode")
+    
+    Or using create_object(), with directory/file-related arguments in 
+    a dictionary passed to the "file" argument:
+    
+    >>> adata = create_object(
+    ... dict(directory="/home/asline01/projects/crispr/examples/data/crispr-screening/HH03, 
+    ... subdirectory_mtx="filtered_feature_bc_matrix", 
+    ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv"),
+    ... col_barcode="cell_barcode", col_gene_symbols="gene_symbols")
+    
+    """
+    adata = sc.read_10x_mtx(
+        os.path.join(directory, subdirectory_mtx), 
+        var_names=col_gene_symbols, **kwargs)  # 10x matrix, barcodes, features
+    dff = pd.read_csv(os.path.join(directory, file_protospacer), 
+                      index_col=col_barcode)  # perturbation information
+    if col_barcode is None:
+        dff, col_barcode = dff.set_index(dff.columns[0]), dff.columns[0]
+    adata.obs = adata.obs.join(dff.rename_axis(adata.obs.index.names[0]))
     return adata
 
 

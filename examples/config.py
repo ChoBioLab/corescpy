@@ -11,7 +11,7 @@ DIR = pathlib.Path(__file__).parent.resolve()
 DIR = os.path.join(DIR, "data")
 
 files_data = {
-    "CRISPRi_scr": f"{DIR}/crispr-screening/filtered_feature_bc_matrix_HH06.h5",
+    "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH03"),
     "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS) 
     "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq
     "pool": f"{DIR}/norman_2019_raw.h5ad",
@@ -41,7 +41,7 @@ col_cell_type_data = {
 }
 
 col_gene_symbols_data = {
-    "CRISPRi_scr": "gene_symbols",
+    "CRISPRi_scr": "gene_ids",
     "CRISPRi_wgs": "gene",  # ?
     "CRISPRi_ess": "gene_symbols",
     "pool": "gene_symbols",
@@ -96,7 +96,7 @@ col_perturbation_data = {
 }
 
 key_control_data = {
-    "CRISPRi_scr": "Non-Targeting",
+    "CRISPRi_scr": "NT",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "NT",  # must modify NaNs in guide_ids column
     "pool": np.nan,
@@ -109,7 +109,7 @@ key_control_data = {
 }
 
 key_treatment_data = {
-    "CRISPRi_scr": np.nan,
+    "CRISPRi_scr": "Perturbed",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": None,
     "pool": np.nan,
@@ -137,7 +137,7 @@ label_perturbation_type_data = {
 col_target_genes_data = {
     "CRISPRi_scr": "target_gene_name",
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "guide_ids",
+    "CRISPRi_ess": "target_gene",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -148,7 +148,7 @@ col_target_genes_data = {
 }
 
 col_guide_rna_data = {
-    "CRISPRi_scr": "name",
+    "CRISPRi_scr": "feature_call",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "guide_ids",
     "pool": np.nan,
@@ -199,6 +199,19 @@ col_batch_data = {
     "augur_ex": None
 }
 
+kws_process_guide_rna_data = {
+    "CRISPRi_scr": dict(feature_split="|", guide_split="-", 
+                        key_control_patterns=[np.nan, "CTRL"]),
+    "CRISPRi_wgs": None,
+    "CRISPRi_ess": None,
+    "pool": None,
+    "bulk": None,
+    "screen": None,
+    "perturb-seq": None,
+    "ECCITE": None,
+    "coda": None, 
+    "augur_ex": None
+}
 
 def load_example_data(file, col_gene_symbols, write_public=False):
     """(Down)load data for examples/vignettes.
@@ -226,9 +239,6 @@ def load_example_data(file, col_gene_symbols, write_public=False):
         adata = cr.pp.create_object(file_path, assay=None, 
                                     col_gene_symbols=col_gene_symbols,
                                     **kwargs)
-        # except Exception as e:
-        #     err = f"\n\n{'=' * 80}\n\n{file_path} failed to load:\n\n{e}"
-        #     print(err)
     if adata is None:  # if file doesn't exist or failed to load
         if file in files_data:
             print(f"\n\nLooking for downloadable files for: {file}.")
@@ -267,11 +277,15 @@ def load_example_data(file, col_gene_symbols, write_public=False):
         else:
             raise ValueError(f"{file_path} does not exist.")
     if file == "CRISPRi_ess":
-        col_target_genes = col_target_genes_data[file]
-        adata.obs[col_target_genes] = adata.obs[
-            col_target_genes].astype(str).str.strip(" ").replace(
-                "", key_control_data[file]).replace(
-                    np.nan, key_control_data[file])
-        adata.obs[col_perturbation_data[file]] = adata.obs[
-            col_target_genes]
+        adata = adata[adata.obs["guide_ids"].isin(
+            ["NT", "CDKN1A", "CDKN1A,CDKN1B", "CEBPA", "CEBPB", 
+            "CEBPA,CEBPB", "CEBPB,OSR2", "S1PR2,SGK1",
+            "DUSP9,KLF1", "SAMD1,UBASH3B", "TGFBR2", 
+            "FEV,ISL2", "PRTG,TGFBR2",
+            "JUN", "CLDN6,KLF1", "CBFA2T3,POU3F2", "FOXA1,HOXB9",
+            "DLX2,ZBTB10", "SAMD1,TGFBR2", "ZBTB10", "CEBPE,SPI1", "PTPN13",
+            "CEBPE,PTPN12", "CDKN1B,CDKN1C", "FOXF1,FOXL2", "AHR,FEV",
+            "KLF1,TGFBR2", "CDKN1A,CDKN1B"])]  # subset for speed
+    if file == "coda": 
+        adata.var.loc[:, col_gene_symbols_data[file]] = adata.var.index.values
     return adata

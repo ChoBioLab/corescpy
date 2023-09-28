@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import seaborn as sb
 # import cowplot
 import warnings
+import math
 import pandas as pd
 import numpy as np
 
@@ -36,3 +37,12 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
             adata, genes, groupby=method_cluster, rotation=90)
     if plot_types == "all" or "dot" in plot_types:
         figs["dot"] = sc.pl.dotplot(adata, genes, groupby='leiden')
+        
+
+def square_grid(number):
+    """Return row-column dimensions that most closely approximate a square."""
+    if isinstance(number, (np.ndarray, list, set, tuple, pd.Series)):
+        number = len(number)  # if provided actual object, calculate length
+    rows = int(np.sqrt(number))  # number of rows (try to get close to square grid)
+    cols = math.ceil(number / rows)  # number of columns
+    return rows, cols
