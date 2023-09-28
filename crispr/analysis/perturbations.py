@@ -257,7 +257,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
                 **kws_augur_predict)  # recursive -- run function both ways
         figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
             results[0], results[1])  # compare  methods (diagonal=same)
-    else:
+    else:x
         # Setup
         figs = {}
         if kws_augur_predict is None:
