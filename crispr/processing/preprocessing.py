@@ -144,8 +144,6 @@ def process_data(adata, assay=None, assay_protein=None,
     sc.pp.normalize_total(adata[assay] if assay else adata, 
                           target_sum=target_sum)  # count-normalize
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
-    # sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-    #                             subset=True)  # highly variable genes
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
         
@@ -187,6 +185,27 @@ def process_data(adata, assay=None, assay_protein=None,
     if col_cell_type is not None and col_cell_type in adata.obs:
         print(f"\n\n{'=' * 80}\nCell Counts (Post-Processing)\n{'=' * 80}\n\n")
         print(adata.obs[col_cell_type].value_counts())
+        
+    # Gene Expression Heatmap
+    # if assay:
+    #     labels = adata[assay].var.reset_index()[col_gene_symbols]  # genes
+    #     if labels[0] != adata[assay].var.index.values[0]:
+    #         labels = dict(zip(list(adata[assay].var.index.values), list(
+    #             adata[assay].var.reset_index()[col_gene_symbols])))
+    # else:
+    #     labels = adata.var.reset_index()[col_gene_symbols]  # gene names
+    #     if labels[0] != adata.var.index.values[0]:
+    #         labels = dict(zip(list(adata.var.index.values), list(
+    #             adata.var.reset_index()[col_gene_symbols])))
+    # figs["gene_expression"] = sc.pl.heatmap(
+    #     adata[assay] if assay else adata, labels,
+    #     col_cell_type, show_gene_labels=True, dendrogram=True)
+    # if layer is not None:
+    #     labels = adata.var.reset_index()[col_gene_symbols]  # gene names 
+    #     figs[f"gene_expression_{layer}"] = sc.pl.heatmap(
+    #         adata[assay] if assay else adata, labels,
+    #         layer=layer, show_gene_labels=True, 
+    #         dendrogram=True)
             
     print("\n\n")
     return adata, figs
@@ -264,7 +283,8 @@ def assign_guide_rna(adata, assignment_threshold=5, layer="counts",
     return gdo
 
 
-def remove_batch_effects(col_cell_type="leiden", col_batch="batch"):
+def remove_batch_effects(adata, col_cell_type="leiden", 
+                         col_batch="batch", plot=True):
     """Remove batch effects (IN PROGRESS)."""
     if plot is True:
         sc.pl.umap(adata, color=[col_batch, col_cell_type], 

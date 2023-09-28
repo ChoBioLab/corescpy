@@ -6,8 +6,10 @@
 """
 
 import scanpy as sc
-import subprocess
+# import subprocess
 import os
+import warnings
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import crispr as cr
@@ -60,6 +62,206 @@ class Crispr(object):
                     "col_gene_symbols"])
         else:
             self._adata = value
+            
+    def plot(self, genes=None, assay="default", 
+             title=None,  # NOTE: will apply to multiple plots
+             marker_genes_dict=None,
+             kws_gex=None, kws_clustering=None, 
+             kws_gex_violin=None, kws_gex_matrix=None, 
+             cmap_continuous="coolwarm", cmap_categorical="viridis",
+             run_label="main"):
+        
+        # Setup 
+        figs = {}
+        if not isinstance(genes, (list, np.ndarray)) and (
+            genes is None or genes == "all"):
+            names = self.adata.var.reset_index()[
+                self._columns["col_gene_symbols"]].copy()  # gene names
+            if genes == "all": 
+                genes = names.copy()
+        else:
+            names = genes.copy()
+        genes, names = list(pd.unique(genes)), list(pd.unique(names))
+        if assay == "default":
+            assay = self._assay
+        if assay:  # store available `.obs` columns
+            cols_obs = self.adata[assay].obs.columns
+        else:
+            cols_obs = self.adata.obs.columns
+        if "scaled" not in self.adata.layers:
+            self.adata.layers['scaled'] = sc.pp.scale(
+                self.adata, copy=True).X  # scaling (Z-scores)
+        layers = [None] + list(self.adata.layers)
+            
+        # Pre-Processing
+        print("\n<<< PLOTTING PRE-PROCESSING >>>")
+        if "preprocessing" in self.figures[run_label]:
+            figs["preprocessing"] = self.figures[run_label]["preprocessing"]
+            
+        # Gene Expression Heatmap(s)
+        if kws_gex is None:
+            kws_gex = {"dendrogram": True, "show_gene_labels": True}
+        if "cmap" not in kws_gex:
+            kws_gex.update({"cmap": cmap_continuous})
+        print("\n<<< PLOTTING GEX (Heatmap) >>>")
+        for i in layers:
+            lab = f"gene_expression_{i}" if i else "gene_expression"
+            if i is None:
+                hm_title = "Gene Expression"
+            elif i == self._layer_perturbation:
+                hm_title = f"Gene Expression (Perturbation Layer)"
+            else:
+                hm_title = f"Gene Expression ({i})"
+            try:
+                figs[lab] = sc.pl.heatmap(
+                    self.adata[assay] if assay else self.adata, names,
+                    self._columns["col_cell_type"], layer=i,
+                    gene_symbols=self._columns["col_gene_symbols"], 
+                    show=False)  # GEX heatmap
+                figs[lab] = plt.gcf(), figs[lab]
+                figs[lab][0].suptitle(title if title else hm_title)
+                # figs[lab][0].supxlabel("Gene")
+                figs[lab][0].show()
+            except Exception as err:
+                warnings.warn(
+                    f"{err}\n\nCould not plot GEX heatmap ('{hm_title}').")
+                figs[lab] = err
+        
+        # Gene Expression Violin Plots
+        if kws_gex_violin is None:
+            kws_gex_violin = {}
+        if "cmap" not in kws_gex_violin:
+            kws_gex_violin.update({"cmap": cmap_continuous})
+        if "groupby" in kws_gex_violin or "col_cell_type" in kws_gex_violin:
+            lab_cluster = kws_gex_violin.pop(
+                "groupby" if "groupby" in kws_gex_violin else "col_cell_type")
+        else:
+            lab_cluster = self._columns["col_cell_type"]
+        if lab_cluster not in cols_obs:
+            lab_cluster = None   # None if cluster label N/A in `.obs`
+        for i in zip(["dendrogram", "swap_axes", "cmap"], 
+                     [True, False, cmap_continuous]):
+            if i[0] not in kws_gex_violin:  # add default arguments
+                kws_gex_violin.update({i[0]: i[1]})
+        print("\n<<< PLOTTING GEX (Violin) >>>")
+        for i in [None] + list(self.adata.layers):
+            try:
+                lab = f"gene_expression_violin"
+                title_gexv = title if title else "Gene Expression"
+                if i:
+                    lab += "_" + str(i)
+                    if not title:
+                        title_gexv = f"{title_gexv} ({i})"
+                figs[lab] = sc.pl.stacked_violin(
+                    self.adata[assay] if assay else self.adata, 
+                    marker_genes_dict if marker_genes_dict else genes,
+                    layer=i, groupby=lab_cluster, return_fig=True, 
+                    gene_symbols=self._columns["col_gene_symbols"], 
+                    title=title_gexv, show=False,
+                    **kws_gex_violin)  # violin plot of GEX
+                # figs[lab].fig.supxlabel("Gene")
+                # figs[lab].fig.supylabel(lab_cluster)
+                figs[lab].show()
+            except Exception as err:
+                warnings.warn(f"{err}\n\nCould not plot GEX violins.")
+                figs["gene_expression_violin"] = err
+        
+        # Gene Expression Matrix Plots
+        if kws_gex_matrix is None:
+            kws_gex_matrix = {}
+        if "cmap" not in kws_gex_matrix:
+            kws_gex_matrix.update({"cmap": cmap_continuous})
+        if "groupby" in kws_gex_matrix or "col_cell_type" in kws_gex_matrix:
+            lab_cluster = kws_gex_matrix.pop(
+                "groupby" if "groupby" in kws_gex_matrix else "col_cell_type")
+        else:
+            lab_cluster = self._columns["col_cell_type"]
+        if lab_cluster not in cols_obs:
+            lab_cluster = None   # None if cluster label N/A in `.obs`
+        for i in zip(["dendrogram", "swap_axes", "cmap"], 
+                     [True, False, cmap_continuous]):
+            if i[0] not in kws_gex_matrix:  # add default arguments
+                kws_gex_matrix.update({i[0]: i[1]})
+        print("\n<<< PLOTTING GEX (Matrix) >>>")
+        print(kws_gex_matrix)
+        try:
+            for i in [None] + list(self.adata.layers):
+                lab = f"gene_expression_matrix"
+                title_gexm = title if title else "Gene Expression"
+                if i:
+                    lab += "_" + str(i)
+                    if not title:
+                        title_gexm = f"{title_gexm} ({i})"
+                if i == "scaled":
+                    bar_title = "Expression (Mean Z-Score)"
+                else: 
+                    bar_title = "Expression"
+                figs[lab] = sc.pl.matrixplot(
+                    self.adata[assay] if assay else self.adata, genes,
+                    layer=i, return_fig=True, groupby=lab_cluster,
+                    title=title_gexm,
+                    gene_symbols=self._columns["col_gene_symbols"],
+                    **{"colorbar_title": bar_title, **kws_gex_matrix
+                       },  # colorbar title overriden if already in kws_gex
+                    show=False)  # violin plot of GEX
+                # figs[lab].fig.supxlabel("Gene")
+                # figs[lab].fig.supylabel(lab_cluster)
+                figs[lab].show()
+        except Exception as err:
+            warnings.warn(f"{err}\n\nCould not plot GEX matrix plot.")
+            figs["gene_expression_matrix"] = err
+        
+        # UMAP
+        if kws_clustering is None:
+            kws_clustering = {"frameon": False, "legend_loc": "on_data"}
+        title_umap = str(title if title else kws_clustering[
+            "title"] if "title" in kws_clustering else "UMAP")
+        color = kws_clustering.pop(
+            "color") if "color" in kws_clustering else None  # color-coding
+        if "cmap" in kws_clustering:  # in case use wrong form of argument
+            kws_clustering["color_map"] = kws_clustering.pop("cmap")
+        if "palette" not in kws_clustering:
+            kws_clustering.update({"palette": cmap_categorical})
+        if "X_umap" in self.adata.obsm:
+            print("\n<<< PLOTTING UMAP >>>")
+            if "col_cell_type" in kws_clustering:  # if provide cell column
+                lab_cluster = kws_clustering.pop("col_cell_type")
+            else: 
+                lab_cluster = self._columns["col_cell_type"] 
+            try:
+                figs["clustering"] = sc.pl.umap(
+                    self.adata[assay] if assay else self.adata, 
+                    color=lab_cluster, return_fig=True, 
+                    title=title_umap,  **kws_clustering)  # UMAP ~ cell type
+            except Exception as err:
+                warnings.warn(f"{err}\n\nCould not plot UMAP clusters.")
+                figs["clustering"] = err
+            if genes is not None:
+                print("\n<<< PLOTTING GEX ON UMAP >>>")
+                try:
+                    figs["clustering_gene_expression"] = sc.pl.umap(
+                        self.adata[assay] if assay else self.adata, 
+                        title=names,
+                        return_fig=True, 
+                        gene_symbols=self._columns["col_gene_symbols"],
+                        color=names)  # UMAP ~ GEX
+                except Exception as err:
+                    warnings.warn(f"{err}\n\nCould not plot GEX UMAP.")
+                    figs["clustering_gene_expression"] = err
+            if color is not None:
+                print(f"\n<<< PLOTTING {color} on UMAP >>>")
+                try:
+                    figs[f"clustering_{color}"] = sc.pl.umap(
+                        self.adata[assay] if assay else self.adata, 
+                        title=title if title else None, return_fig=True, 
+                        color=color)  # UMAP ~ GEX
+                except Exception as err:
+                    warnings.warn(f"{err}\n\nCould not plot UMAP ~ {color}.")
+                    figs[f"clustering_{color}"] = err
+        else:
+            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`. >>>")
+        return figs
+            
     
     def preprocess(self, assay=None, assay_protein=None, 
                    clustering=False, run_label="main", **kwargs):
@@ -150,6 +352,12 @@ class Crispr(object):
             n_threads = os.cpu_count() - 1 # use available CPUs - 1
         if assay is None:
             assay = self._assay
+        if kws_augur_predict is None:
+            kws_augur_predict = {}
+        # if run_label != "main":
+        #     kws_augur_predict.update(
+        #         {"key_added": f"augurpy_results_{run_label}"}
+        #         )  # run label incorporated in key in adata
         data, results, figs_aug = cr.ax.perform_augur(
             self.adata.copy() if test is True else self.adata, 
             assay=assay, classifier=classifier, 

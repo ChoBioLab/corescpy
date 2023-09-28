@@ -193,12 +193,14 @@ def perform_mixscape(adata, col_perturbation="perturbation",
 def perform_augur(adata, assay=None, layer_perturbation=None,
                   classifier="random_forest_classifier", 
                   augur_mode="default", 
-                  subsample_size=20, n_threads=4, n_folds=3,
+                  subsample_size=20, n_folds=3,
                   select_variance_features=False, 
                   col_cell_type="leiden",
                   col_perturbation=None, 
+                  col_gene_symbols="gene_symbols",
                   key_control="NT", key_treatment=None,
-                  seed=1618, plot=True, kws_augur_predict=None, **kwargs):
+                  seed=1618, plot=True, n_threads=None,
+                  kws_augur_predict=None, **kwargs):
     """Calculates AUC using Augur and a specified classifier.
 
     Args:
@@ -232,38 +234,50 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         _type_: _description_
     """
     # Setup
-    figs = {}
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
-    if kws_augur_predict is None:
-        kws_augur_predict = {}
-    adata_pert = adata[assay].copy() if assay else adata.copy()
-    if layer_perturbation is not None:
-        adata_pert.X = adata_pert.layers[layer_perturbation]
-    
-    # Unfortunately, Augur renames columns INPLACE
-    # Prevent this from overwriting existing column names
-    col_pert_new, col_cell_new = "label", "cell_type"
-    adata_pert.obs[col_pert_new] = adata_pert.obs[col_perturbation].copy()
-    adata_pert.obs[col_cell_new] = adata_pert.obs[col_cell_type].copy()
     
     # Run Augur
     if select_variance_features == "both":  
         # both methods: select genes based on...
         # - original Augur (True)
         # - scanpy's highly_variable_genes (False)
-        data, results, figs = [[None, None]] * 3  # to store results
+        data, results = [[None, None]] * 2  # to store results
+        figs = {}
         for i, x in enumerate([True, False]):  # iterate over methods
-            data[i], results[i], figs[i] = perform_augur(
-                adata_pert, 
-                subsample_size=subsample_size, 
-                select_variance_features=x, 
-                n_threads=n_threads, folds=n_folds,
+            data[i], results[i], figs[str(i)] = perform_augur(
+                adata.copy(), assay=None, layer_perturbation=None,
+                select_variance_features=x, classifier=classifier,
+                augur_mode=augur_mode, subsample_size=subsample_size,
+                n_threads=n_threads, n_folds=n_folds,
+                col_cell_type=col_cell_type, col_perturbation=col_perturbation,
+                col_gene_symbols=col_gene_symbols, 
+                key_control=key_control, key_treatment=key_treatment,
+                seed=seed, plot=plot, **kwargs, 
                 **kws_augur_predict)  # recursive -- run function both ways
-            if plot is True:
-                figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
-                    results[0], results[1])  # compare  methods (diagonal=same)
+        figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
+            results[0], results[1])  # compare  methods (diagonal=same)
     else:
+        # Setup
+        figs = {}
+        if kws_augur_predict is None:
+            kws_augur_predict = {}
+        adata_pert = adata[assay].copy() if assay else adata.copy()
+        if layer_perturbation is not None:
+            adata_pert.X = adata_pert.layers[layer_perturbation]
+        if adata_pert.var_names[0] != adata_pert.var.reset_index()[
+            col_gene_symbols][0]:  # so gene names used in plots if index differs
+            adata_pert.var_names = pd.Index(adata_pert.var.reset_index()[
+                col_gene_symbols])
+        
+        # Unfortunately, Augur renames columns INPLACE
+        # Prevent this from overwriting existing column names
+        col_pert_new, col_cell_new = "label", "cell_type"
+        adata_pert.obs[col_pert_new] = adata_pert.obs[col_perturbation].copy()
+        adata_pert.obs[col_cell_new] = adata_pert.obs[col_cell_type].copy()
+        print(adata_pert)
+        
+        # Augur Model & Data
         ag_rfc = pt.tl.Augur(classifier)
         loaded_data = ag_rfc.load(
             adata_pert, condition_label=key_control, 
@@ -271,6 +285,8 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             cell_type_col=col_cell_new,
             label_col=col_pert_new
             )  # add dummy variables, rename cell type & label columns
+
+        # Run Augur Predict
         data, results = ag_rfc.predict(
             loaded_data, subsample_size=subsample_size, augur_mode=augur_mode, 
             select_variance_features=select_variance_features,
@@ -284,7 +300,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             sc.pp.neighbors(data)
             sc.tl.umap(data)
             figs["perturbation_effect_umap"] = sc.pl.umap(
-                adata_pert, color=[
+                data, color=[
                     "augur_score",
                     col_cell_type, col_perturbation])  # UMAP scores
             figs["important_features"] = pt.pl.ag.important_features(
@@ -496,7 +512,7 @@ def compute_distance(adata, col_perturbation="perturbation",
     return distance, data, dff, mat, figs
 
 
-def perform_gsea(adata, label_condition):
+def perform_gsea(adata, label_condition, filter_by_highly_variable=False):
     """Perform a gene set enrichment analysis (adapted from SC Best Practices)."""
     
     # Extract DEGs
@@ -547,4 +563,5 @@ def perform_gsea(adata, label_condition):
     # fig[] = so.Plot(data=(gsea_results.head(20).assign(
     #     **{"-log10(pval)": lambda x: -np.log10(x["pval"])})),
     #                 x="-log10(pval)", y="source").add(so.Bar())
+    return gsea_results
 
