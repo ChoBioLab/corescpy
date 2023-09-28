@@ -265,10 +265,10 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         adata_pert = adata[assay].copy() if assay else adata.copy()
         if layer_perturbation is not None:
             adata_pert.X = adata_pert.layers[layer_perturbation]
-        if adata_pert.var_names[0] != adata_pert.var.reset_index()[
-            col_gene_symbols][0]:  # so gene names used in plots if index differs
-            adata_pert.var_names = pd.Index(adata_pert.var.reset_index()[
-                col_gene_symbols])
+        # if adata_pert.var_names[0] != adata_pert.var.reset_index()[
+        #     col_gene_symbols][0]:  # so gene names plots use if index differs
+        #     adata_pert.var_names = pd.Index(adata_pert.var.reset_index()[
+        #         col_gene_symbols])
         
         # Unfortunately, Augur renames columns INPLACE
         # Prevent this from overwriting existing column names
@@ -293,7 +293,9 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             n_threads=n_threads, random_state=seed,
             **kws_augur_predict)  # AUGUR model prediction
         print(results["summary_metrics"])  # results summary
-        if plot is True:  # plotting
+        
+        # Plotting
+        if plot is True:
             figs["perturbation_effect_by_cell_type"] = pt.pl.ag.lollipop(
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?

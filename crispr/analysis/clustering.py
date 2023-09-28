@@ -94,3 +94,4 @@ def find_markers(adata, assay=None, plot=True, n_genes=25, method="wilcoxon"):
         figs["marker_rankings"] = sc.pl.rank_genes_groups(
             adata, n_genes=n_genes, sharey=False)
     return adata.uns['rank_genes_groups'], figs
+
