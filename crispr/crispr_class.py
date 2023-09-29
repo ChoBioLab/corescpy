@@ -421,9 +421,9 @@ class Crispr(object):
         if assay is None:
             assay = self._assay
         if label_perturbation_type is None:
-            label_perturbation_type=self._label_perturbation_type,
+            label_perturbation_type = self._label_perturbation_type,
         figs_mix = cr.ax.perform_mixscape(
-            self.adata[subset] if subset is not None else adata.copy(
+            self.adata[subset] if subset is not None else self.adata.copy(
                 ) if test is True else self.adata, assay=assay,
             **self._columns, **self._keys,
             label_perturbation_type=self._label_perturbation_type, 

@@ -99,10 +99,13 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     mix.perturbation_signature(
         adata[assay] if assay else adata, col_perturbation, 
         key_control, split_by=col_split_by)  # perturbation signature
-    adata_pert = adata_pert[adata_pert.obs[col_perturbation].isin(
-        [key_treatment, key_control])].copy()  # make sure in perturbed/control
     adata_pert = adata[assay].copy() if assay else adata.copy()
+    adata_pert = adata_pert[adata_pert.obs[col_perturbation].isin(
+        [key_treatment, key_control])].copy()  # ensure in perturbed/control
+    adata_pert = adata_pert[~adata_pert.obs[
+        col_target_genes].isnull()].copy()  # ensure no NA target genes
     adata_pert.X = adata_pert.layers["X_pert"]
+    layer_perturbation = "X_pert"
     mix.mixscape(adata=adata_pert, 
                  # adata=adata_pert,
                  labels=col_target_genes, control=key_control, 
