@@ -19,13 +19,29 @@ def cluster(adata, assay=None, plot=True, colors=None,
             method_cluster="leiden",
             kws_pca=None, kws_neighbors=None, 
             kws_umap=None, kws_cluster=None, **kwargs):
-    """Perform PCA, UMAP, etc."""
+    """
+    Perform clustering and visualize results.
+    
+    Returns
+    -------
+    figs : dictionary of figures visualizing results
+    
+    adata: AnnData (adds fields to data)
+        `.obsm['X_pca']`: Data as represented by PCA
+        `.varm['PCs']`: Principal components loadings
+        `.uns['pca']['variance_ratio']`: 
+            Proportion of variance explained by each PCA component
+        `.uns['pca']['variance']`: 
+            Eigenvalues of covariance matrix 
+                (variance expalined by PCA components).
+    
+    """
     figs = {}  # for figures
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
-    if "col_gene_symbols" in kwargs:
-        col_gene_symbols = kwargs.pop("col_gene_symbols")
-    else:
-        col_gene_symbols = None
+    # if "col_gene_symbols" in kwargs:
+    #     col_gene_symbols = kwargs.pop("col_gene_symbols")
+    # else:
+    #     col_gene_symbols = None
     if kwargs:
         print(f"Un-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
@@ -69,10 +85,9 @@ def cluster(adata, assay=None, plot=True, colors=None,
         except Exception as err:
             warnings.warn(f"Failed to plot PCA variance ratio: {err}")
         try:
-            figs["umap"] =  sc.pl.umap(adata[assay] if assay else adata, 
-                                       color=method_cluster, 
-                                       legend_loc='on data', title='', 
-                                       frameon=False, save='.pdf')
+            figs["umap"] =  sc.pl.umap(
+                adata[assay] if assay else adata, color=method_cluster, 
+                legend_loc="on data", title="", frameon=False)  # UMAP plot
         except Exception as err:
             warnings.warn(f"Failed to plot UMAP: {err}")
         if colors is not None:  # plot UMAP + extra color coding subplots

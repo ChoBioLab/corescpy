@@ -11,10 +11,15 @@ import decoupler
 from scipy.cluster.hierarchy import linkage, dendrogram
 import pandas as pd
 import numpy as np
+
+COLOR_PALETTE = "tab20"
+COLOR_MAP = "coolwarm"
     
     
 def perform_mixscape(adata, col_perturbation="perturbation",
                      key_control="NT",
+                     key_treatment="perturbed",
+                     key_nonperturbed="NP",
                      label_perturbation_type="KO",
                      assay=None,
                      layer_perturbation=None,
@@ -103,7 +108,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                  # adata=adata_pert,
                  labels=col_target_genes, control=key_control, 
                  layer=layer_perturbation, 
-                 perturbation_type=label_perturbation_type,
+                 perturbation_type=key_treatment,
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
     mix.lda(adata=adata[assay] if assay else adata, 
@@ -112,36 +117,55 @@ def perform_mixscape(adata, col_perturbation="perturbation",
             layer=layer_perturbation, control=key_control, 
             min_de_genes=min_de_genes,
             split_by=col_split_by, 
-            perturbation_type=label_perturbation_type,
+            perturbation_type=key_treatment,
             mixscape_class_global="mixscape_class_global",
             n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
             pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
     if plot is True:
-        figs["perturbation_clusters"] = pt.pl.ms.lda(
-            adata=adata[assay] if assay else adata, 
-            control=key_control)  # cluster perturbation
+        try:
+            figs["perturbation_clusters"] = pt.pl.ms.lda(
+                adata=adata[assay] if assay else adata, 
+                control=key_control)  # cluster perturbation
+        except Exception as err:
+            figs["perturbation_clusters"] = err
+            warnings.warn(f"{err}\n\nCould not plot perturbation clusters!")
     if target_gene_idents is True:  # to plot all target genes
         target_gene_idents = list(adata[assay].uns[
             "mixscape"].keys()) if assay else list(
                 adata.uns["mixscape"].keys())  # target genes
     if plot is True:
-        figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
-            adata[assay] if assay else adata,
-            # adata_pert, 
-            guide_rna_column=key_control)  # targeting efficiency by condition 
-        if n_comps_lda is not None:  # LDA clusters
-            figs["cluster_perturbation_response"] = pt.pl.ms.lda(
+        try:
+            figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
                 adata[assay] if assay else adata,
-                # adata=adata_pert, 
-                control=key_control)  # perturbation response
+                # adata_pert, 
+                guide_rna_column=key_control
+                )  # targeting efficiency by condition 
+        except Exception as err:
+            figs["perturbation_clusters"] = err
+            warnings.warn(
+                f"{err}\n\nCould not plot targeting efficiency by class!")
+        if n_comps_lda is not None:  # LDA clusters
+            try:
+                figs["cluster_perturbation_response"] = pt.pl.ms.lda(
+                    adata[assay] if assay else adata,
+                    # adata=adata_pert, 
+                    control=key_control)  # perturbation response
+            except Exception as err:
+                figs["perturbation_clusters"] = err
+                warnings.warn(
+                    f"{err}\n\nCould not plot cluster perturbation response!")
         if target_gene_idents is not None:  # G/P EX
             figs["mixscape_DEX_ordered_by_ppp_heat"] = {}
             figs["mixscape_ppp_violin"] = {}
             figs["mixscape_perturb_score"] = {}
-            figs["mixscape_targeting_efficacy"] = pt.pl.ms.barplot(
-                adata[assay] if assay else adata,
-                # adata_pert, 
-                guide_rna_column=col_guide_rna)
+            try:
+                figs["mixscape_targeting_efficacy"] = pt.pl.ms.barplot(
+                    adata[assay] if assay else adata,
+                    # adata_pert,
+                    guide_rna_column=col_guide_rna)
+            except Exception as err:
+                figs["perturbation_clusters"] = err
+                warnings.warn(f"{err}\n\nCould not plot targeting efficiency!")
             for g in target_gene_idents:  # iterate target genes of interest
                 if g not in list(adata[assay].obs["mixscape_class"] 
                                  if assay else adata.obs["mixscape_class"]):
@@ -159,7 +183,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                     )  # differential expression heatmap ordered by PPs
                 tg_conds = [
                     key_control, f"{g} NP", 
-                    f"{g} {label_perturbation_type}"]  # conditions: gene g
+                    f"{g} {key_treatment}"]  # conditions: gene g
                 figs["mixscape_ppp_violin"][g] = pt.pl.ms.violin(
                     adata=adata[assay] if assay else adata,
                     # adata=adata_pert, 
@@ -169,11 +193,11 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                     adata=adata[assay] if assay else adata,
                     # adata=adata_pert, 
                     target_gene_idents=[key_control, "NP", 
-                                        label_perturbation_type], 
+                                        key_treatment], 
                     groupby="mixscape_class_global")  # global: P, NP, control 
             tg_conds = [key_control] + functools.reduce(
                 lambda i, j: i + j, [[f"{g} NP", 
-                        f"{g} {label_perturbation_type}"] 
+                        f"{g} {key_treatment}"] 
                 for g in target_gene_idents])  # conditions: all genes
             figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
                 adata=adata[assay] if assay else adata,
@@ -207,18 +231,21 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         adata (AnnData): Scanpy object.
         assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
             Defaults to None (works if only one assay).
-        classifier (str, optional): Classifier. Defaults to "random_forest_classifier".
+        classifier (str, optional): Classifier. 
+            Defaults to "random_forest_classifier".
         augur_mode (str, optional): Augur or permute? Defaults to "default".
         subsample_size (int, optional): Per Pertpy code: 
             "number of cells to subsample randomly per type 
             from each experimental condition."
-        n_folds (int, optional): Number of folds for cross-validation. Defaults to 3.
+        n_folds (int, optional): Number of folds for cross-validation. 
+            Defaults to 3.
         n_threads (int, optional): _description_. Defaults to 4.
-        select_variance_features (bool, optional): Use Augur to select genes (True), or 
-            Scanpy's  highly_variable_genes (False). Defaults to False.
+        select_variance_features (bool, optional): Use Augur to select 
+            genes (True), or Scanpy's  highly_variable_genes (False). 
+            Defaults to False.
         col_cell_type (str, optional): Column name for cell type. 
             Defaults to "cell_type_col".
-        col_perturbation (str, optional): Column name for experimental condition. 
+        col_perturbation (str, optional): Experimental condition column name. 
             Defaults to None.
         key_control (str, optional): Control category key
             (`adata.obs[col_perturbation]` entries).Defaults to "NT".
@@ -229,6 +256,9 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         plot (bool, optional): Plots? Defaults to True.
         kws_augur_predict (dict, optional): Optional additional keyword 
             arguments to pass to Augur predict.
+        kwargs (keyword arguments, optional): Additional keyword arguments.
+            Use key "kws_umap" and "kws_neighbors" to pass arguments 
+            to the relevant
 
     Returns:
         _type_: _description_
@@ -296,15 +326,36 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         
         # Plotting
         if plot is True:
+            if "vcenter" not in kwargs:
+                kwargs.update({"vcenter": 0})
+            if "legend_loc" not in kwargs:
+                kwargs.update({"legend_loc": "on_data"})
+            if "frameon" not in kwargs:
+                kwargs.update({"frameon": False})
             figs["perturbation_effect_by_cell_type"] = pt.pl.ag.lollipop(
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?
-            sc.pp.neighbors(data)
-            sc.tl.umap(data)
-            figs["perturbation_effect_umap"] = sc.pl.umap(
-                data, color=["augur_score", col_cell_type, col_perturbation],
-                palette=str(kwargs["palette"] if "palette" in kwargs 
-                            else "bright"))  # scores super-imposed on UMAP
+            kws_umap = kwargs.pop("kws_umap") if "kws_umap" in kwargs else {}
+            kws_neighbors = kwargs.pop(
+                "kws_neighbors") if "kws_neighbors" in kwargs else {}
+            try:
+                # def_pal = {col_perturbation: dict(zip(
+                #     [key_control, key_treatment], ["black", "red"]))}
+                sc.pp.neighbors(data, **kws_neighbors)
+                sc.tl.umap(data, **kws_umap)
+                figs["perturbation_effect_umap"] = sc.pl.umap(
+                    data, color=["augur_score", col_cell_type, 
+                                 col_perturbation],
+                    color_map=kwargs[
+                        "color_map"] if "color_map" in kwargs else "reds",
+                    palette=kwargs[
+                        "palette"] if "palette" in kwargs else None,
+                    title=["Augur Score", col_cell_type, col_perturbation]
+                )  # scores super-imposed on UMAP
+            except Exception as err:
+                figs["perturbation_effect_umap"] = err
+                warnings.warn(
+                    f"{err}\n\nCould not plot perturbation effects on UMAP!")
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # most important genes for prioritization
             figs["perturbation_scores"] = {}

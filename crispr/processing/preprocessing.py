@@ -49,6 +49,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     # TODO: Flesh this out, generalize, test, etc.
     adata.var_names_make_unique()
     adata.obs_names_make_unique()
+    if col_gene_symbols not in adata.var.columns:
+        adata.var = adata.var.rename_axis(col_gene_symbols)
     if assay is not None:
         adata = adata[assay]  # subset by assay if desired 
     print("\n\n", adata)
@@ -105,6 +107,8 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # Initial Information
     print(adata)
+    if col_gene_symbols == adata.var.index.names[0]:
+        col_gene_symbols = None
     if col_cell_type is not None and col_cell_type in adata.obs:
         print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
         print(adata.obs[col_cell_type].value_counts())

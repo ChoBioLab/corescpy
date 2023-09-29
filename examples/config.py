@@ -41,7 +41,7 @@ col_cell_type_data = {
 }
 
 col_gene_symbols_data = {
-    "CRISPRi_scr": "gene_ids",
+    "CRISPRi_scr": "gene_symbols",
     "CRISPRi_wgs": "gene",  # ?
     "CRISPRi_ess": "gene_symbols",
     "pool": "gene_symbols",
@@ -115,23 +115,23 @@ key_treatment_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
-    "ECCITE": "Perturbed",
+    "ECCITE": "KO",
     "perturb-seq": "63(mod)_pBA580",
     "coda": "Salmonella",
     "augur_ex": "Withdraw_48h_Cocaine"
 }
 
-label_perturbation_type_data = {
-    "CRISPRi_scr": "KD",
-    "CRISPRi_wgs": "KD",
-    "CRISPRi_ess": "KD",
+key_nonperturbed_data = {
+    "CRISPRi_scr": "NP",
+    "CRISPRi_wgs": np.nan,
+    "CRISPRi_ess": np.nan,
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
-    "perturb-seq": "CRISPR",
     "ECCITE": "KO",
-    "coda": "Salmonella",
-    "augur_ex": "Cocaine_Withdrawal"
+    "perturb-seq": np.nan,
+    "coda": np.nan,
+    "augur_ex": np.nan
 }
 
 col_target_genes_data = {
@@ -174,7 +174,7 @@ layer_perturbation_data = {
 }
 
 col_sample_id_data = {
-    "CRISPRi_scr": np.nan,
+    "CRISPRi_scr": None,
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "gemgroup",
     "pool": np.nan,
@@ -187,7 +187,7 @@ col_sample_id_data = {
 }
 
 col_batch_data = {
-    "CRISPRi_scr": np.nan,
+    "CRISPRi_scr": None,
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "gemgroup",
     "pool": np.nan,
@@ -201,9 +201,10 @@ col_batch_data = {
 
 kws_process_guide_rna_data = {
     "CRISPRi_scr": dict(feature_split="|", guide_split="-", 
-                        key_control_patterns=[np.nan, "CTRL"]),
+                        key_control_patterns=["CTRL"]),
     "CRISPRi_wgs": None,
-    "CRISPRi_ess": None,
+    "CRISPRi_ess": dict(feature_split=",", guide_split="-", 
+                        key_control_patterns=["CTRL"]),
     "pool": None,
     "bulk": None,
     "screen": None,
