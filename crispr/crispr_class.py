@@ -368,6 +368,17 @@ class Crispr(object):
                         "key_control"]).to_frame(
                             self._columns["col_perturbation"]
                             )  # binary perturbed/not
+        for t in targets.explode().unique():
+            tgt = targets.apply(
+                lambda x: x if x == self._keys[
+                    "key_nonperturbed"] else self._keys["key_treatment"] 
+                if t in x else self._keys["key_control"]).to_frame(
+                    f"{self._keys['key_treatment']}_{t}"
+                    )  # NP, treatment, or control key for each target
+            if assay:
+                self.adata[assay].obs = self.adata[assay].obs.join(tgt)
+            else:
+                self.adata.obs = self.adata.obs.join(tgt)
         if assay: 
             self.adata[assay].obs = self.adata[assay].obs.join(
                 target_genes, lsuffix="_original")
@@ -377,19 +388,6 @@ class Crispr(object):
             self.adata.obs = self.adata.obs.join(
                 target_genes, lsuffix="_original")
             self.adata.obs = self.adata.obs.join(binary, lsuffix="_original")
-        for t in targets.explode().unique():
-            if assay:
-                self.adata[assay].obs[
-                    f"{self._keys['key_treatment']}_{t}"] = targets.apply(
-                        lambda x: self._keys['key_treatment'] if t in x else 
-                        self._keys['key_control']
-                        )  # treatment or control key for each target
-            else:
-                self.adata.obs[
-                    f"{self._keys['key_treatment']}_{t}"] = targets.apply(
-                        lambda x: self._keys['key_treatment'] if t in x else 
-                        self._keys['key_control']
-                        )  # treatment or control key for each target
                 
                     
     def cluster(self, assay=None, method_cluster="leiden", 
@@ -414,7 +412,7 @@ class Crispr(object):
         return figs_cl
         
         
-    def run_mixscape(self, 
+    def run_mixscape(self, subset=None,
                      assay=None, target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
                      label_perturbation_type=None, run_label="main", 
@@ -423,9 +421,10 @@ class Crispr(object):
         if assay is None:
             assay = self._assay
         if label_perturbation_type is None:
-            label_perturbation_type=self._label_perturbation_type
+            label_perturbation_type=self._label_perturbation_type,
         figs_mix = cr.ax.perform_mixscape(
-            self.adata.copy() if test is True else self.adata, assay=assay,
+            self.adata[subset] if subset is not None else adata.copy(
+                ) if test is True else self.adata, assay=assay,
             **self._columns, **self._keys,
             label_perturbation_type=self._label_perturbation_type, 
             layer_perturbation=self._layer_perturbation, 
@@ -506,12 +505,16 @@ class Crispr(object):
                 {f"{distance_type}_{method}": output})
         return output
     
-    def compute_distance(self, distance_type="edistance", method="X_pca", 
+    def compute_distance(self, assay=None, subset=None,
+                         distance_type="edistance", method="X_pca", 
                          kws_plot=None, highlight_real_range=False,
                          run_label="main", plot=True):
         """Analyze cell type composition changes."""
         output = cr.ax.compute_distance(
-            self.adata, **self._columns, **self._keys,
+            (self.adata[assay] if assay else self.adata
+             ) if subset is None else (
+                 self.adata[assay] if assay else self.adata)[subset], 
+            **self._columns, **self._keys,
             distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
             plot=plot)

@@ -525,7 +525,7 @@ def analyze_composition(adata, reference_cell_type,
     return (results, figs)
 
 
-def compute_distance(adata, col_perturbation="perturbation", 
+def compute_distance(adata, col_target_genes="perturbation_genes", 
                      col_cell_type="leiden",
                      distance_type="edistance", method="X_pca",
                      kws_plot=None, highlight_real_range=False, plot=True,
@@ -539,7 +539,7 @@ def compute_distance(adata, col_perturbation="perturbation",
         kws_plot = dict(robust=True, figsize=(10, 10))
     # Distance Metrics
     distance = pt.tl.Distance(distance_type, method)
-    data = distance.pairwise(adata, groupby=col_perturbation, verbose=True)
+    data = distance.pairwise(adata, groupby=col_target_genes, verbose=True)
     if plot is True:  # cluster heatmaps
         if highlight_real_range is True:
             vmin = np.min(np.ravel(data.values)[np.ravel(data.values) != 0])
@@ -549,14 +549,19 @@ def compute_distance(adata, col_perturbation="perturbation",
                     vmin already set in kwargs plot: {kws_plot['vmin']}
                     Setting to {vmin} because highlight_real_range is True.""")
             kws_plot.update(dict(vmin=vmin))
-        figs[f"distance_heat_{distance_type}"] = clustermap(data, **kws_plot)
+        if "figsize" not in kws_plot:
+            kws_plot["figsize"] = (20, 20)
+        if "cmap" not in kws_plot:
+            kws_plot["cmap"] = "Reds_r"
+        figs[f"distance_heat_{distance_type}"] = clustermap(
+            data, **kws_plot)
         plt.show()
     # Cluster Hierarchies
     dff = distance.pairwise(adata, groupby=col_cell_type, verbose=True)
     mat = linkage(dff, method="ward")
     if plot is True:  # cluster hierarchies
-        hierarchy = dendrogram(mat, labels=dff.index, orientation='left', 
-                               color_threshold=0)
+        _ = dendrogram(mat, labels=dff.index, orientation='left', 
+                       color_threshold=0)
         plt.xlabel('E-distance')
         plt.ylabel('Leiden clusters')
         plt.gca().yaxis.set_label_position("right")
