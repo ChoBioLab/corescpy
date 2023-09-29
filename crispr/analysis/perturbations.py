@@ -20,7 +20,6 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                      key_control="NT",
                      key_treatment="perturbed",
                      key_nonperturbed="NP",
-                     label_perturbation_type="KO",
                      assay=None,
                      layer_perturbation=None,
                      col_guide_rna="guide_ID",
@@ -53,9 +52,8 @@ def perform_mixscape(adata, col_perturbation="perturbation",
             (should contain key_control).
         key_control (str, optional): Control category key
             (`adata.obs[col_perturbation]` entries).Defaults to "NT".
-        label_perturbation_type (str, optional): CRISPR perturbation type 
-            (purely for Mixscape labeling process, but is carried through).
-            Defaults to "KO".
+        label_perturbation_type (str, optional): CRISPR perturbation type.
+            Used for labeling. Defaults to "KO".
         col_split_by (str, optional): `adata.obs` column name of 
             sample categories to calculate separately (e.g., replicates). 
             Defaults to None.
@@ -101,17 +99,18 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     mix.perturbation_signature(
         adata[assay] if assay else adata, col_perturbation, 
         key_control, split_by=col_split_by)  # perturbation signature
-    # adata_pert = adata[assay].copy() if assay else adata.copy()
-    # if layer_perturbation is not None:
-    #     adata_pert.X = adata_pert.layers[layer_perturbation]
-    mix.mixscape(adata=adata[assay] if assay else adata, 
+    adata_pert = adata_pert[adata_pert.obs[col_perturbation].isin(
+        [key_treatment, key_control])].copy()  # make sure in perturbed/control
+    adata_pert = adata[assay].copy() if assay else adata.copy()
+    adata_pert.X = adata_pert.layers["X_pert"]
+    mix.mixscape(adata=adata_pert, 
                  # adata=adata_pert,
                  labels=col_target_genes, control=key_control, 
                  layer=layer_perturbation, 
                  perturbation_type=key_treatment,
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
-    mix.lda(adata=adata[assay] if assay else adata, 
+    mix.lda(adata=adata_pert, 
             # adata=adata_pert,
             labels=col_target_genes, 
             layer=layer_perturbation, control=key_control, 
@@ -124,7 +123,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     if plot is True:
         try:
             figs["perturbation_clusters"] = pt.pl.ms.lda(
-                adata=adata[assay] if assay else adata, 
+                adata=adata_pert, 
                 control=key_control)  # cluster perturbation
         except Exception as err:
             figs["perturbation_clusters"] = err
@@ -136,7 +135,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     if plot is True:
         try:
             figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
-                adata[assay] if assay else adata,
+                adata_pert,
                 # adata_pert, 
                 guide_rna_column=key_control
                 )  # targeting efficiency by condition 
@@ -147,7 +146,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
         if n_comps_lda is not None:  # LDA clusters
             try:
                 figs["cluster_perturbation_response"] = pt.pl.ms.lda(
-                    adata[assay] if assay else adata,
+                    adata_pert,
                     # adata=adata_pert, 
                     control=key_control)  # perturbation response
             except Exception as err:
@@ -160,23 +159,22 @@ def perform_mixscape(adata, col_perturbation="perturbation",
             figs["mixscape_perturb_score"] = {}
             try:
                 figs["mixscape_targeting_efficacy"] = pt.pl.ms.barplot(
-                    adata[assay] if assay else adata,
+                    adata_pert,
                     # adata_pert,
                     guide_rna_column=col_guide_rna)
             except Exception as err:
                 figs["perturbation_clusters"] = err
                 warnings.warn(f"{err}\n\nCould not plot targeting efficiency!")
             for g in target_gene_idents:  # iterate target genes of interest
-                if g not in list(adata[assay].obs["mixscape_class"] 
-                                 if assay else adata.obs["mixscape_class"]):
+                if g not in list(adata_pert.obs["mixscape_class"]):
                     print(f"\n\nTarget gene {g} not in mixscape_class!")
                     continue  # skip to next target gene if missing
                 figs["mixscape_perturb_score"][g] = pt.pl.ms.perturbscore(
-                    adata=adata[assay] if assay else adata,
+                    adata=adata_pert,
                     # adata=adata_pert, 
                     labels=col_target_genes, target_gene=g, color="red")
                 figs["mixscape_DEX_ordered_by_ppp_heat"][g] = pt.pl.ms.heatmap(
-                    adata=adata[assay] if assay else adata,
+                    adata=adata_pert,
                     # adata=adata_pert, 
                     labels=col_target_genes, target_gene=g, 
                     layer=layer_perturbation, control=key_control
@@ -185,12 +183,12 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                     key_control, f"{g} NP", 
                     f"{g} {key_treatment}"]  # conditions: gene g
                 figs["mixscape_ppp_violin"][g] = pt.pl.ms.violin(
-                    adata=adata[assay] if assay else adata,
+                    adata=adata_pert,
                     # adata=adata_pert, 
                     target_gene_idents=tg_conds, 
                     groupby="mixscape_class")  # gene: perturbed, NP, control
                 figs["mixscape_ppp_violin"][f"{g}_global"] = pt.pl.ms.violin(
-                    adata=adata[assay] if assay else adata,
+                    adata=adata_pert,
                     # adata=adata_pert, 
                     target_gene_idents=[key_control, "NP", 
                                         key_treatment], 
@@ -200,13 +198,13 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                         f"{g} {key_treatment}"] 
                 for g in target_gene_idents])  # conditions: all genes
             figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
-                adata=adata[assay] if assay else adata,
+                adata=adata_pert,
                 # adata=adata_pert, 
                 target_gene_idents=tg_conds, 
                 groupby="mixscape_class")  # gene: perturbed, NP, control
         if assay_protein is not None and target_gene_idents is not None:
             figs[f"mixscape_protein_{protein_of_interest}"] = pt.pl.ms.violin( 
-                adata=adata[assay] if assay else adata,
+                adata=adata_pert,
                 # adata=adata_pert, 
                 target_gene_idents=target_gene_idents,
                 keys=protein_of_interest, groupby=col_target_genes,
