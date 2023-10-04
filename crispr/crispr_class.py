@@ -14,6 +14,8 @@ import re
 import pandas as pd
 import numpy as np
 import crispr as cr
+from crispr.defaults import (names_layers, kws_process_guide_rna_default, 
+                             col_multi_transfection, feature_split_convention)
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -53,26 +55,29 @@ class Crispr(object):
         self._keys = dict(key_control=key_control, key_treatment=key_treatment,
                           key_nonperturbed=key_nonperturbed)
         self._file_path = file_path
-        self.adata = file_path
+        # self.adata = file_path
+        self.adata = cr.pp.create_object(
+            self._file_path, assay=None, col_gene_symbols=self._columns[
+                "col_gene_symbols"])
         self.figures = {"main": {}}
         self.results = {"main": {}}
 
-    @property
-    def adata(self):
-        """Specify file path to data."""
-        return self._adata
+    # @property
+    # def adata(self):
+    #     """Specify file path to data."""
+    #     return self._adata
 
-    @adata.setter
-    def adata(self, value):
-        """Set file path and load object."""
-        self._file_path = value
-        if not isinstance(value, sc.AnnData):
-            print("<<<\n\nCREATING OBJECT>>>")
-            self._adata = cr.pp.create_object(
-                value, assay=None, col_gene_symbols=self._columns[
-                    "col_gene_symbols"])
-        else:
-            self._adata = value
+    # @adata.setter
+    # def adata(self, value):
+    #     """Set file path and load object."""
+    #     self._file_path = value
+    #     if isinstance(value, str):
+    #         print("\n\n<<<CREATING OBJECT>>>")
+    #         self._adata = cr.pp.create_object(
+    #             value, assay=None, col_gene_symbols=self._columns[
+    #                 "col_gene_symbols"])
+    #     else:
+    #         self._adata = value
             
     def plot(self, genes=None, assay="default", 
              title=None,  # NOTE: will apply to multiple plots
@@ -99,8 +104,8 @@ class Crispr(object):
             cols_obs = self.adata[assay].obs.columns
         else:
             cols_obs = self.adata.obs.columns
-        if "scaled" not in self.adata.layers:
-            self.adata.layers['scaled'] = sc.pp.scale(
+        if names_layers["scaled"] not in self.adata.layers:
+            self.adata.layers[names_layers["scaled"]] = sc.pp.scale(
                 self.adata, copy=True).X  # scaling (Z-scores)
         if layers == "all":  # to include all layers
             layers = list(self.adata.layers.copy())
@@ -221,7 +226,7 @@ class Crispr(object):
                     lab += "_" + str(i)
                     if not title:
                         title_gexm = f"{title_gexm} ({i})"
-                if i == "scaled":
+                if i == names_layers["scaled"]:
                     bar_title = "Expression (Mean Z-Score)"
                 else: 
                     bar_title = "Expression"
@@ -298,8 +303,9 @@ class Crispr(object):
             
     
     def preprocess(self, assay=None, assay_protein=None, 
-                   kws_process_guide_rna=None,
-                   clustering=False, run_label="main", **kwargs):
+                   kws_process_guide_rna=kws_process_guide_rna_default,
+                   clustering=False, run_label="main", 
+                   remove_doublets=True, **kwargs):
         """Preprocess data."""
         if assay_protein is None:
             assay_protein = self._assay_protein
@@ -310,8 +316,9 @@ class Crispr(object):
                 "assay") if "assay" in kws_process_guide_rna else assay
             self.process_guide_rna(assay=assay_gr, **kws_process_guide_rna)
         _, figs = cr.pp.process_data(
-            self.adata, assay=assay, **self._columns,
-            assay_protein=assay_protein, **kwargs)  # preprocess
+            self.adata, assay=assay, assay_protein=assay_protein, 
+            remove_doublets=remove_doublets, **self._columns,
+            **kwargs)  # preprocess
         if run_label not in self.figures:
             self.figures[run_label] = {}
         self.figures[run_label]["preprocessing"] = figs
@@ -323,23 +330,29 @@ class Crispr(object):
                 figs = figs + [figs_cl]
             else:
                 raise TypeError(
-                    "'clustering' must be dict (keyword arguments) or bool.")
+                    "`clustering` must be dict (keyword arguments) or bool.")
         return figs
     
     
     def process_guide_rna(self, assay=None, feature_split="|", guide_split="-",
-                          key_control_patterns="CTRL"):
+                          key_control_patterns="CTRL", 
+                          remove_multi_transfected=True):
         """
         Convert specific guide RNA entries to general gene targets,
         including dummy-coded columns for each gene target (if no counts) 
         or count columns for each target, plus a column of gene target 
-        categories stripped of specific guide ID suffixes (e.g., -1, -2-1).
+        categories stripped of specific guide ID suffixes 
+        (e.g., -1, -2-1, etc. if `guide_split`='-').
         """
         if isinstance(key_control_patterns, str):
             key_control_patterns = [key_control_patterns]
+        if guide_split in self._keys["key_control"]:
+            raise ValueError(
+                f"""`guide_split` ({guide_split}) must not be in 
+                `self._keys['key_control']`.""")
         targets = self.adata.obs[self._columns["col_guide_rna"]].str.strip(
             " ").replace("", np.nan)
-        if np.nan in key_control_patterns:  # if NAs mean non-targeting sgRNAs
+        if np.nan in key_control_patterns:  # if NAs mean control sgRNAs
             key_control_patterns = list(pd.Series(key_control_patterns).dropna())
             targets = targets.replace(
                 np.nan, self._keys["key_control"])  # NaNs replaced w/ control key
@@ -347,31 +360,44 @@ class Crispr(object):
             targets = targets.replace(
                 np.nan, self._keys["key_nonperturbed"]
                 )  # NaNs replaced w/ nonperturbed key
+        keys_leave = [self._keys["key_nonperturbed"], 
+                      self._keys["key_control"]]  # entries to leave alone
         targets = targets.apply(
-            lambda x: x if x == self._keys["key_nonperturbed"] else [
-                re.sub(f"{guide_split}.*", "", i) for i in x.split(
-                    feature_split)])  # each entry -> list of target genes
+            lambda x: [re.sub(f"{guide_split}.*", "", str(i)) 
+            for i in x.split(
+                feature_split)])  # each entry -> list of target genes
         targets = targets.apply(
-            lambda x: x if x == self._keys["key_nonperturbed"] else [
-            self._keys["key_control"] if any(
-                (k in i for k in key_control_patterns)) else i 
+            lambda x: [i if i in keys_leave else self._keys[
+                "key_control"] if any(
+                    (k in i for k in key_control_patterns)) else i 
                 for i in x])  # find control keys among targets
+        targets = targets.apply(pd.unique).apply(list)  # unique guides
         target_genes = targets.apply(
-            lambda x: np.nan if x == self._keys[
-                "key_nonperturbed"] else feature_split.join(
-                    x)).to_frame(self._columns["col_target_genes"]
-                                 )  # re-join gene lists => single string/entry
+            lambda x: feature_split_convention.join(
+                x)).to_frame(self._columns["col_target_genes"]
+                             )  # re-join gene lists => single string/entry
         binary = targets.apply(
-            lambda x: x if x == self._keys["key_nonperturbed"] else self._keys[
+            lambda x: self._keys[
                 "key_treatment"] if any(
-                    np.array(x) != self._keys["key_control"]) else self._keys[
-                        "key_control"]).to_frame(
-                            self._columns["col_perturbation"]
-                            )  # binary perturbed/not
+                    (q not in [
+                        self._keys["key_nonperturbed"], 
+                        self._keys["key_control"]]) 
+                    for q in x) else self._keys["key_control"]).to_frame(
+                        self._columns["col_perturbation"]
+                        )  # binary perturbed/not
+        multi = targets.apply(
+            lambda x: "multi" if sum([i not in [
+                        self._keys["key_nonperturbed"], 
+                        self._keys["key_control"]] for i in x]
+                                    ) > 1  # >1 non-control guide?
+            else None if all(np.array(x) == self._keys["key_nonperturbed"]
+                            ) or len(x) == 0 
+            else "single").to_frame(
+                col_multi_transfection)  # multi v. single-transfected
         for t in targets.explode().unique():
             tgt = targets.apply(
                 lambda x: x if x == self._keys[
-                    "key_nonperturbed"] else self._keys["key_treatment"] 
+                    "key_nonperturbed"] else self._keys["key_treatment"]
                 if t in x else self._keys["key_control"]).to_frame(
                     f"{self._keys['key_treatment']}_{t}"
                     )  # NP, treatment, or control key for each target
@@ -384,12 +410,22 @@ class Crispr(object):
                 target_genes, lsuffix="_original")
             self.adata[assay].obs = self.adata[assay].obs.join(
                 binary, lsuffix="_original")
+            self.adata[assay].obs = self.adata[assay].obs.join(
+                multi, lsuffix="_original")  # multi- v. single-transfected
+            if remove_multi_transfected is True:  # remove multi-transfected?
+                self.adata[assay] = self.adata[assay][self.adata[assay].obs[
+                    col_multi_transfection] == "single"]
         else:
             self.adata.obs = self.adata.obs.join(
                 target_genes, lsuffix="_original")
             self.adata.obs = self.adata.obs.join(binary, lsuffix="_original")
+            self.adata.obs = self.adata.obs.join(
+                multi, lsuffix="_original")  # multi- v. single-transfected
+            if remove_multi_transfected is True:  # remove multi-transfected?
+                self.adata = self.adata[self.adata.obs[
+                    col_multi_transfection] == "single"]
                 
-                    
+                
     def cluster(self, assay=None, method_cluster="leiden", 
                 plot=True, colors=None, paga=False, 
                 kws_pca=None, kws_neighbors=None, 

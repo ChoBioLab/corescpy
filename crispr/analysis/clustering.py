@@ -37,7 +37,6 @@ def cluster(adata, assay=None, plot=True, colors=None,
     
     """
     figs = {}  # for figures
-    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
     # if "col_gene_symbols" in kwargs:
     #     col_gene_symbols = kwargs.pop("col_gene_symbols")
     # else:

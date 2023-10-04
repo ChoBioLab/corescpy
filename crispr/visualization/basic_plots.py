@@ -19,6 +19,7 @@ import numpy as np
 
 
 def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
+    """Make plots facetted/split by cell type/cluster."""
     if not isinstance(plot_types, str):
         raise TypeError("plot_types must be a string.")
     plot_types = plot_types.lower()  # so not case-sensitive
@@ -37,6 +38,7 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
             adata, genes, groupby=method_cluster, rotation=90)
     if plot_types == "all" or "dot" in plot_types:
         figs["dot"] = sc.pl.dotplot(adata, genes, groupby='leiden')
+    return figs
         
 
 def square_grid(number):

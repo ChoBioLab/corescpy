@@ -20,6 +20,7 @@ import h5py
 import anndata
 import pandas as pd
 import numpy as np
+# from crispr.defaults import names_layers
 
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
@@ -61,7 +62,8 @@ def combine_matrix_protospacer(
     directory="", subdirectory_mtx="filtered_feature_bc_matrix", 
     col_gene_symbols="gene_symbols", 
     file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
-    col_barcode="cell_barcode", **kwargs):
+    col_barcode="cell_barcode", 
+    **kwargs):
     """
     Combine CellRanger directory-derived AnnData `.obs` & perturbation data.
     
@@ -92,18 +94,21 @@ def combine_matrix_protospacer(
         dff, col_barcode = dff.set_index(dff.columns[0]), dff.columns[0]
     adata.obs = adata.obs.join(dff.rename_axis(adata.obs.index.names[0]))
     return adata
-
+    
 
 def process_data(adata, assay=None, assay_protein=None,
                  col_gene_symbols=None,
                  col_cell_type=None,
-                 layer=None,
+                 remove_doublets=True,
                  target_sum=1e4,  max_genes_by_counts=2500, max_pct_mt=5,
                  min_genes=200, min_cells=3, 
                  scale=10,  # or scale=True for no clipping
                  regress_out=regress_out_vars, 
-                 kws_hvg=None, kws_scale=None, **kwargs):
-    """Preprocess adata."""
+                 kws_hvg=None, kws_scale=None, kws_crispr=None,
+                 **kwargs):
+    """
+    Preprocess data (plus CRISPR-specific steps if kws_crispr is not None).
+    """
     
     # Initial Information
     print(adata)
@@ -117,6 +122,15 @@ def process_data(adata, assay=None, assay_protein=None,
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     print(col_gene_symbols, assay, n_top)
+        
+    # Doublets
+    # doublets = detect_doublets(adata[assay] if assay else adata)
+    # if remove_doublets is True:
+    #     adata
+    #     # TODO: doublets
+        
+    
+    # Highly-Expressed Genes
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
         adata[assay] if assay else adata, n_top=n_top,
         gene_symbols=col_gene_symbols)
@@ -221,11 +235,10 @@ def process_data(adata, assay=None, assay_protein=None,
     if scale is not None:
         print("\n<<< SCALING >>>")
         if scale is True:  # if True, just scale to unit variance
-            sc.pp.scale(adata[assay] if assay else adata, layer=layer,
+            sc.pp.scale(adata[assay] if assay else adata, 
                         **kws_scale)  # scale
         else:  # if scale provided as an integer...
             sc.pp.scale(adata[assay] if assay else adata, max_value=scale,
-                        layer=layer,
                         **kws_scale)  # ...also clip values > "scale" SDs
             
     # Cell Counts (Post-Processing)
