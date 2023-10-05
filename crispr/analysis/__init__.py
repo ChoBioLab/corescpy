@@ -3,5 +3,6 @@ from .perturbations import (perform_mixscape,
                             perform_augur, 
                             perform_differential_prioritization,
                             analyze_composition,
-                            compute_distance)
+                            compute_distance,
+                            perform_gsea)
 from .clustering import cluster, find_markers

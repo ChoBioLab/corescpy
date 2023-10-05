@@ -571,7 +571,8 @@ def compute_distance(adata, col_target_genes="perturbation_genes",
     return distance, data, dff, mat, figs
 
 
-def perform_gsea(adata, label_condition, filter_by_highly_variable=False):
+def perform_gsea(adata, key_condition="Perturbed", 
+                 filter_by_highly_variable=False, **kwargs):
     """Perform a gene set enrichment analysis (adapted from SC Best Practices)."""
     
     # Extract DEGs

@@ -115,9 +115,9 @@ class Crispr(object):
         if self._columns["col_gene_symbols"] != self.adata.var.index.names[0]:
             gene_symbols = self._columns["col_gene_symbols"]
             
-        # Pre-Processing
-        print("\n<<< PLOTTING PRE-PROCESSING >>>")
+        # Pre-Processing/QC
         if "preprocessing" in self.figures[run_label]:
+            print("\n<<< PLOTTING PRE-PROCESSING >>>")
             figs["preprocessing"] = self.figures[run_label]["preprocessing"]
             
         # Gene Expression Heatmap(s)
@@ -126,10 +126,6 @@ class Crispr(object):
         if "cmap" not in kws_gex:
             kws_gex.update({"cmap": COLOR_MAP})
         print("\n<<< PLOTTING GEX (Heatmap) >>>")
-        # rows, cols = cr.pl.square_grid(len([None] + list(layers)))
-        # figs["gene_expression"], axes_gex = plt.subplots(
-        #     rows, cols, figsize=(20 * rows, int(4 * cols / 3)), 
-        #     gridspec_kw={'wspace': 0.9})
         for j, i in enumerate([None] + list(layers)):
             lab = f"gene_expression_{i}" if i else "gene_expression"
             if i is None:
@@ -336,14 +332,26 @@ class Crispr(object):
     
     def process_guide_rna(self, assay=None, feature_split="|", guide_split="-",
                           key_control_patterns="CTRL", 
-                          remove_multi_transfected=True):
+                          remove_multi_transfected=True, 
+                          remove_nonperturbed=True, 
+                          min_proportion_target_umis=None,
+                          **kwargs):
         """
         Convert specific guide RNA entries to general gene targets,
         including dummy-coded columns for each gene target (if no counts) 
         or count columns for each target, plus a column of gene target 
         categories stripped of specific guide ID suffixes 
         (e.g., -1, -2-1, etc. if `guide_split`='-').
+        
+        If min_proportion_target_umis=4, for example, in cells that have
+        one targeting guide and one control guide, only include those
+        where the number of UMIs for the target gene is at least four times
+        the number of control UMIs. N.B.: The column with number of UMIs 
+        must have the same separating character as `feature_split`.
         """
+        print("\n<<< PROCESSING GUIDE RNAs >>>\n")
+        if assay is None:
+            assay = self._assay
         if isinstance(key_control_patterns, str):
             key_control_patterns = [key_control_patterns]
         if guide_split in self._keys["key_control"]:
@@ -371,11 +379,20 @@ class Crispr(object):
                 "key_control"] if any(
                     (k in i for k in key_control_patterns)) else i 
                 for i in x])  # find control keys among targets
+        target_list = targets.apply(list).to_frame(
+            self._columns["col_target_genes"] + "_list")  # guide gene list
         targets = targets.apply(pd.unique).apply(list)  # unique guides
+        if min_proportion_target_umis is not None:
+            raise NotImplementedError(
+                "Filtering by proportion of target umis not implemented.")
         target_genes = targets.apply(
             lambda x: feature_split_convention.join(
-                x)).to_frame(self._columns["col_target_genes"]
-                             )  # re-join gene lists => single string/entry
+                list(x if all(np.array(x) == self._keys[
+                    "key_control"]) else pd.Series(x).replace(
+                        self._keys["key_control"], np.nan).dropna()
+                    )  # drop control label if multi-transfect w/ non-control
+                )).to_frame(self._columns["col_target_genes"]
+                            )  # re-join lists => single string
         binary = targets.apply(
             lambda x: self._keys[
                 "key_treatment"] if any(
@@ -405,25 +422,30 @@ class Crispr(object):
                 self.adata[assay].obs = self.adata[assay].obs.join(tgt)
             else:
                 self.adata.obs = self.adata.obs.join(tgt)
+        target_info = multi.join(binary).join(target_genes).join(
+            target_list)  # guide info combined into dataframe
         if assay: 
             self.adata[assay].obs = self.adata[assay].obs.join(
-                target_genes, lsuffix="_original")
-            self.adata[assay].obs = self.adata[assay].obs.join(
-                binary, lsuffix="_original")
-            self.adata[assay].obs = self.adata[assay].obs.join(
-                multi, lsuffix="_original")  # multi- v. single-transfected
+                target_info, lsuffix="_original")  # join info with .obs
             if remove_multi_transfected is True:  # remove multi-transfected?
                 self.adata[assay] = self.adata[assay][self.adata[assay].obs[
                     col_multi_transfection] == "single"]
+            if remove_nonperturbed is True:  # drop cells with no gRNAs?
+                self.adata[assay] = self.adata[assay][self.adata[assay].obs[
+                    self._columns["col_target_genes"]] != self._keys[
+                      "key_nonperturbed"]]
         else:
             self.adata.obs = self.adata.obs.join(
-                target_genes, lsuffix="_original")
-            self.adata.obs = self.adata.obs.join(binary, lsuffix="_original")
-            self.adata.obs = self.adata.obs.join(
-                multi, lsuffix="_original")  # multi- v. single-transfected
+                target_info, lsuffix="_original")  # join info with .obs
             if remove_multi_transfected is True:  # remove multi-transfected?
                 self.adata = self.adata[self.adata.obs[
                     col_multi_transfection] == "single"]
+            if remove_nonperturbed is True:  # drop cells with no gRNAs?
+                self.adata = self.adata[self.adata.obs[
+                    self._columns["col_target_genes"]] != self._keys[
+                      "key_nonperturbed"]]
+        print("\n\n<<< GUIDE RNAs PROCESSED: >>>\n\n")
+        print(self.adata[assay].obs.head() if assay else self.adata.obs.head())
                 
                 
     def cluster(self, assay=None, method_cluster="leiden", 
@@ -446,7 +468,17 @@ class Crispr(object):
                 self.figures[run_label] = {}
             self.figures[run_label].update({"clustering": figs_cl})
         return figs_cl
-        
+    
+    def find_markers(self, n_genes=5, layer="scaled", 
+                     method="wilcoxon", key_reference="rest", 
+                     plot=True, **kwargs):
+        if assay is None:
+            assay = self._assay
+        marks, figs_m = cr.ax.find_markers(
+            self.adata, assay=assay, plot=plot,
+            col_cell_type=self._columns["col_cell_type"], **kwargs)
+        print(marks)
+        return marks, figs_m
         
     def run_mixscape(self, subset=None,
                      assay=None, target_gene_idents=True, 
@@ -482,8 +514,6 @@ class Crispr(object):
                   seed=1618, plot=True, run_label="main", test=False,
                   **kwargs):
         """Run Augur."""
-        if test is True:
-            annd = self.adata.copy()
         if key_treatment is None:
             key_treatment = self._keys["key_treatment"]
         if col_perturbation is None:
@@ -541,33 +571,40 @@ class Crispr(object):
                 {f"{distance_type}_{method}": output})
         return output
     
-    def compute_distance(self, assay=None, subset=None,
-                         distance_type="edistance", method="X_pca", 
-                         kws_plot=None, highlight_real_range=False,
-                         run_label="main", plot=True):
-        """Analyze cell type composition changes."""
-        output = cr.ax.compute_distance(
-            (self.adata[assay] if assay else self.adata
-             ) if subset is None else (
-                 self.adata[assay] if assay else self.adata)[subset], 
-            **self._columns, **self._keys,
-            distance_type=distance_type, method=method,
-            kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
-            plot=plot)
-        if plot is True:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label]["distances"] = {}
-            self.figures[run_label]["distances"].update(
-                {f"{distance_type}_{method}": output[-1]})
-            if run_label not in self.results:
-                self.results[run_label] = {}
-            self.results[run_label]["distances"] = {}
-            self.results[run_label]["distances"].update(
-                {f"{distance_type}_{method}": output})
+    def run_gsea(self, key_condition=None, 
+                 filter_by_highly_variable=False, 
+                 run_label="main", **kwargs):
+        """Perform gene set enrichment analyses & plotting."""
+        output = cr.ax.perform_gsea(
+            self.adata, filter_by_highly_variable=filter_by_highly_variable, 
+            **{**self._keys, "key_condition": self._keys[
+                "key_condition"] if key_condition is None else key_condition
+               }, **self._columns, **kwargs)  # GSEA
+        if run_label not in self.results:
+            self.results[run_label] = {}
+        self.results[run_label]["gsea"] = output
         return output
           
-    
+    def run_composition_analysis(self, reference_cell_type, 
+                                 assay=None, analysis_type="cell_level", 
+                                 col_perturbation=None,
+                                 est_fdr=0.05, generate_sample_level=False,
+                                 plot=True, run_label="main", **kwargs):
+        """Perform gene set enrichment analyses & plotting."""
+        if col_perturbation is None:
+            col_perturbation = self._columns["col_perturbation"]
+        output = cr.ax.analyze_composition(
+            self.adata, reference_cell_type,
+            assay=assay if assay else self._assay, analysis_type=analysis_type,
+            generate_sample_level=generate_sample_level, 
+            col_cell_type=self._columns["col_cell_type"],
+            col_perturbation=col_perturbation, est_fdr=est_fdr, plot=plot, 
+            **self._columns, **self._keys, **kwargs)
+        if run_label not in self.results:
+            self.results[run_label] = {}
+        self.results[run_label]["composition"] = output
+        return output
+        
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""
     #     # TODO: FINISH
