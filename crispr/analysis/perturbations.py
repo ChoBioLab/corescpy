@@ -9,6 +9,7 @@ from seaborn import clustermap
 import warnings
 import decoupler
 from scipy.cluster.hierarchy import linkage, dendrogram
+import re
 import pandas as pd
 import numpy as np
 
@@ -19,7 +20,6 @@ COLOR_MAP = "coolwarm"
 def perform_mixscape(adata, col_perturbation="perturbation",
                      key_control="NT",
                      key_treatment="perturbed",
-                     key_nonperturbed="NP",
                      assay=None,
                      layer_perturbation=None,
                      col_guide_rna="guide_ID",
@@ -31,6 +31,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                      plot=True, 
                      assay_protein=None,
                      protein_of_interest=None,
+                     guide_split="-", feature_split=None,
                      target_gene_idents=None, **kwargs):
     """
     Identify perturbed cells based on target genes (`adata.obs['mixscape_class']`,
@@ -69,6 +70,12 @@ def perform_mixscape(adata, col_perturbation="perturbation",
             <target_gene_idents> perturbation category (x),
             split/color-coded by Mixscape classification 
             (`adata.obs['mixscape_class_global']`). Defaults to None.
+        col_guide_rna (str, optional): Name of column with guide RNA IDs (full).
+            Format may be something like STAT1-1|CNTRL-2-1. 
+            Defaults to "guide_ID".
+        guide_split (str, optional): Guide RNA ID # split character
+            before guide #(s) (as in "-" for "STAT3-1-2"). Same as used in
+            Crispr/crispr_class.py process guide RNA method. Defaults to "-".
         target_gene_idents (list or bool, optional): List of names of genes 
             whose perturbations will determine cell grouping 
             for the above-described violin plot and/or
@@ -105,6 +112,13 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     adata_pert = adata_pert[~adata_pert.obs[
         col_target_genes].isnull()].copy()  # ensure no NA target genes
     adata_pert.X = adata_pert.layers["X_pert"]
+    if guide_split is not None:
+        adata_pert.obs.loc[:, col_guide_rna] = adata_pert.obs.apply(
+            lambda x: feature_split.join(list(pd.unique(np.array([
+                re.sub(guide_split, "g", str(i), count=1) 
+                for i in list(str(x[col_guide_rna]).split(feature_split)
+                              if feature_split else [x[col_guide_rna]])])))), 
+            axis=1)  # Pertpy needs format <gene_target>g<#>
     layer_perturbation = "X_pert"
     mix.mixscape(adata=adata_pert, 
                  # adata=adata_pert,
@@ -138,9 +152,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     if plot is True:
         try:
             figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
-                adata_pert,
-                # adata_pert, 
-                guide_rna_column=key_control
+                adata_pert, guide_rna_column=col_guide_rna
                 )  # targeting efficiency by condition 
         except Exception as err:
             figs["perturbation_clusters"] = err
@@ -212,6 +224,11 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                 target_gene_idents=target_gene_idents,
                 keys=protein_of_interest, groupby=col_target_genes,
                 hue="mixscape_class_global")
+    try:
+        adata.uns["mixscape"] = adata_pert.uns["mixscape"]
+    except Exception as err:
+        warnings.warn(f"\n{err}\n\nCould not update `adata.uns`. In figs.")
+        figs.update({"results_mixscape": adata_pert.uns["mixscape"]})
     return figs
 
 

@@ -26,9 +26,13 @@ regress_out_vars = ["total_counts", "pct_counts_mt"]
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   col_barcode=None, **kwargs):
-    """Create object from Scanpy-compatible file."""
+    """Create object from Scanpy- or Muon-compatible file."""
     # extension = os.path.splitext(file)[1]
-    if isinstance(file, dict):
+    if isinstance(file, (str, os.PathLike)) and os.path.splitext(
+        file)[1] == ".h5mu":  # MuData
+        print(f"\n<<< LOADING FILE {file} with muon.read()>>>")
+        adata = muon.read(file)
+    elif isinstance(file, dict):
         adata = combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, col_barcode=col_barcode,
             **kwargs)  # when perturbation info not in mtx

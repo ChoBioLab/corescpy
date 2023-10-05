@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 import crispr as cr
 from crispr.defaults import (names_layers, kws_process_guide_rna_default, 
-                             col_multi_transfection, feature_split_convention)
+                             col_multi_transfection)
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -61,6 +61,10 @@ class Crispr(object):
                 "col_gene_symbols"])
         self.figures = {"main": {}}
         self.results = {"main": {}}
+        self._info = {}  # extra info to store by methods
+        print(self.adata.obs, "\n\n") if assay else None
+        print(f"\n\n{self._columns}\n\n{self._keys}\n\n")
+        print("\n\n", self.adata[assay].obs if assay else self.adata)
 
     # @property
     # def adata(self):
@@ -370,23 +374,42 @@ class Crispr(object):
                 )  # NaNs replaced w/ nonperturbed key
         keys_leave = [self._keys["key_nonperturbed"], 
                       self._keys["key_control"]]  # entries to leave alone
-        targets = targets.apply(
-            lambda x: [re.sub(f"{guide_split}.*", "", str(i)) 
-            for i in x.split(
-                feature_split)])  # each entry -> list of target genes
+        targets, nums = [targets.apply(
+            lambda x: [re.sub(p, ["", r"\1"][j], str(i)) for i in x.split(
+                feature_split)]) for j, p in enumerate([
+                    f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$'])
+                         ]  # each entry -> list of target genes
         targets = targets.apply(
             lambda x: [i if i in keys_leave else self._keys[
                 "key_control"] if any(
                     (k in i for k in key_control_patterns)) else i 
                 for i in x])  # find control keys among targets
+        if min_proportion_target_umis is not None:
+            # in `targets` and `nums`, 
+            # [target guide, control guide] => [control_guide]
+            # if target_guide not abundant enough compared to control 
+            raise NotImplementedError(
+                "Filtering by proportion of target umis not implemented.")
+        grnas = targets.to_frame("t").join(nums.to_frame("n")).apply(
+            lambda x: [i + guide_split + "_".join(np.array(
+                x["n"])[np.where(np.array(x["t"]) == i)[0]]) 
+                        for i in pd.unique(x["t"])], 
+            axis=1).apply(lambda x: feature_split.join(x)).to_frame(
+                self._columns["col_guide_rna"]
+                )  # e.g., STAT1-1|STAT1-2|NT-1-2 => STAT1-1_2
         target_list = targets.apply(list).to_frame(
             self._columns["col_target_genes"] + "_list")  # guide gene list
         targets = targets.apply(pd.unique).apply(list)  # unique guides
-        if min_proportion_target_umis is not None:
-            raise NotImplementedError(
-                "Filtering by proportion of target umis not implemented.")
         target_genes = targets.apply(
-            lambda x: feature_split_convention.join(
+            lambda x: feature_split.join(
+                list(x if all(np.array(x) == self._keys[
+                    "key_control"]) else pd.Series(x).replace(
+                        self._keys["key_control"], np.nan).dropna()
+                    )  # drop control label if multi-transfect w/ non-control
+                )).to_frame(self._columns["col_target_genes"]
+                            )  # re-join lists => single string
+        target_genes = targets.apply(
+            lambda x: feature_split.join(
                 list(x if all(np.array(x) == self._keys[
                     "key_control"]) else pd.Series(x).replace(
                         self._keys["key_control"], np.nan).dropna()
@@ -423,7 +446,8 @@ class Crispr(object):
             else:
                 self.adata.obs = self.adata.obs.join(tgt)
         target_info = multi.join(binary).join(target_genes).join(
-            target_list)  # guide info combined into dataframe
+            target_list).join(
+                grnas.loc[targets.index])  # guide info combined into dataframe
         if assay: 
             self.adata[assay].obs = self.adata[assay].obs.join(
                 target_info, lsuffix="_original")  # join info with .obs
@@ -444,6 +468,10 @@ class Crispr(object):
                 self.adata = self.adata[self.adata.obs[
                     self._columns["col_target_genes"]] != self._keys[
                       "key_nonperturbed"]]
+        self._info["guide_rna"] = {}
+        self._info["guide_rna"].update(
+            {"guide_split": guide_split, "feature_split": feature_split, 
+             "key_control_patterns": key_control_patterns})
         print("\n\n<<< GUIDE RNAs PROCESSED: >>>\n\n")
         print(self.adata[assay].obs.head() if assay else self.adata.obs.head())
                 
@@ -483,7 +511,7 @@ class Crispr(object):
     def run_mixscape(self, subset=None,
                      assay=None, target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
-                     label_perturbation_type=None, run_label="main", 
+                     label_perturbation_type=None, run_label="main",
                      test=False, plot=True, **kwargs):
         """Run Mixscape.""" 
         if assay is None:
@@ -498,6 +526,7 @@ class Crispr(object):
             layer_perturbation=self._layer_perturbation, 
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
+            guide_split=self._info["guide_split"],
             plot=plot, **kwargs)
         if test is False:
             if run_label not in self.figures:

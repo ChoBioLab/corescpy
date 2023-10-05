@@ -6,4 +6,5 @@ kws_process_guide_rna_default = {"feature_split": None, "guide_split": "-",
 
 col_multi_transfection = "transfection"
 
-feature_split_convention = "|"
+# feature_split_convention = "|"
+# guide_split_convention = "g"  # required by pertpy functions
