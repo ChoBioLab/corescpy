@@ -466,7 +466,7 @@ def analyze_composition(adata, reference_cell_type,
         generate_sample_level=generate_sample_level,
         cell_type_identifier=col_cell_type, 
         sample_identifier=sample_identifier, 
-        covariate_obs=["condition"])  # load data
+        covariate_obs=col_perturbation)  # load data
     print(sccoda_data)
     print(sccoda_data["coda"].X)
     print(sccoda_data["coda"].obs)

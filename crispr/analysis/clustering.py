@@ -100,12 +100,21 @@ def cluster(adata, assay=None, plot=True, colors=None,
     return figs
 
 
-def find_markers(adata, assay=None, plot=True, n_genes=25, method="wilcoxon"):
+def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
+                 key_reference="rest", n_genes=25, method="wilcoxon", 
+                 plot=True, **kwargs):
     """Find cluster gene markers."""
     figs = {}
-    sc.tl.rank_genes_groups(adata, 'leiden', method=method)
+    sc.tl.rank_genes_groups(adata, col_cell_type, method=method, 
+                            reference=key_reference, 
+                            key_added="rank_genes_groups", 
+                            **kwargs)
     if plot is True:
         figs["marker_rankings"] = sc.pl.rank_genes_groups(
             adata, n_genes=n_genes, sharey=False)
-    return adata.uns['rank_genes_groups'], figs
-
+    ranks = sc.get.rank_genes_groups_df(
+        adata, None, key='rank_genes_groups', pval_cutoff=None, 
+        log2fc_min=None, log2fc_max=None, gene_symbols=None)
+    ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
+        [col_cell_type, "names"])
+    return ranks, figs

@@ -4,4 +4,4 @@ from .perturbations import (perform_mixscape,
                             perform_differential_prioritization,
                             analyze_composition,
                             compute_distance)
-from .clustering import cluster
+from .clustering import cluster, find_markers
