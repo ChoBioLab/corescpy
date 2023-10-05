@@ -469,7 +469,7 @@ class Crispr(object):
             self.figures[run_label].update({"clustering": figs_cl})
         return figs_cl
     
-    def find_markers(self, n_genes=5, layer="scaled", 
+    def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 
                      plot=True, **kwargs):
         if assay is None:
