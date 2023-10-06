@@ -557,7 +557,7 @@ def analyze_composition(adata, reference_cell_type,
     return (results, figs)
 
 
-def compute_distance(adata, col_target_genes="perturbation_genes", 
+def compute_distance(adata, col_target_genes="target_genes", 
                      col_cell_type="leiden",
                      distance_type="edistance", method="X_pca",
                      kws_plot=None, highlight_real_range=False, plot=True,
@@ -569,6 +569,7 @@ def compute_distance(adata, col_target_genes="perturbation_genes",
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_plot is None:
         kws_plot = dict(robust=True, figsize=(10, 10))
+        
     # Distance Metrics
     distance = pt.tl.Distance(distance_type, method)
     data = distance.pairwise(adata, groupby=col_target_genes, verbose=True)
@@ -588,6 +589,7 @@ def compute_distance(adata, col_target_genes="perturbation_genes",
         figs[f"distance_heat_{distance_type}"] = clustermap(
             data, **kws_plot)
         plt.show()
+        
     # Cluster Hierarchies
     dff = distance.pairwise(adata, groupby=col_cell_type, verbose=True)
     mat = linkage(dff, method="ward")
@@ -610,7 +612,7 @@ def perform_gsea(adata, key_condition="Perturbed",
     if filter_by_highly_variable is True:
         t_stats = (
             # Get dataframe of DE results for condition vs. rest
-            sc.get.rank_genes_groups_df(adata, label_condition, key="t-test")
+            sc.get.rank_genes_groups_df(adata, key_condition, key="t-test")
             .set_index("names")
             # Subset to highly variable genes
             .loc[adata.var["highly_variable"]]
@@ -618,18 +620,18 @@ def perform_gsea(adata, key_condition="Perturbed",
             .sort_values("scores", key=np.abs, ascending=False)
             # Format for decoupler
             [["scores"]]
-            .rename_axis([label_condition], axis=1)
+            .rename_axis([key_condition], axis=1)
         )
     else:
         t_stats = (
             # Get dataframe of DE results for condition vs. rest
-            sc.get.rank_genes_groups_df(adata, label_condition, key="t-test")
+            sc.get.rank_genes_groups_df(adata, key_condition, key="t-test")
             .set_index("names")
             # Sort by absolute score
             .sort_values("scores", key=np.abs, ascending=False)
             # Format for decoupler
             [["scores"]]
-            .rename_axis([label_condition], axis=1)
+            .rename_axis([key_condition], axis=1)
         )
     print(t_stats)
     
