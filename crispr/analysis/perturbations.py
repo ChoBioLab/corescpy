@@ -12,6 +12,7 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 import re
 import pandas as pd
 import numpy as np
+import crispr as cr
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -27,6 +28,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                      col_target_genes="gene_target", 
                      iter_num=10,
                      min_de_genes=5, pval_cutoff=5e-2, logfc_threshold=0.25,
+                     subsample_number=300,
                      n_comps_lda=None, 
                      plot=True, 
                      assay_protein=None,
@@ -102,6 +104,8 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     figs = {}
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
+    
+    # Perturbation Signature
     mix = pt.tl.Mixscape()
     mix.perturbation_signature(
         adata[assay] if assay else adata, col_perturbation, 
@@ -112,14 +116,9 @@ def perform_mixscape(adata, col_perturbation="perturbation",
     adata_pert = adata_pert[~adata_pert.obs[
         col_target_genes].isnull()].copy()  # ensure no NA target genes
     adata_pert.X = adata_pert.layers["X_pert"]
-    if guide_split is not None:
-        adata_pert.obs.loc[:, col_guide_rna] = adata_pert.obs.apply(
-            lambda x: feature_split.join(list(pd.unique(np.array([
-                re.sub(guide_split, "g", str(i), count=1) 
-                for i in list(str(x[col_guide_rna]).split(feature_split)
-                              if feature_split else [x[col_guide_rna]])])))), 
-            axis=1)  # Pertpy needs format <gene_target>g<#>
     layer_perturbation = "X_pert"
+    
+    # Mixscape Classification & Perturbation Scoring
     mix.mixscape(adata=adata_pert, 
                  # adata=adata_pert,
                  labels=col_target_genes, control=key_control, 
@@ -127,56 +126,18 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                  perturbation_type=key_treatment,
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
-    mix.lda(adata=adata_pert, 
-            # adata=adata_pert,
-            labels=col_target_genes, 
-            layer=layer_perturbation, control=key_control, 
-            min_de_genes=min_de_genes,
-            split_by=col_split_by, 
-            perturbation_type=key_treatment,
-            mixscape_class_global="mixscape_class_global",
-            n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
-            pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
-    if plot is True:
-        try:
-            figs["perturbation_clusters"] = pt.pl.ms.lda(
-                adata=adata_pert, 
-                control=key_control)  # cluster perturbation
-        except Exception as err:
-            figs["perturbation_clusters"] = err
-            warnings.warn(f"{err}\n\nCould not plot perturbation clusters!")
     if target_gene_idents is True:  # to plot all target genes
-        target_gene_idents = list(adata[assay].uns[
-            "mixscape"].keys()) if assay else list(
-                adata.uns["mixscape"].keys())  # target genes
+        target_gene_idents = list(adata_pert.uns["mixscape"].keys())  # targets
     if plot is True:
-        try:
-            figs["gRNA_targeting_efficiency_by_class"] = pt.pl.ms.barplot(
-                adata_pert, guide_rna_column=col_guide_rna
-                )  # targeting efficiency by condition 
-        except Exception as err:
-            figs["perturbation_clusters"] = err
-            warnings.warn(
-                f"{err}\n\nCould not plot targeting efficiency by class!")
-        if n_comps_lda is not None:  # LDA clusters
-            try:
-                figs["cluster_perturbation_response"] = pt.pl.ms.lda(
-                    adata_pert,
-                    # adata=adata_pert, 
-                    control=key_control)  # perturbation response
-            except Exception as err:
-                figs["perturbation_clusters"] = err
-                warnings.warn(
-                    f"{err}\n\nCould not plot cluster perturbation response!")
         if target_gene_idents is not None:  # G/P EX
             figs["mixscape_DEX_ordered_by_ppp_heat"] = {}
             figs["mixscape_ppp_violin"] = {}
             figs["mixscape_perturb_score"] = {}
             try:
-                figs["mixscape_targeting_efficacy"] = pt.pl.ms.barplot(
-                    adata_pert,
-                    # adata_pert,
-                    guide_rna_column=col_guide_rna)
+                fpp = cr.pl.plot_perturbation_scores_by_guide(
+                    adata_pert, guide_rna_column=col_guide_rna, 
+                    guide_split=guide_split)
+                figs["mixscape_targeting_efficacy"] = fpp
             except Exception as err:
                 figs["perturbation_clusters"] = err
                 warnings.warn(f"{err}\n\nCould not plot targeting efficiency!")
@@ -185,50 +146,103 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                     print(f"\n\nTarget gene {g} not in mixscape_class!")
                     continue  # skip to next target gene if missing
                 figs["mixscape_perturb_score"][g] = pt.pl.ms.perturbscore(
-                    adata=adata_pert,
-                    # adata=adata_pert, 
-                    labels=col_target_genes, target_gene=g, color="red")
-                figs["mixscape_DEX_ordered_by_ppp_heat"][g] = pt.pl.ms.heatmap(
-                    adata=adata_pert,
-                    # adata=adata_pert, 
-                    labels=col_target_genes, target_gene=g, 
-                    layer=layer_perturbation, control=key_control
-                    )  # differential expression heatmap ordered by PPs
+                    adata=adata_pert, labels=col_target_genes, 
+                    target_gene=g, color="red")
+                try:
+                    figs["mixscape_DEX_ordered_by_ppp_heat"][
+                        g] = pt.pl.ms.heatmap(
+                            adata=adata_pert, 
+                            subsample_number=subsample_number,
+                            labels=col_target_genes, target_gene=g, 
+                            layer=layer_perturbation, control=key_control
+                            )  # differential expression heatmap ordered by PPs
+                except Exception as err:
+                    figs["mixscape_DEX_ordered_by_ppp_heat"][g] = err
+                    warnings.warn(f"{err}\n\nCould not plot DEX heatmap!")
                 tg_conds = [
                     key_control, f"{g} NP", 
                     f"{g} {key_treatment}"]  # conditions: gene g
                 figs["mixscape_ppp_violin"][g] = pt.pl.ms.violin(
-                    adata=adata_pert,
-                    # adata=adata_pert, 
-                    target_gene_idents=tg_conds, 
+                    adata=adata_pert, target_gene_idents=tg_conds, rotation=45,
+                    keys=f"mixscape_class_p_{key_treatment}".lower(),
                     groupby="mixscape_class")  # gene: perturbed, NP, control
-                figs["mixscape_ppp_violin"][f"{g}_global"] = pt.pl.ms.violin(
-                    adata=adata_pert,
-                    # adata=adata_pert, 
-                    target_gene_idents=[key_control, "NP", 
-                                        key_treatment], 
-                    groupby="mixscape_class_global")  # global: P, NP, control 
+            figs["mixscape_ppp_violin"][f"global"] = pt.pl.ms.violin(
+                adata=adata_pert, target_gene_idents=[
+                    key_control, "NP", key_treatment], rotation=45,
+                keys=f"mixscape_class_p_{key_treatment}".lower(),
+                groupby="mixscape_class_global")  # same, but global
             tg_conds = [key_control] + functools.reduce(
                 lambda i, j: i + j, [[f"{g} NP", 
                         f"{g} {key_treatment}"] 
                 for g in target_gene_idents])  # conditions: all genes
             figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
                 adata=adata_pert,
-                # adata=adata_pert, 
-                target_gene_idents=tg_conds, 
+                keys=f"mixscape_class_p_{key_treatment}".lower(),
+                target_gene_idents=tg_conds, rotation=45,
                 groupby="mixscape_class")  # gene: perturbed, NP, control
-        if assay_protein is not None and target_gene_idents is not None:
-            figs[f"mixscape_protein_{protein_of_interest}"] = pt.pl.ms.violin( 
-                adata=adata_pert,
-                # adata=adata_pert, 
-                target_gene_idents=target_gene_idents,
-                keys=protein_of_interest, groupby=col_target_genes,
-                hue="mixscape_class_global")
+            
+    # Perturbation-Specific Cell Clusters
     try:
-        adata.uns["mixscape"] = adata_pert.uns["mixscape"]
+        mix.lda(adata=adata_pert, 
+                # adata=adata_pert,
+                labels=col_target_genes, 
+                layer=layer_perturbation, control=key_control, 
+                min_de_genes=min_de_genes,
+                split_by=col_split_by, 
+                perturbation_type=key_treatment,
+                mixscape_class_global="mixscape_class_global",
+                n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
+                pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
+        if plot is True:
+            try:
+                figs["perturbation_clusters"] = pt.pl.ms.lda(
+                    adata=adata_pert, 
+                    control=key_control)  # cluster perturbation
+            except Exception as err:
+                figs["perturbation_clusters"] = err
+                warnings.warn(f"{err}\n\nCouldn't plot perturbation clusters!")
+            if n_comps_lda is not None:  # LDA clusters
+                try:
+                    figs["cluster_perturbation_response"] = pt.pl.ms.lda(
+                        adata_pert, control=key_control)  # perturbation response
+                except Exception as err:
+                    figs["perturbation_clusters"] = err
+                    warnings.warn(
+                        f"{err}\n\nCould not plot cluster perturbation response!")
+                try:
+                    if assay_protein is not None and (
+                        target_gene_idents is not None):
+                        f_pr = pt.pl.ms.violin(
+                            adata=adata_pert,
+                            # adata=adata_pert, 
+                            target_gene_idents=target_gene_idents,
+                            keys=protein_of_interest, groupby=col_target_genes,
+                            hue="mixscape_class_global")
+                        figs[f"mixscape_protein_{protein_of_interest}"] = f_pr 
+                except Exception as err:
+                    figs[f"mixscape_protein_{protein_of_interest}"] = err
+                    warnings.warn(
+                        f"{err}\n\nCould not plot protein expression!")
+    except Exception as error:
+        warnings.warn(
+            f"{error}\n\nCouldn't perform perturbation-specific clustering!")
+        
+    # Store Results
+    try:
+        if assay:
+            adata[assay].uns["mixscape"] = adata_pert.uns[
+                "mixscape"]  # `.uns` join
+        else:
+            adata.uns["mixscape"] = adata_pert.uns["mixscape"]  # `.uns` join
     except Exception as err:
         warnings.warn(f"\n{err}\n\nCould not update `adata.uns`. In figs.")
         figs.update({"results_mixscape": adata_pert.uns["mixscape"]})
+    if assay:
+        adata[assay].obs = adata.obs.join(adata_pert.obs[
+            ["mixscape_class", "mixscape_class_global"]], lsuffix="_o")  # data
+    else:
+        adata.obs = adata.obs.join(adata_pert.obs[
+            ["mixscape_class", "mixscape_class_global"]], lsuffix="_o")  # data
     return figs
 
 

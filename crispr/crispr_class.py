@@ -28,7 +28,6 @@ class Crispr(object):
                  assay=None, 
                  assay_protein=None,
                  layer_perturbation=None, 
-                 label_perturbation_type="Perturbed",
                  col_gene_symbols="gene_symbols", 
                  col_cell_type="leiden",
                  col_sample_id="standard_sample_id", 
@@ -44,7 +43,6 @@ class Crispr(object):
         self._assay = assay
         self._assay_protein = assay_protein
         self._layer_perturbation = layer_perturbation
-        self._label_perturbation_type = label_perturbation_type
         self._columns = dict(col_gene_symbols=col_gene_symbols,
                              col_cell_type=col_cell_type, 
                              col_sample_id=col_sample_id, 
@@ -508,25 +506,19 @@ class Crispr(object):
         print(marks)
         return marks, figs_m
         
-    def run_mixscape(self, subset=None,
-                     assay=None, target_gene_idents=True, 
+    def run_mixscape(self, assay=None, target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
-                     label_perturbation_type=None, run_label="main",
+                     run_label="main",
                      test=False, plot=True, **kwargs):
         """Run Mixscape.""" 
         if assay is None:
             assay = self._assay
-        if label_perturbation_type is None:
-            label_perturbation_type = self._label_perturbation_type,
         figs_mix = cr.ax.perform_mixscape(
-            self.adata[subset] if subset is not None else self.adata.copy(
-                ) if test is True else self.adata, assay=assay,
+            self.adata.copy() if test is True else self.adata, assay=assay,
             **self._columns, **self._keys,
-            label_perturbation_type=self._label_perturbation_type, 
             layer_perturbation=self._layer_perturbation, 
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
-            guide_split=self._info["guide_split"],
             plot=plot, **kwargs)
         if test is False:
             if run_label not in self.figures:

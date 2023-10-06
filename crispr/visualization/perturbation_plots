@@ -11,6 +11,7 @@ from plotnine import (
     xlab,
     ylab,
 )
+from scanpy.plotting import _utils
 import pandas as pd 
 
 
@@ -26,7 +27,7 @@ def plot_perturbation_scores_by_guide(
     if mixscape_class_global not in adata.obs:
         raise ValueError("Please run `pt.tl.mixscape` first.")
     if panel_spacing is None:
-        panel_spacing = [0.3, 0.3]
+        panel_spacing = [0.1, 0.1]
     if isinstance(panel_spacing, (int, float)):
         panel_spacing = [panel_spacing, panel_spacing]
     if kws_text_size is None:
@@ -42,7 +43,7 @@ def plot_perturbation_scores_by_guide(
     all_cells_percentage = pd.melt(count / count.sum(), 
                                    ignore_index=False).reset_index()
     KO_cells_percentage = all_cells_percentage[all_cells_percentage[
-        mixscape_class_global] == "KO"]
+        mixscape_class_global] == key_treatment]
     KO_cells_percentage = KO_cells_percentage.sort_values(
         "value", ascending=False)
 
@@ -92,4 +93,5 @@ def plot_perturbation_scores_by_guide(
                 legend_text=element_text(
                     size=kws_text_size["legend_text_size"]))
     )
+    _utils.savefig_or_show("mixscape_barplot", show=True, save=False)
     return p_1

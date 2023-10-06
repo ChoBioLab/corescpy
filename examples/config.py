@@ -109,7 +109,7 @@ key_control_data = {
 }
 
 key_treatment_data = {
-    "CRISPRi_scr": "Perturbed",
+    "CRISPRi_scr": "KD",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": None,
     "pool": np.nan,
