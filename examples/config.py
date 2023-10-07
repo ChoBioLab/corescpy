@@ -160,6 +160,19 @@ col_guide_rna_data = {
     "augur_ex": None
 }
 
+col_num_umis_data = {
+    "CRISPRi_scr": "num_umis",
+    "CRISPRi_wgs": np.nan,
+    "CRISPRi_ess": np.nan,
+    "pool": np.nan,
+    "bulk": np.nan,
+    "screen": np.nan,
+    "perturb-seq": None,
+    "ECCITE": "guide_ID",
+    "coda": np.nan,
+    "augur_ex": None
+}
+
 layer_perturbation_data = {
     "CRISPRi_scr": np.nan,
     "CRISPRi_wgs": np.nan,

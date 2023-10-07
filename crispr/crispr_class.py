@@ -10,7 +10,9 @@ import scanpy as sc
 import os
 import warnings
 import matplotlib.pyplot as plt
+import seaborn as sns
 import re
+import pertpy as pt
 import pandas as pd
 import numpy as np
 import crispr as cr
@@ -35,9 +37,12 @@ class Crispr(object):
                  col_perturbation="perturbation",
                  col_target_genes="target_genes",
                  col_guide_rna="guide_ids",
+                 col_num_umis="num_umis",
                  key_control="NT", 
                  key_treatment="perturbed", 
                  key_nonperturbed="NP", 
+                 kws_process_guide_rna=None,
+                 remove_multi_transfected=True,
                  **kwargs):
         """CRISPR class initialization."""
         self._assay = assay
@@ -49,20 +54,52 @@ class Crispr(object):
                              col_batch=col_batch,
                              col_perturbation=col_perturbation,
                              col_guide_rna=col_guide_rna,
+                             col_num_umis=col_num_umis,
                              col_target_genes=col_target_genes)
         self._keys = dict(key_control=key_control, key_treatment=key_treatment,
                           key_nonperturbed=key_nonperturbed)
         self._file_path = file_path
-        # self.adata = file_path
         self.adata = cr.pp.create_object(
             self._file_path, assay=None, col_gene_symbols=self._columns[
                 "col_gene_symbols"])
         self.figures = {"main": {}}
         self.results = {"main": {}}
-        self._info = {}  # extra info to store by methods
+        self._info = {"descriptives": {}, 
+                      "guide_rna": {}}  # extra info to store by methods
         print(self.adata.obs, "\n\n") if assay else None
         print(f"\n\n{self._columns}\n\n{self._keys}\n\n")
         print("\n\n", self.adata[assay].obs if assay else self.adata)
+        if kws_process_guide_rna is not None:
+            print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
+            tg_info = cr.pp.filter_by_guide_counts(
+                self.adata[assay] if assay else self.adata, 
+                col_guide_rna, col_num_umis=col_num_umis,
+                key_control=key_control, **kws_process_guide_rna)
+            if remove_multi_transfected is True:
+                self._info["guide_rna"]["counts_raw"] = tg_info.copy()
+                tg_info = tg_info.loc[tg_info[
+                    f"{col_guide_rna}_list_count_filtered"].apply(
+                        lambda x: np.nan if len(x) > 1 else x).dropna().index]
+            self._info["guide_rna"]["counts"] = tg_info.copy()
+            self._info["guide_rna"]["keywords"] = kws_process_guide_rna
+            if assay:
+                self.adata[assay].obs = self.adata[assay].obs.join(
+                    tg_info, lsuffix="_original")
+                if remove_multi_transfected is True:
+                    self.adata[assay] = self.adata[assay][
+                        ~self.adata[assay].obs[col_guide_rna].isnull()]
+            else:
+                if remove_multi_transfected is True:
+                    self.adata.obs = self.adata.obs.join(
+                        tg_info, lsuffix="_original")
+                if remove_multi_transfected is True:
+                    self.adata = self.adata[
+                        ~self.adata.obs[col_guide_rna].isnull()]
+            print("\n\n", self.adata[assay].obs if assay else self.adata)
+        
+            # Correct 10x CellRanger Guide Count Incorporation
+            # raise NotImplementedError(
+            #     "Delete guides from var_names not yet implemented!")
 
     # @property
     # def adata(self):
@@ -80,6 +117,39 @@ class Crispr(object):
     #                 "col_gene_symbols"])
     #     else:
     #         self._adata = value
+    
+    def describe(self, group_by=None, plot=False):
+        desc, figs = {}, {}
+        if "descriptives" not in self._info:
+            self._info["descriptives"] = {}
+        try:
+            if "guide_rna_counts" in self._info["descriptives"]:
+                self._info["descriptives"][
+                    "guide_rna_counts"] = self.count_gRNAs()
+            desc["n_grnas"] = self._info["descriptives"][
+                "guide_rna_counts"].groupby("gene").describe().rename(
+                    {"mean": "mean sgRNA count/cell"})
+            print(desc["n_grnas"])
+            if plot is True:
+                # _, cols = cr.pl.square_grid(self._info["descriptives"][
+                #     "guide_rna_counts"].reset_index().gene.unique())
+                # figs["n_grna"] = sns.displot(data=self._info["descriptives"][
+                #     "guide_rna_counts"].to_frame(
+                #         "sgRNA Count").reset_index(), 
+                #     x="sgRNA Count", col="gene", col_wrap=cols)
+                n_grna = self._info["descriptives"][
+                    "guide_rna_counts"].to_frame("sgRNA Count")
+                if group_by is not None:
+                    n_grna = n_grna.join(self.adata.obs[
+                        group_by].rename_axis("bc"))  # join group_by variable
+                figs["n_grna"] = sns.catplot(data=n_grna.reset_index(),
+                    y="gene", x="sgRNA Count", kind="violin", hue=group_by,
+                    height=len(self._info["descriptives"][
+                        "guide_rna_counts"].reset_index().gene.unique())
+                    )  # violin plot of gNRA counts per cell
+        except Exception as err:
+            warnings.warn(f"{err}\n\n\nCould not describe sgRNA count.")
+        return desc, figs
             
     def plot(self, genes=None, assay="default", 
              title=None,  # NOTE: will apply to multiple plots
@@ -300,8 +370,7 @@ class Crispr(object):
         return figs
             
     
-    def preprocess(self, assay=None, assay_protein=None, 
-                   kws_process_guide_rna=kws_process_guide_rna_default,
+    def preprocess(self, assay=None, assay_protein=None,
                    clustering=False, run_label="main", 
                    remove_doublets=True, **kwargs):
         """Preprocess data."""
@@ -309,10 +378,6 @@ class Crispr(object):
             assay_protein = self._assay_protein
         if assay is None:
             assay = self._assay
-        if kws_process_guide_rna is not None:  # process perturbation columns
-            assay_gr = kws_process_guide_rna.pop(
-                "assay") if "assay" in kws_process_guide_rna else assay
-            self.process_guide_rna(assay=assay_gr, **kws_process_guide_rna)
         _, figs = cr.pp.process_data(
             self.adata, assay=assay, assay_protein=assay_protein, 
             remove_doublets=remove_doublets, **self._columns,
@@ -330,149 +395,6 @@ class Crispr(object):
                 raise TypeError(
                     "`clustering` must be dict (keyword arguments) or bool.")
         return figs
-    
-    
-    def process_guide_rna(self, assay=None, feature_split="|", guide_split="-",
-                          key_control_patterns="CTRL", 
-                          remove_multi_transfected=True, 
-                          remove_nonperturbed=True, 
-                          min_proportion_target_umis=None,
-                          **kwargs):
-        """
-        Convert specific guide RNA entries to general gene targets,
-        including dummy-coded columns for each gene target (if no counts) 
-        or count columns for each target, plus a column of gene target 
-        categories stripped of specific guide ID suffixes 
-        (e.g., -1, -2-1, etc. if `guide_split`='-').
-        
-        If min_proportion_target_umis=4, for example, in cells that have
-        one targeting guide and one control guide, only include those
-        where the number of UMIs for the target gene is at least four times
-        the number of control UMIs. N.B.: The column with number of UMIs 
-        must have the same separating character as `feature_split`.
-        """
-        print("\n<<< PROCESSING GUIDE RNAs >>>\n")
-        if assay is None:
-            assay = self._assay
-        if isinstance(key_control_patterns, str):
-            key_control_patterns = [key_control_patterns]
-        if guide_split in self._keys["key_control"]:
-            raise ValueError(
-                f"""`guide_split` ({guide_split}) must not be in 
-                `self._keys['key_control']`.""")
-        targets = self.adata.obs[self._columns["col_guide_rna"]].str.strip(
-            " ").replace("", np.nan)
-        if np.nan in key_control_patterns:  # if NAs mean control sgRNAs
-            key_control_patterns = list(pd.Series(key_control_patterns).dropna())
-            targets = targets.replace(
-                np.nan, self._keys["key_control"])  # NaNs replaced w/ control key
-        else:  # if NAs mean unperturbed cells
-            targets = targets.replace(
-                np.nan, self._keys["key_nonperturbed"]
-                )  # NaNs replaced w/ nonperturbed key
-        keys_leave = [self._keys["key_nonperturbed"], 
-                      self._keys["key_control"]]  # entries to leave alone
-        targets, nums = [targets.apply(
-            lambda x: [re.sub(p, ["", r"\1"][j], str(i)) for i in x.split(
-                feature_split)]) for j, p in enumerate([
-                    f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$'])
-                         ]  # each entry -> list of target genes
-        targets = targets.apply(
-            lambda x: [i if i in keys_leave else self._keys[
-                "key_control"] if any(
-                    (k in i for k in key_control_patterns)) else i 
-                for i in x])  # find control keys among targets
-        if min_proportion_target_umis is not None:
-            # in `targets` and `nums`, 
-            # [target guide, control guide] => [control_guide]
-            # if target_guide not abundant enough compared to control 
-            raise NotImplementedError(
-                "Filtering by proportion of target umis not implemented.")
-        grnas = targets.to_frame("t").join(nums.to_frame("n")).apply(
-            lambda x: [i + guide_split + "_".join(np.array(
-                x["n"])[np.where(np.array(x["t"]) == i)[0]]) 
-                        for i in pd.unique(x["t"])], 
-            axis=1).apply(lambda x: feature_split.join(x)).to_frame(
-                self._columns["col_guide_rna"]
-                )  # e.g., STAT1-1|STAT1-2|NT-1-2 => STAT1-1_2
-        target_list = targets.apply(list).to_frame(
-            self._columns["col_target_genes"] + "_list")  # guide gene list
-        targets = targets.apply(pd.unique).apply(list)  # unique guides
-        target_genes = targets.apply(
-            lambda x: feature_split.join(
-                list(x if all(np.array(x) == self._keys[
-                    "key_control"]) else pd.Series(x).replace(
-                        self._keys["key_control"], np.nan).dropna()
-                    )  # drop control label if multi-transfect w/ non-control
-                )).to_frame(self._columns["col_target_genes"]
-                            )  # re-join lists => single string
-        target_genes = targets.apply(
-            lambda x: feature_split.join(
-                list(x if all(np.array(x) == self._keys[
-                    "key_control"]) else pd.Series(x).replace(
-                        self._keys["key_control"], np.nan).dropna()
-                    )  # drop control label if multi-transfect w/ non-control
-                )).to_frame(self._columns["col_target_genes"]
-                            )  # re-join lists => single string
-        binary = targets.apply(
-            lambda x: self._keys[
-                "key_treatment"] if any(
-                    (q not in [
-                        self._keys["key_nonperturbed"], 
-                        self._keys["key_control"]]) 
-                    for q in x) else self._keys["key_control"]).to_frame(
-                        self._columns["col_perturbation"]
-                        )  # binary perturbed/not
-        multi = targets.apply(
-            lambda x: "multi" if sum([i not in [
-                        self._keys["key_nonperturbed"], 
-                        self._keys["key_control"]] for i in x]
-                                    ) > 1  # >1 non-control guide?
-            else None if all(np.array(x) == self._keys["key_nonperturbed"]
-                            ) or len(x) == 0 
-            else "single").to_frame(
-                col_multi_transfection)  # multi v. single-transfected
-        for t in targets.explode().unique():
-            tgt = targets.apply(
-                lambda x: x if x == self._keys[
-                    "key_nonperturbed"] else self._keys["key_treatment"]
-                if t in x else self._keys["key_control"]).to_frame(
-                    f"{self._keys['key_treatment']}_{t}"
-                    )  # NP, treatment, or control key for each target
-            if assay:
-                self.adata[assay].obs = self.adata[assay].obs.join(tgt)
-            else:
-                self.adata.obs = self.adata.obs.join(tgt)
-        target_info = multi.join(binary).join(target_genes).join(
-            target_list).join(
-                grnas.loc[targets.index])  # guide info combined into dataframe
-        if assay: 
-            self.adata[assay].obs = self.adata[assay].obs.join(
-                target_info, lsuffix="_original")  # join info with .obs
-            if remove_multi_transfected is True:  # remove multi-transfected?
-                self.adata[assay] = self.adata[assay][self.adata[assay].obs[
-                    col_multi_transfection] == "single"]
-            if remove_nonperturbed is True:  # drop cells with no gRNAs?
-                self.adata[assay] = self.adata[assay][self.adata[assay].obs[
-                    self._columns["col_target_genes"]] != self._keys[
-                      "key_nonperturbed"]]
-        else:
-            self.adata.obs = self.adata.obs.join(
-                target_info, lsuffix="_original")  # join info with .obs
-            if remove_multi_transfected is True:  # remove multi-transfected?
-                self.adata = self.adata[self.adata.obs[
-                    col_multi_transfection] == "single"]
-            if remove_nonperturbed is True:  # drop cells with no gRNAs?
-                self.adata = self.adata[self.adata.obs[
-                    self._columns["col_target_genes"]] != self._keys[
-                      "key_nonperturbed"]]
-        self._info["guide_rna"] = {}
-        self._info["guide_rna"].update(
-            {"guide_split": guide_split, "feature_split": feature_split, 
-             "key_control_patterns": key_control_patterns})
-        print("\n\n<<< GUIDE RNAs PROCESSED: >>>\n\n")
-        print(self.adata[assay].obs.head() if assay else self.adata.obs.head())
-                
                 
     def cluster(self, assay=None, method_cluster="leiden", 
                 plot=True, colors=None, paga=False, 

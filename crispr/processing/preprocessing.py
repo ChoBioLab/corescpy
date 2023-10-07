@@ -8,6 +8,7 @@ Preprocessing CRISPR experiment data.
 """
 
 import os
+import re
 import scanpy as sc
 import pertpy as pt
 import muon
@@ -365,3 +366,132 @@ def remove_batch_effects(adata, col_cell_type="leiden",
         sc.pl.umap(corrected_adata, color=[col_batch, col_cell_type], 
                    wspace=0.4, frameon=False)
     return corrected_adata
+
+
+def detect_guide_targets(adata, col_guide_rna="guide_ID", 
+                         feature_split="|", guide_split="-",
+                         key_control_patterns=None,
+                         key_control="Control", **kwargs):
+    """Detect guide RNA gene targets."""
+    if kwargs:
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
+    if key_control_patterns is None:
+        key_control_patterns = [
+            key_control]  # if already converted, pattern=key itself
+    if isinstance(key_control_patterns, str) or pd.isnull(
+        key_control_patterns):
+        key_control_patterns = [key_control_patterns]
+    targets = adata.obs[col_guide_rna].str.strip(" ").replace("", np.nan)
+    if np.nan in key_control_patterns:  # if NAs mean control sgRNAs
+        key_control_patterns = list(pd.Series(key_control_patterns).dropna())
+        targets = targets.replace(
+            np.nan, key_control)  # NaNs replaced w/ control key
+    else:  # if NAs mean unperturbed cells
+        if any(pd.isnull(targets)):
+            warnings.warn(
+                f"Dropping rows with NaNs in `col_guide_rna`.")
+        targets = targets.dropna()
+    keys_leave = [key_control]  # entries to leave alone
+    targets, nums = [targets.apply(
+        lambda x: [re.sub(p, ["", r"\1"][j], str(i)) for i in x.split(
+            feature_split)]) for j, p in enumerate([
+                f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$'])
+                        ]  # each entry -> list of target genes
+    targets = targets.apply(
+        lambda x: [i if i in keys_leave else key_control if any(
+                (k in i for k in key_control_patterns)) else i 
+            for i in x])  # find control keys among targets
+    grnas = targets.to_frame("t").join(nums.to_frame("n")).apply(
+        lambda x: [i + guide_split + "_".join(np.array(
+            x["n"])[np.where(np.array(x["t"]) == i)[0]]) 
+                    for i in pd.unique(x["t"])], 
+        axis=1).apply(lambda x: feature_split.join(x)).to_frame(
+            col_guide_rna
+            )  # e.g., STAT1-1|STAT1-2|NT-1-2 => STAT1-1_2
+    return targets, grnas
+
+
+def find_guide_info(adata, col_guide_rna, col_num_umis=None, 
+                    feature_split="|", guide_split="-",
+                    key_control_patterns=None,
+                    key_control="Control", **kwargs):
+    if isinstance(key_control_patterns, str):
+        key_control_patterns = [key_control_patterns]
+    targets, grnas = detect_guide_targets(
+        adata, col_guide_rna=col_guide_rna,
+        feature_split=feature_split, guide_split=guide_split, 
+        key_control_patterns=key_control_patterns, 
+        key_control=key_control, **kwargs)  # target genes
+    tg_info = grnas.iloc[:, 0].to_frame(
+        col_guide_rna + "_flat_ix").join(
+            targets.to_frame(col_guide_rna + "_list"))
+    if col_num_umis is not None:
+        tg_info = tg_info.join(
+            adata.obs[[col_num_umis]].apply(
+                lambda x: [float(i) for i in str(x[col_num_umis]).split(
+                    feature_split)], axis=1).to_frame(
+                        col_num_umis + "_list"))
+    tg_info = adata.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
+    tg_info = tg_info.join(tg_info[col_num_umis + "_list"].dropna().apply(
+        sum).to_frame(col_num_umis + "_total"))  # total UMIs/cell
+    return tg_info
+
+
+def filter_by_guide_counts(adata, col_guide_rna, col_num_umis=None, 
+                           max_percent_umis_control_drop=75,
+                           min_percent_umis=40,
+                           feature_split="|", guide_split="-",
+                           key_control_patterns=None,
+                           key_control="Control", **kwargs):
+    # Extract Guide RNA Information
+    tg_info = find_guide_info(
+        adata, col_guide_rna, col_num_umis=col_num_umis, 
+        feature_split=feature_split, guide_split=guide_split, 
+        key_control_patterns=key_control_patterns, 
+        key_control=key_control, **kwargs)
+
+    # Sum Up gRNA UMIs
+    cols = [col_guide_rna + "_list", col_num_umis + "_list"]
+    feats_n = tg_info[cols].dropna().apply(lambda x: pd.Series(
+        dict(zip(pd.unique(x[cols[0]]), [sum(np.array(x[cols[1]])[
+            np.where(np.array(x[cols[0]]) == i)[0]]) for i in pd.unique(
+                x[cols[0]])]))), axis=1).stack().rename_axis(["bc", "g"])
+
+    # Actual Filtering
+    feats_n = feats_n.to_frame("n").join(feats_n.groupby("bc").sum().to_frame("t"))
+    feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)
+    filt = feats_n.groupby(["bc", "g"]).apply(
+        lambda x: np.nan if x.name[1] == key_control and float(
+            x["p"]) <= max_percent_umis_control_drop else np.nan if float(
+                x["p"]) < min_percent_umis else x.stack())
+    filt = pd.concat(list(filt.dropna())).unstack(2)
+    filt = filt.n.to_frame("u").groupby("bc").apply(
+        lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
+                            cols[1]: list(x.reset_index("g")["u"])}))
+    tg_info = tg_info.join(filt, lsuffix="_all", rsuffix="_count_filtered")
+    tg_info = tg_info.dropna().loc[adata.obs.index.intersection(
+        tg_info.dropna().index)]  # re-order according to adata index
+    # # Determine Exclusion Criteria Met per gRNA
+    # tg_info = tg_info.join(feats_n.to_frame("u").groupby("bc").apply(
+    #     lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
+    #                          cols[1]: list(x.reset_index("g")["u"])})), 
+    #                        rsuffix="_unique", lsuffix="_all")
+    # ecol, grc, nuc = [f"{col_guide_rna}_exclusions", f"{col_guide_rna}_list_unique", 
+    #                   f"{col_num_umis}_percent"]  # column names
+    # tg_info.loc[:, ecol] = tg_info[grc].apply(lambda x: [""] * len(x))  # placehold
+    # tg_info.loc[:, ecol] = tg_info.apply(
+    #     lambda x: [x[ecol][i] + " " + "low_umis" if x[
+    #         nuc][i] < min_percent_umis else x[ecol][i] 
+    #                for i, q in enumerate(x[grc])], axis=1)  # low UMI count
+    # tg_info.loc[:, ecol] = tg_info.apply(
+    #     lambda x: [x[ecol][i] + " " + "tolerable_control_umis" if (
+    #         q == key_control and any(np.array(x[grc]) != key_control) and x[
+    #             nuc][i] <= max_percent_umis_control_drop) else x[ecol][i] 
+    #                for i, q in enumerate(x[grc])], axis=1
+    #     )  # control guides w/i tolerable % => drop control guide
+    # tg_info.loc[:, ecol] = tg_info[ecol].apply(lambda x: [
+    #     np.nan if i == "" else i for i in x])
+    for q in [col_guide_rna, col_num_umis]:
+        tg_info.loc[:, q] = tg_info[q + "_list_count_filtered"].apply(
+            lambda x: feature_split.join(str(i) for i in x))
+    return tg_info
