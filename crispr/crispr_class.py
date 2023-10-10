@@ -161,10 +161,20 @@ class Crispr(object):
     
     def describe(self, group_by=None, plot=False):
         desc, figs = {}, {}
+        gbp = [self._columns["col_cell_type"]]
+        if group_by:
+            gbp += [group_by]
         if "descriptives" not in self._info:
             self._info["descriptives"] = {}
+        print("\n\n\n", self.adata.obs.describe().round(2),
+              "\n\n\n")
+        print(f"\n\n{'=' * 80}\nDESCRIPTIVES\n{'=' * 80}\n\n")
+        print(self.adata.obs.describe())
+        for g in gbp:
+            print(self.adata.obs.groupby(g).describe().round(2), 
+                  f"\n\n{'-' * 40}\n\n") 
         try:
-            if "guide_rna_counts" in self._info["descriptives"]:
+            if "guide_rna_counts" not in self._info["descriptives"]:
                 self._info["descriptives"][
                     "guide_rna_counts"] = self.count_gRNAs()
             desc["n_grnas"] = self._info["descriptives"][
@@ -172,12 +182,6 @@ class Crispr(object):
                     {"mean": "mean sgRNA count/cell"})
             print(desc["n_grnas"])
             if plot is True:
-                # _, cols = cr.pl.square_grid(self._info["descriptives"][
-                #     "guide_rna_counts"].reset_index().gene.unique())
-                # figs["n_grna"] = sns.displot(data=self._info["descriptives"][
-                #     "guide_rna_counts"].to_frame(
-                #         "sgRNA Count").reset_index(), 
-                #     x="sgRNA Count", col="gene", col_wrap=cols)
                 n_grna = self._info["descriptives"][
                     "guide_rna_counts"].to_frame("sgRNA Count")
                 if group_by is not None:
@@ -190,7 +194,227 @@ class Crispr(object):
                     )  # violin plot of gNRA counts per cell
         except Exception as err:
             warnings.warn(f"{err}\n\n\nCould not describe sgRNA count.")
-        return desc, figs
+        # try:
+        print(f"\n\n{'=' * 80}\nCELL COUNTS\n{'=' * 80}\n")
+        print(f"\t\t\tTotal Cells: {self.adata.shape[0]}")
+        desc["n_cells"], figs["n_cells"] = {}, {}
+        desc["n_cells"]["all"] = self.adata.shape[0]
+        for g in gbp:
+            if g in self.adata.obs:
+                print(f"\t\t\n***** By {g} *****\n")
+                desc["n_cells"][g] = self.adata.obs.groupby(g).apply(
+                    lambda x: x.shape[0])
+                print("\t\t\t\n", dict(desc["n_cells"][g].T))
+                if plot is True:
+                    figs["n_cells"][g] = sns.catplot(
+                        data=desc["n_cells"][g].to_frame("N").reset_index(), 
+                        y="N", kind="bar", x=g, hue=g)  # bar plot of cell #s
+        # except Exception as err:
+        #     warnings.warn(f"{err}\n\n\nCould not describe cell counts.")
+        self._info["descriptives"].update(desc)
+        return figs
+    
+    def preprocess(self, assay=None, assay_protein=None,
+                   clustering=False, run_label="main", 
+                   remove_doublets=True, **kwargs):
+        """Preprocess data."""
+        if assay_protein is None:
+            assay_protein = self._assay_protein
+        if assay is None:
+            assay = self._assay
+        _, figs = cr.pp.process_data(
+            self.adata, assay=assay, assay_protein=assay_protein, 
+            remove_doublets=remove_doublets, **self._columns,
+            **kwargs)  # preprocess
+        if run_label not in self.figures:
+            self.figures[run_label] = {}
+        self.figures[run_label]["preprocessing"] = figs
+        if clustering not in [None, False]:
+            if clustering is True:
+                clustering = {}
+            if isinstance(clustering, dict):
+                figs_cl = self.cluster(**clustering)  # clustering
+                figs = figs + [figs_cl]
+            else:
+                raise TypeError(
+                    "`clustering` must be dict (keyword arguments) or bool.")
+        return figs
+                
+    def cluster(self, assay=None, method_cluster="leiden", 
+                plot=True, colors=None, paga=False, 
+                kws_pca=None, kws_neighbors=None, 
+                kws_umap=None, kws_cluster=None, 
+                run_label="main", test=False, **kwargs):
+        """Perform dimensionality reduction and create UMAP."""
+        if assay is None:
+            assay = self._assay
+        figs_cl = cr.ax.cluster(
+            self.adata.copy() if test is True else self.adata, 
+            assay=assay, method_cluster=method_cluster,
+            **self._columns, **self._keys,
+            plot=plot, colors=colors, paga=paga, 
+            kws_pca=kws_pca, kws_neighbors=kws_neighbors,
+            kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
+        if test is False:
+            if run_label not in self.figures:
+                self.figures[run_label] = {}
+            self.figures[run_label].update({"clustering": figs_cl})
+        return figs_cl
+    
+    def find_markers(self, assay=None, n_genes=5, layer="scaled", 
+                     method="wilcoxon", key_reference="rest", 
+                     plot=True, **kwargs):
+        if assay is None:
+            assay = self._assay
+        marks, figs_m = cr.ax.find_markers(
+            self.adata, assay=assay, method=method, n_genes=n_genes, 
+            layer=layer, key_reference=key_reference, plot=plot,
+            col_cell_type=self._columns["col_cell_type"], **kwargs)
+        print(marks)
+        return marks, figs_m
+        
+    def run_mixscape(self, assay=None, target_gene_idents=True, 
+                     col_split_by=None, min_de_genes=5,
+                     run_label="main",
+                     test=False, plot=True, **kwargs):
+        """Run Mixscape.""" 
+        if assay is None:
+            assay = self._assay
+        figs_mix = cr.ax.perform_mixscape(
+            self.adata.copy() if test is True else self.adata, assay=assay,
+            **self._columns, **self._keys,
+            layer_perturbation=self._layer_perturbation, 
+            target_gene_idents=target_gene_idents,
+            min_de_genes=min_de_genes, col_split_by=col_split_by, 
+            plot=plot, **kwargs)
+        if test is False:
+            if run_label not in self.figures:
+                self.figures[run_label] = {}
+            self.figures[run_label].update({"mixscape": figs_mix})
+        return figs_mix
+    
+    def run_augur(self, assay=None, 
+                  col_perturbation=None, key_treatment=None,
+                  augur_mode="default", classifier="random_forest_classifier", 
+                  kws_augur_predict=None, n_folds=3,
+                  subsample_size=20, n_threads=True, 
+                  select_variance_features=False, 
+                  seed=1618, plot=True, run_label="main", test=False,
+                  **kwargs):
+        """Run Augur."""
+        if key_treatment is None:
+            key_treatment = self._keys["key_treatment"]
+        if col_perturbation is None:
+            col_perturbation = self._columns["col_perturbation"]
+        if n_threads is True:
+            n_threads = os.cpu_count() - 1 # use available CPUs - 1
+        if assay is None:
+            assay = self._assay
+        if kws_augur_predict is None:
+            kws_augur_predict = {}
+        # if run_label != "main":
+        #     kws_augur_predict.update(
+        #         {"key_added": f"augurpy_results_{run_label}"}
+        #         )  # run label incorporated in key in adata
+        data, results, figs_aug = cr.ax.perform_augur(
+            self.adata.copy() if test is True else self.adata, 
+            assay=assay, classifier=classifier, 
+            augur_mode=augur_mode, subsample_size=subsample_size,
+            select_variance_features=select_variance_features, 
+            n_folds=n_folds,
+            **{**self._columns, "col_perturbation": col_perturbation},  
+            kws_augur_predict=kws_augur_predict,
+            key_control=self._keys["key_control"], key_treatment=key_treatment,
+            layer=self._layer_perturbation,
+            seed=seed, n_threads=n_threads, plot=plot, **kwargs)
+        if test is False:
+            if run_label not in self.results:
+                self.results[run_label] = {}
+            self.results[run_label].update(
+                {"Augur": {"results": results, "data": data}})
+            if run_label not in self.figures:
+                self.figures[run_label] = {}
+            self.figures[run_label].update({"Augur": figs_aug})
+        return data, results, figs_aug
+    
+    def compute_distance(self, distance_type="edistance", method="X_pca", 
+                         kws_plot=None, highlight_real_range=False,
+                         run_label="main", plot=True):
+        """Compute and visualize distance metrics."""
+        output = cr.ax.compute_distance(
+            self.adata, **self._columns, **self._keys,
+            distance_type=distance_type, method=method,
+            kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
+            plot=plot)
+        if plot is True:
+            if run_label not in self.figures:
+                self.figures[run_label] = {}
+            self.figures[run_label]["distances"] = {}
+            self.figures[run_label]["distances"].update(
+                {f"{distance_type}_{method}": output[-1]})
+            if run_label not in self.results:
+                self.results[run_label] = {}
+            self.results[run_label]["distances"] = {}
+            self.results[run_label]["distances"].update(
+                {f"{distance_type}_{method}": output})
+        return output
+    
+    def run_gsea(self, key_condition=None, 
+                 filter_by_highly_variable=False, 
+                 run_label="main", **kwargs):
+        """Perform gene set enrichment analyses & plotting."""
+        output = cr.ax.perform_gsea(
+            self.adata, filter_by_highly_variable=filter_by_highly_variable, 
+            **{**self._keys, "key_condition": self._keys[
+                "key_condition"] if key_condition is None else key_condition
+               }, **self._columns, **kwargs)  # GSEA
+        if run_label not in self.results:
+            self.results[run_label] = {}
+        self.results[run_label]["gsea"] = output
+        return output
+          
+    def run_composition_analysis(self, reference_cell_type, 
+                                 assay=None, analysis_type="cell_level", 
+                                 col_perturbation=None,
+                                 est_fdr=0.05, generate_sample_level=False,
+                                 plot=True, run_label="main", **kwargs):
+        """Perform gene set enrichment analyses & plotting."""
+        if col_perturbation is None:
+            col_perturbation = self._columns["col_perturbation"]
+        output = cr.ax.analyze_composition(
+            self.adata, reference_cell_type,
+            assay=assay if assay else self._assay, analysis_type=analysis_type,
+            generate_sample_level=generate_sample_level, 
+            col_cell_type=self._columns["col_cell_type"],
+            col_perturbation=col_perturbation, est_fdr=est_fdr, plot=plot, 
+            **self._columns, **self._keys, **kwargs)
+        if run_label not in self.results:
+            self.results[run_label] = {}
+        self.results[run_label]["composition"] = output
+        return output
+    
+    def run_dialogue(self, n_programs=3, col_cell_type=None,
+                     cmap="coolwarm", vcenter=0, 
+                     run_label="main", **kws_plot):
+        """Analyze multicellular programs."""
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        d_l = pt.tl.Dialogue(
+            sample_id=self._columns["col_perturbation"], n_mpcs=n_programs,
+            celltype_key=col_cell_type, 
+            n_counts_key=self._columns["col_num_umis"])
+        pdata, mcps, ws, ct_subs = d_l.calculate_multifactor_PMD(
+            self.adata.copy(), normalize=True)
+        mcp_cols = list(set(pdata.obs.columns).difference(
+            self.adata.obs.columns))
+        cols = cr.pl.square_grid(len(mcp_cols) + 2)[1]
+        fig = sc.pl.umap(
+            pdata, color=mcp_cols + [
+                self._columns["col_perturbation"], col_cell_type],
+            ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
+        self.results[run_label]["dialogue"] = pdata, mcps, ws, ct_subs
+        self.figures[run_label]["dialogue"] = fig
+        return fig
             
     def plot(self, genes=None, genes_highlight=None,
              cell_types_circle=None,
@@ -457,208 +681,6 @@ class Crispr(object):
         else:
             print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`. >>>")
         return figs
-    
-    def preprocess(self, assay=None, assay_protein=None,
-                   clustering=False, run_label="main", 
-                   remove_doublets=True, **kwargs):
-        """Preprocess data."""
-        if assay_protein is None:
-            assay_protein = self._assay_protein
-        if assay is None:
-            assay = self._assay
-        _, figs = cr.pp.process_data(
-            self.adata, assay=assay, assay_protein=assay_protein, 
-            remove_doublets=remove_doublets, **self._columns,
-            **kwargs)  # preprocess
-        if run_label not in self.figures:
-            self.figures[run_label] = {}
-        self.figures[run_label]["preprocessing"] = figs
-        if clustering not in [None, False]:
-            if clustering is True:
-                clustering = {}
-            if isinstance(clustering, dict):
-                figs_cl = self.cluster(**clustering)  # clustering
-                figs = figs + [figs_cl]
-            else:
-                raise TypeError(
-                    "`clustering` must be dict (keyword arguments) or bool.")
-        return figs
-                
-    def cluster(self, assay=None, method_cluster="leiden", 
-                plot=True, colors=None, paga=False, 
-                kws_pca=None, kws_neighbors=None, 
-                kws_umap=None, kws_cluster=None, 
-                run_label="main", test=False, **kwargs):
-        """Perform dimensionality reduction and create UMAP."""
-        if assay is None:
-            assay = self._assay
-        figs_cl = cr.ax.cluster(
-            self.adata.copy() if test is True else self.adata, 
-            assay=assay, method_cluster=method_cluster,
-            **self._columns, **self._keys,
-            plot=plot, colors=colors, paga=paga, 
-            kws_pca=kws_pca, kws_neighbors=kws_neighbors,
-            kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
-        if test is False:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label].update({"clustering": figs_cl})
-        return figs_cl
-    
-    def find_markers(self, assay=None, n_genes=5, layer="scaled", 
-                     method="wilcoxon", key_reference="rest", 
-                     plot=True, **kwargs):
-        if assay is None:
-            assay = self._assay
-        marks, figs_m = cr.ax.find_markers(
-            self.adata, assay=assay, method=method, n_genes=n_genes, 
-            layer=layer, key_reference=key_reference, plot=plot,
-            col_cell_type=self._columns["col_cell_type"], **kwargs)
-        print(marks)
-        return marks, figs_m
-        
-    def run_mixscape(self, assay=None, target_gene_idents=True, 
-                     col_split_by=None, min_de_genes=5,
-                     run_label="main",
-                     test=False, plot=True, **kwargs):
-        """Run Mixscape.""" 
-        if assay is None:
-            assay = self._assay
-        figs_mix = cr.ax.perform_mixscape(
-            self.adata.copy() if test is True else self.adata, assay=assay,
-            **self._columns, **self._keys,
-            layer_perturbation=self._layer_perturbation, 
-            target_gene_idents=target_gene_idents,
-            min_de_genes=min_de_genes, col_split_by=col_split_by, 
-            plot=plot, **kwargs)
-        if test is False:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label].update({"mixscape": figs_mix})
-        return figs_mix
-    
-    def run_augur(self, assay=None, 
-                  col_perturbation=None, key_treatment=None,
-                  augur_mode="default", classifier="random_forest_classifier", 
-                  kws_augur_predict=None, n_folds=3,
-                  subsample_size=20, n_threads=True, 
-                  select_variance_features=False, 
-                  seed=1618, plot=True, run_label="main", test=False,
-                  **kwargs):
-        """Run Augur."""
-        if key_treatment is None:
-            key_treatment = self._keys["key_treatment"]
-        if col_perturbation is None:
-            col_perturbation = self._columns["col_perturbation"]
-        if n_threads is True:
-            n_threads = os.cpu_count() - 1 # use available CPUs - 1
-        if assay is None:
-            assay = self._assay
-        if kws_augur_predict is None:
-            kws_augur_predict = {}
-        # if run_label != "main":
-        #     kws_augur_predict.update(
-        #         {"key_added": f"augurpy_results_{run_label}"}
-        #         )  # run label incorporated in key in adata
-        data, results, figs_aug = cr.ax.perform_augur(
-            self.adata.copy() if test is True else self.adata, 
-            assay=assay, classifier=classifier, 
-            augur_mode=augur_mode, subsample_size=subsample_size,
-            select_variance_features=select_variance_features, 
-            n_folds=n_folds,
-            **{**self._columns, "col_perturbation": col_perturbation},  
-            kws_augur_predict=kws_augur_predict,
-            key_control=self._keys["key_control"], key_treatment=key_treatment,
-            layer=self._layer_perturbation,
-            seed=seed, n_threads=n_threads, plot=plot, **kwargs)
-        if test is False:
-            if run_label not in self.results:
-                self.results[run_label] = {}
-            self.results[run_label].update(
-                {"Augur": {"results": results, "data": data}})
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label].update({"Augur": figs_aug})
-        return data, results, figs_aug
-    
-    def compute_distance(self, distance_type="edistance", method="X_pca", 
-                         kws_plot=None, highlight_real_range=False,
-                         run_label="main", plot=True):
-        """Compute and visualize distance metrics."""
-        output = cr.ax.compute_distance(
-            self.adata, **self._columns, **self._keys,
-            distance_type=distance_type, method=method,
-            kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
-            plot=plot)
-        if plot is True:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label]["distances"] = {}
-            self.figures[run_label]["distances"].update(
-                {f"{distance_type}_{method}": output[-1]})
-            if run_label not in self.results:
-                self.results[run_label] = {}
-            self.results[run_label]["distances"] = {}
-            self.results[run_label]["distances"].update(
-                {f"{distance_type}_{method}": output})
-        return output
-    
-    def run_gsea(self, key_condition=None, 
-                 filter_by_highly_variable=False, 
-                 run_label="main", **kwargs):
-        """Perform gene set enrichment analyses & plotting."""
-        output = cr.ax.perform_gsea(
-            self.adata, filter_by_highly_variable=filter_by_highly_variable, 
-            **{**self._keys, "key_condition": self._keys[
-                "key_condition"] if key_condition is None else key_condition
-               }, **self._columns, **kwargs)  # GSEA
-        if run_label not in self.results:
-            self.results[run_label] = {}
-        self.results[run_label]["gsea"] = output
-        return output
-          
-    def run_composition_analysis(self, reference_cell_type, 
-                                 assay=None, analysis_type="cell_level", 
-                                 col_perturbation=None,
-                                 est_fdr=0.05, generate_sample_level=False,
-                                 plot=True, run_label="main", **kwargs):
-        """Perform gene set enrichment analyses & plotting."""
-        if col_perturbation is None:
-            col_perturbation = self._columns["col_perturbation"]
-        output = cr.ax.analyze_composition(
-            self.adata, reference_cell_type,
-            assay=assay if assay else self._assay, analysis_type=analysis_type,
-            generate_sample_level=generate_sample_level, 
-            col_cell_type=self._columns["col_cell_type"],
-            col_perturbation=col_perturbation, est_fdr=est_fdr, plot=plot, 
-            **self._columns, **self._keys, **kwargs)
-        if run_label not in self.results:
-            self.results[run_label] = {}
-        self.results[run_label]["composition"] = output
-        return output
-    
-    def run_dialogue(self, n_programs=3, col_cell_type=None,
-                     cmap="coolwarm", vcenter=0, 
-                     run_label="main", **kws_plot):
-        """Analyze multicellular programs."""
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
-        d_l = pt.tl.Dialogue(
-            sample_id=self._columns["col_perturbation"], n_mpcs=n_programs,
-            celltype_key=col_cell_type, 
-            n_counts_key=self._columns["col_num_umis"])
-        pdata, mcps, ws, ct_subs = d_l.calculate_multifactor_PMD(
-            self.adata.copy(), normalize=True)
-        mcp_cols = list(set(pdata.obs.columns).difference(
-            self.adata.obs.columns))
-        cols = cr.pl.square_grid(len(mcp_cols) + 2)[1]
-        fig = sc.pl.umap(
-            pdata, color=mcp_cols + [
-                self._columns["col_perturbation"], col_cell_type],
-            ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
-        self.results[run_label]["dialogue"] = pdata, mcps, ws, ct_subs
-        self.figures[run_label]["dialogue"] = fig
-        return fig
         
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""
