@@ -16,8 +16,7 @@ import pertpy as pt
 import pandas as pd
 import numpy as np
 import crispr as cr
-from crispr.defaults import (names_layers, kws_process_guide_rna_default, 
-                             col_multi_transfection)
+from crispr.defaults import (names_layers)
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -35,7 +34,7 @@ class Crispr(object):
                  col_sample_id="standard_sample_id", 
                  col_batch=None,
                  col_perturbation="perturbation",
-                 col_target_genes="target_genes",
+                 col_target_genes=None,
                  col_guide_rna="guide_ids",
                  col_num_umis="num_umis",
                  key_control="NT", 
@@ -45,56 +44,96 @@ class Crispr(object):
                  remove_multi_transfected=True,
                  **kwargs):
         """CRISPR class initialization."""
+        print("\n\n<<<INITIALIZING CRISPR CLASS OBJECT>>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
         self._layer_perturbation = layer_perturbation
-        self._columns = dict(col_gene_symbols=col_gene_symbols,
-                             col_cell_type=col_cell_type, 
-                             col_sample_id=col_sample_id, 
-                             col_batch=col_batch,
-                             col_perturbation=col_perturbation,
-                             col_guide_rna=col_guide_rna,
-                             col_num_umis=col_num_umis,
-                             col_target_genes=col_target_genes)
-        self._keys = dict(key_control=key_control, key_treatment=key_treatment,
-                          key_nonperturbed=key_nonperturbed)
         self._file_path = file_path
+        if kwargs:
+            print(f"\nUnused keyword arguments: {kwargs}.\n")
+        
+        # Create Object & Attributes to Store Results/Figures
         self.adata = cr.pp.create_object(
-            self._file_path, assay=None, col_gene_symbols=self._columns[
-                "col_gene_symbols"])
+            self._file_path, assay=None, col_gene_symbols=col_gene_symbols)
         self.figures = {"main": {}}
         self.results = {"main": {}}
         self._info = {"descriptives": {}, 
                       "guide_rna": {}}  # extra info to store by methods
         print(self.adata.obs, "\n\n") if assay else None
-        print(f"\n\n{self._columns}\n\n{self._keys}\n\n")
         print("\n\n", self.adata[assay].obs if assay else self.adata)
+        
+        # Process Guide RNAs (optional)
+        self._info["guide_rna"]["keywords"] = kws_process_guide_rna
         if kws_process_guide_rna is not None:
             print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
             tg_info = cr.pp.filter_by_guide_counts(
                 self.adata[assay] if assay else self.adata, 
                 col_guide_rna, col_num_umis=col_num_umis,
-                key_control=key_control, **kws_process_guide_rna)
+                key_control=key_control, **kws_process_guide_rna
+                )  # process (e.g., multi-probe names) & filter by sgRNA counts
+            for q in [col_guide_rna, 
+                      col_num_umis]:  # replace w/ processed entries
+                tg_info.loc[:, q] = tg_info[q + "_filtered"]
             if remove_multi_transfected is True:
                 self._info["guide_rna"]["counts_raw"] = tg_info.copy()
                 tg_info = tg_info.loc[tg_info[
-                    f"{col_guide_rna}_list_count_filtered"].apply(
+                    f"{col_guide_rna}_list_filtered"].apply(
                         lambda x: np.nan if len(x) > 1 else x).dropna().index]
             self._info["guide_rna"]["counts"] = tg_info.copy()
-            self._info["guide_rna"]["keywords"] = kws_process_guide_rna
             if assay:
                 self.adata[assay].obs = self.adata[assay].obs.join(
                     tg_info, lsuffix="_original")
+                self.adata[assay].obs.loc[:,  col_target_genes] = self.adata[
+                    assay].obs[col_guide_rna]  
+                # ^ col_target_genes=processed col_guide_rna 
                 if remove_multi_transfected is True:
                     self.adata[assay] = self.adata[assay][
                         ~self.adata[assay].obs[col_guide_rna].isnull()]
             else:
-                if remove_multi_transfected is True:
-                    self.adata.obs = self.adata.obs.join(
-                        tg_info, lsuffix="_original")
+                self.adata.obs = self.adata.obs.join(
+                    tg_info, lsuffix="_original")
                 if remove_multi_transfected is True:
                     self.adata = self.adata[
                         ~self.adata.obs[col_guide_rna].isnull()]
+                self.adata.obs.loc[:,  col_target_genes] = self.adata.obs[
+                    col_guide_rna]  # col_target_genes=processed col_guide_rna 
+                if remove_multi_transfected is True:
+                    # drop cells w/ multiple guides that survived filtering
+                    self.adata = self.adata[
+                        ~self.adata.obs[col_guide_rna].isnull()]
+                    
+            # Perturbed vs. Untreated Column
+            if col_perturbation not in self.adata.obs:
+                print("\n\n<<<CREATING PERTURBED/CONTROL COLUMN>>>\n")
+                if assay:
+                    self.adata[assay].obs.loc[
+                        :, col_perturbation] = self.adata[assay].obs[
+                            col_target_genes].apply(
+                                lambda x: key_control if pd.isnull(x) or (
+                                    x == key_control) else key_treatment)
+                else:
+                    self.adata.obs.loc[:, col_perturbation] = self.adata.obs[
+                        col_target_genes].apply(
+                            lambda x: key_control if pd.isnull(x) or (
+                                x == key_control) else key_treatment)
+        
+            # Store Columns & Keys within Columns as Dictionary Attributes
+            if col_target_genes is None:  # if unspecified...
+                col_target_genes = col_guide_rna  # ...= guide ID (maybe processed)
+            self._columns = dict(col_gene_symbols=col_gene_symbols,
+                                 col_cell_type=col_cell_type, 
+                                 col_sample_id=col_sample_id, 
+                                 col_batch=col_batch,
+                                 col_perturbation=col_perturbation,
+                                 col_guide_rna=col_guide_rna,
+                                 col_num_umis=col_num_umis,
+                                 col_target_genes=col_target_genes)
+            self._keys = dict(key_control=key_control, 
+                              key_treatment=key_treatment,
+                              key_nonperturbed=key_nonperturbed)
+            print("\n".join([f"{x} = '{self._columns[x]}'" 
+                             for x in self._columns]))
+            print("\n".join([f"{x} = '{self._keys[x]}'" for x in self._keys]))
             print("\n\n", self.adata[assay].obs if assay else self.adata)
         
             # Correct 10x CellRanger Guide Count Incorporation

@@ -372,7 +372,7 @@ def detect_guide_targets(adata, col_guide_rna="guide_ID",
                          feature_split="|", guide_split="-",
                          key_control_patterns=None,
                          key_control="Control", **kwargs):
-    """Detect guide RNA gene targets."""
+    """Detect guide gene targets (see `filter_by_guide_counts` docstring)."""
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     if key_control_patterns is None:
@@ -415,6 +415,7 @@ def find_guide_info(adata, col_guide_rna, col_num_umis=None,
                     feature_split="|", guide_split="-",
                     key_control_patterns=None,
                     key_control="Control", **kwargs):
+    """Process guide names/counts (see `filter_by_guide_counts` docstring).""" 
     if isinstance(key_control_patterns, str):
         key_control_patterns = [key_control_patterns]
     targets, grnas = detect_guide_targets(
@@ -437,15 +438,65 @@ def find_guide_info(adata, col_guide_rna, col_num_umis=None,
     return tg_info
 
 
-def filter_by_guide_counts(adata, col_guide_rna, col_num_umis=None, 
+def filter_by_guide_counts(adata, col_guide_rna, col_num_umis, 
                            max_percent_umis_control_drop=75,
                            min_percent_umis=40,
                            feature_split="|", guide_split="-",
                            key_control_patterns=None,
                            key_control="Control", **kwargs):
+    """
+    Process sgRNA names (e.g., multi-probe names).
+
+    Args:
+        adata (AnnData): AnnData object (RNA assay, so if multi-modal, subset).
+        col_guide_rna (str): _description_
+        col_num_umis (str): Column with the UMI counts.
+        max_percent_umis_control_drop (int, optional): If control UMI counts 
+            are less than or equal to this percentage of the total counts for 
+            that cell, and if a non-control sgRNA is also present and 
+            meets other filtering criteria, then consider that cell 
+            pseudo-single-transfected (non-control gene). Defaults to 75.
+        min_percent_umis (int, optional): sgRNAs with counts below this 
+            percentage will be considered noise for that guide. Defaults to 40.
+        feature_split (str, optional): For designs with multiple guides,
+            the character that splits guide names in `col_guide_rna`. 
+            For instance, "|" for `STAT1-1|CNTRL-1|CDKN1A`. Defaults to "|".
+        guide_split (str, optional): The character that separates 
+            guide (rather than gene target)-specific IDs within gene. 
+            For instance, guides targeting STAT1 may include 
+            STAT1-1, STAT1-2, etc.; the argument would be "-" so the function  
+            can identify all of those as targeting STAT1. Defaults to "-".
+        key_control_patterns (list, optional): List (or single string) 
+            of patterns in guide RNA column entries that correspond to a 
+            control. For instance, if control entries in `` include `NEGCNTRL`, 
+            `CNTRL.D`, you may specify 'CNTRL' or ['NEG', 'CNTRL'] 
+            (assuming no non-control sgRNA names contain those patterns). 
+            Defaults to None, but you almost certainly shouldn't leave this 
+            blank if you're using this function.
+        key_control (str, optional): The name you want the control 
+            entries to be categorized as under the new `col_guide_rna`. 
+            for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be replaced by 
+            "Control" if that's what you specify here. Defaults to "Control".
+
+    Returns:
+        pandas.DataFrame: A dataframe (a) with sgRNA names replaced under 
+            their target gene categories (or control) and
+            (b) with `col_guide_rna` and `col_num_umis` column entries
+            (strings) grouped into lists (new columns with suffix "list_all"). 
+            Note that the UMI counts are summed across sgRNAs 
+            targeting the same gene within a cell. Also versions of the columns
+            (and the corresponding string versions) filtered by the specified  
+            criteria (with suffixes "_filtered" and "_list_filtered" 
+            for list versions).
+            
+    Notes:
+        FUTURE DEVELOPERS: The Crispr class object initialization depends on
+        names of the columns created in this function. If they are changed
+        (which should be avoided), be sure to change throughout the package.
+    """
     # Extract Guide RNA Information
     tg_info = find_guide_info(
-        adata, col_guide_rna, col_num_umis=col_num_umis, 
+        adata.copy(), col_guide_rna, col_num_umis=col_num_umis, 
         feature_split=feature_split, guide_split=guide_split, 
         key_control_patterns=key_control_patterns, 
         key_control=key_control, **kwargs)
@@ -458,19 +509,21 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis=None,
                 x[cols[0]])]))), axis=1).stack().rename_axis(["bc", "g"])
 
     # Actual Filtering
-    feats_n = feats_n.to_frame("n").join(feats_n.groupby("bc").sum().to_frame("t"))
-    feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)
+    feats_n = feats_n.to_frame("n").join(feats_n.groupby(
+        "bc").sum().to_frame("t"))  # sum w/i-cell # gRNAs w/ same target gene 
+    feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
     filt = feats_n.groupby(["bc", "g"]).apply(
         lambda x: np.nan if x.name[1] == key_control and float(
             x["p"]) <= max_percent_umis_control_drop else np.nan if float(
-                x["p"]) < min_percent_umis else x.stack())
+                x["p"]) < min_percent_umis else x.stack())  # filter
     filt = pd.concat(list(filt.dropna())).unstack(2)
     filt = filt.n.to_frame("u").groupby("bc").apply(
         lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
                             cols[1]: list(x.reset_index("g")["u"])}))
-    tg_info = tg_info.join(filt, lsuffix="_all", rsuffix="_count_filtered")
+    tg_info = tg_info.join(filt, lsuffix="_all", rsuffix="_filtered")  # join
     tg_info = tg_info.dropna().loc[adata.obs.index.intersection(
         tg_info.dropna().index)]  # re-order according to adata index
+    
     # # Determine Exclusion Criteria Met per gRNA
     # tg_info = tg_info.join(feats_n.to_frame("u").groupby("bc").apply(
     #     lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
@@ -491,7 +544,10 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis=None,
     #     )  # control guides w/i tolerable % => drop control guide
     # tg_info.loc[:, ecol] = tg_info[ecol].apply(lambda x: [
     #     np.nan if i == "" else i for i in x])
-    for q in [col_guide_rna, col_num_umis]:
-        tg_info.loc[:, q] = tg_info[q + "_list_count_filtered"].apply(
-            lambda x: feature_split.join(str(i) for i in x))
+    
+    # Re-Make String Versions of New Columns with List Entries
+    for q in [col_guide_rna, col_num_umis]:  # string versions of list entries 
+        tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply(
+            lambda x: feature_split.join(str(i) for i in x)
+            )  # join names of processed/filtered gRNAs by `feature_split`
     return tg_info

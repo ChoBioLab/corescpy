@@ -83,9 +83,9 @@ col_split_by_data = {
 }
 
 col_perturbation_data = {
-    "CRISPRi_scr": "name",
+    "CRISPRi_scr": "perturbation",
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "guide_ids",
+    "CRISPRi_ess": "perturbation",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
