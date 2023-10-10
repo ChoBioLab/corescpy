@@ -278,7 +278,7 @@ class Crispr(object):
                 # axes_gex[j].set_title("Raw" if i is None else i.capitalize())
                 figs[lab] = plt.gcf(), figs[lab]
                 figs[lab][0].suptitle(title if title else hm_title)
-                figs[lab][0].supxlabel("Gene")
+                # figs[lab][0].supxlabel("Gene")
                 figs[lab][0].show()
             except Exception as err:
                 warnings.warn(
