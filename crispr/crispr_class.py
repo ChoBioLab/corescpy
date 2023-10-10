@@ -192,7 +192,9 @@ class Crispr(object):
             warnings.warn(f"{err}\n\n\nCould not describe sgRNA count.")
         return desc, figs
             
-    def plot(self, genes=None, assay="default", 
+    def plot(self, genes=None, genes_highlight=None,
+             cell_types_circle=None,
+             assay="default", 
              title=None,  # NOTE: will apply to multiple plots
              layers="all",
              marker_genes_dict=None,
@@ -200,8 +202,18 @@ class Crispr(object):
              kws_gex_violin=None, kws_gex_matrix=None, 
              run_label="main"):
         
-        # Setup 
+        # Setup  Arguments & Empty Output
         figs = {}
+        if kws_clustering is None:
+            kws_clustering = {"frameon": False, "legend_loc": "on_data"}
+        if "legend_loc" not in kws_clustering:
+            kws_clustering.update({"legend_loc": "on_data"})
+        if "vcenter" not in kws_clustering:
+            kws_clustering.update({"vcenter": 0})
+        if "col_cell_type" in kws_clustering:  # if provide cell column
+            lab_cluster = kws_clustering.pop("col_cell_type")
+        else: 
+            lab_cluster = self._columns["col_cell_type"] 
         if not isinstance(genes, (list, np.ndarray)) and (
             genes is None or genes == "all"):
             names = self.adata.var.reset_index()[
@@ -210,6 +222,12 @@ class Crispr(object):
                 genes = names.copy()
         else:
             names = genes.copy()
+        if genes_highlight and not isinstance(genes_highlight, list):
+            genes_highlight = [genes_highlight] if isinstance(
+                genes_highlight, str) else list(genes_highlight)
+        if cell_types_circle and not isinstance(cell_types_circle, list):
+            cell_types_circle = [cell_types_circle] if isinstance(
+                cell_types_circle, str) else list(cell_types_circle)
         genes, names = list(pd.unique(genes)), list(pd.unique(names))
         if assay == "default":
             assay = self._assay
@@ -250,12 +268,12 @@ class Crispr(object):
             try:
                 # sc.pl.heatmap(
                 #     self.adata[assay] if assay else self.adata, names,
-                #     self._columns["col_cell_type"], layer=i,
+                #     lab_cluster, layer=i,
                 #     ax=axes_gex[j], gene_symbols=gene_symbols, 
                 #     show=False)  # GEX heatmap
                 figs[lab] = sc.pl.heatmap(
                     self.adata[assay] if assay else self.adata, names,
-                    self._columns["col_cell_type"], layer=i,
+                    lab_cluster, layer=i,
                     gene_symbols=gene_symbols, show=False)  # GEX heatmap
                 # axes_gex[j].set_title("Raw" if i is None else i.capitalize())
                 figs[lab] = plt.gcf(), figs[lab]
@@ -306,6 +324,17 @@ class Crispr(object):
             except Exception as err:
                 warnings.warn(f"{err}\n\nCould not plot GEX violins.")
                 figs["gene_expression_violin"] = err
+                
+                
+        # Gene Expression Dot Plot
+        figs["gene_expression_dot"] = sc.pl.dotplot(
+            self.adata[assay] if assay else self.adata, genes, lab_cluster, show=False)
+        if genes_highlight is not None:
+            for x in figs["gene_expression_dot"][
+                "mainplot_ax"].get_xticklabels():
+                # x.set_style("italic")
+                if x.get_text() in genes_highlight:
+                    x.set_color('#A97F03')
         
         # Gene Expression Matrix Plots
         if kws_gex_matrix is None:
@@ -315,12 +344,12 @@ class Crispr(object):
         if "cmap" not in kws_gex_matrix:
             kws_gex_matrix.update({"cmap": COLOR_MAP})
         if "groupby" in kws_gex_matrix or "col_cell_type" in kws_gex_matrix:
-            lab_cluster = kws_gex_matrix.pop(
+            lab_cluster_mat = kws_gex_matrix.pop(
                 "groupby" if "groupby" in kws_gex_matrix else "col_cell_type")
         else:
-            lab_cluster = self._columns["col_cell_type"]
-        if lab_cluster not in cols_obs:
-            lab_cluster = None   # None if cluster label N/A in `.obs`
+            lab_cluster_mat = self._columns["col_cell_type"]
+        if lab_cluster_mat not in cols_obs:
+            lab_cluster_mat = None   # None if cluster label N/A in `.obs`
         for i in zip(["dendrogram", "swap_axes", "cmap"], 
                      [True, False, COLOR_MAP]):
             if i[0] not in kws_gex_matrix:  # add default arguments
@@ -341,25 +370,19 @@ class Crispr(object):
                     bar_title = "Expression"
                 figs[lab] = sc.pl.matrixplot(
                     self.adata[assay] if assay else self.adata, genes,
-                    layer=i, return_fig=True, groupby=lab_cluster,
+                    layer=i, return_fig=True, groupby=lab_cluster_mat,
                     title=title_gexm, gene_symbols=gene_symbols,
                     **{"colorbar_title": bar_title, **kws_gex_matrix
                        },  # colorbar title overriden if already in kws_gex
                     show=False)  # violin plot of GEX
                 # figs[lab].fig.supxlabel("Gene")
-                # figs[lab].fig.supylabel(lab_cluster)
+                # figs[lab].fig.supylabel(lab_cluster_mat)
                 figs[lab].show()
         except Exception as err:
             warnings.warn(f"{err}\n\nCould not plot GEX matrix plot.")
             figs["gene_expression_matrix"] = err
         
         # UMAP
-        if kws_clustering is None:
-            kws_clustering = {"frameon": False, "legend_loc": "on_data"}
-        if "legend_loc" not in kws_clustering:
-            kws_clustering.update({"legend_loc": "on_data"})
-        if "vcenter" not in kws_clustering:
-            kws_clustering.update({"vcenter": 0})
         title_umap = str(title if title else kws_clustering[
             "title"] if "title" in kws_clustering else "UMAP")
         color = kws_clustering.pop(
@@ -370,12 +393,9 @@ class Crispr(object):
             kws_clustering.update({"palette": COLOR_PALETTE})
         if "color_map" not in kws_clustering:
             kws_clustering.update({"color_map": COLOR_MAP})
-        if "X_umap" in self.adata.obsm:
+        if "X_umap" in self.adata.obsm or lab_cluster in (
+            self.adata[assay].obs if assay else self.adata.obs).columns:
             print("\n<<< PLOTTING UMAP >>>")
-            if "col_cell_type" in kws_clustering:  # if provide cell column
-                lab_cluster = kws_clustering.pop("col_cell_type")
-            else: 
-                lab_cluster = self._columns["col_cell_type"] 
             try:
                 figs["clustering"] = sc.pl.umap(
                     self.adata[assay] if assay else self.adata, 
@@ -406,10 +426,37 @@ class Crispr(object):
                 except Exception as err:
                     warnings.warn(f"{err}\n\nCould not plot UMAP ~ {color}.")
                     figs[f"clustering_{color}"] = err
+            if cell_types_circle and "X_umap" in (
+                self.adata[assay] if assay else self.adata
+                ).obsm:  # UMAP(s) with circled cell type(s)?
+                fump, axu = plt.subplots(figsize=(3, 3))
+                sc.pl.umap(self.adata[assay] if assay else self.adata, 
+                           color=[lab_cluster], ax=axu, show=False)  # UMAP
+                for h in cell_types_circle:
+                    if assay:
+                        location_cells = self.adata[assay][self.adata[
+                            assay].obs[lab_cluster] == h, :].obsm['X_umap']
+                    else:
+                        location_cells = self.adata[
+                            self.adata.obs[lab_cluster] == h, :].obsm['X_umap']
+                    coordinates = [location_cells[:, i].mean() for i in [0, 1]]
+                    circle = plt.Circle(tuple(coordinates), 1.5, color="r", 
+                                        clip_on=False, fill=False)  # circle
+                    axu.add_patch(circle)
+                # l_1 = axu.get_legend()  # save original Legend
+                # l_1.set_title(lab_cluster)
+                # # Make a new Legend for the mark
+                # l_2 = axu.legend(handles=[Line2D(
+                #     [0],[0],marker="o", color="k", markerfacecolor="none", 
+                #     markersize=12, markeredgecolor="r", lw=0, 
+                #     label="selected")], frameon=False, 
+                #                 bbox_to_anchor=(3,1), title='Annotation')
+                #     # Add back the original Legend (was overwritten by new)
+                # _ = plt.gca().add_artist(l_1)
+                figs["umap_annotated"] = fump
         else:
             print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`. >>>")
         return figs
-            
     
     def preprocess(self, assay=None, assay_protein=None,
                    clustering=False, run_label="main", 
@@ -589,6 +636,29 @@ class Crispr(object):
             self.results[run_label] = {}
         self.results[run_label]["composition"] = output
         return output
+    
+    def run_dialogue(self, n_programs=3, col_cell_type=None,
+                     cmap="coolwarm", vcenter=0, 
+                     run_label="main", **kws_plot):
+        """Analyze multicellular programs."""
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        d_l = pt.tl.Dialogue(
+            sample_id=self._columns["col_perturbation"], n_mpcs=n_programs,
+            celltype_key=col_cell_type, 
+            n_counts_key=self._columns["col_num_umis"])
+        pdata, mcps, ws, ct_subs = d_l.calculate_multifactor_PMD(
+            self.adata.copy(), normalize=True)
+        mcp_cols = list(set(pdata.obs.columns).difference(
+            self.adata.obs.columns))
+        cols = cr.pl.square_grid(len(mcp_cols) + 2)[1]
+        fig = sc.pl.umap(
+            pdata, color=mcp_cols + [
+                self._columns["col_perturbation"], col_cell_type],
+            ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
+        self.results[run_label]["dialogue"] = pdata, mcps, ws, ct_subs
+        self.figures[run_label]["dialogue"] = fig
+        return fig
         
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""
