@@ -330,21 +330,25 @@ def get_matrix_from_h5(file, gex_genes_return=None):
     return fbm, gex, barcodes, genes
 
 
-def assign_guide_rna(adata, assignment_threshold=5, layer="counts",
+def assign_guide_rna(adata, col_num_umis="num_umis", 
+                     assignment_threshold=5, method="max",
                      plot=False, **kwargs):
     """Assign guide RNAs to cells (based on pertpy tutorial notebook)."""
-    gdo = adata.mod["gdo"]
-    gdo.layers["counts"] = gdo.X.copy()  # save original counts
-    sc.pp.log1p(gdo)  # log-transform data
-    if plot is True:
-        pt.pl.guide.heatmap(gdo, key_to_save_order="plot_order", 
-                            **kwargs)  # heatmap
-    g_a = pt.pp.GuideAssignment()  # guide assignment
-    g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
-                            layer=layer)  # assignment thresholding
-    g_a.assign_to_max_guide(gdo, assignment_threshold=assignment_threshold, 
-                            layer=layer)  # assignment thresholding
-    print(gdo.obs["assigned_guide"])  # creates layer "assigned_guides"
+    layer, out_layer = "guide_counts", "assigned_guides"
+    gdo = adata.copy()
+    gdo.obs = gdo.obs[[col_num_umis]].rename(
+        {col_num_umis: "nCount_RNA"}, axis=1)
+    gdo.layers[layer] = gdo.X.copy()
+    sc.pp.log1p(gdo)
+    pt.pl.guide.heatmap(gdo, key_to_save_order="plot_order")
+    g_a = pt.pp.GuideAssignment()
+    if method.lower() == "max":
+        g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
+                                layer=layer, output_layer=out_layer)
+    else:
+        g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
+                                layer=layer, output_layer=out_layer)
+    pt.pl.guide.heatmap(gdo, layer=out_layer, order_by="plot_order")
     return gdo
 
 

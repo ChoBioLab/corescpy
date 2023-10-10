@@ -131,9 +131,11 @@ class Crispr(object):
             self._keys = dict(key_control=key_control, 
                               key_treatment=key_treatment,
                               key_nonperturbed=key_nonperturbed)
-            print("\n".join([f"{x} = '{self._columns[x]}'" 
-                             for x in self._columns]))
-            print("\n".join([f"{x} = '{self._keys[x]}'" for x in self._keys]))
+            for q in [self._columns, self._keys]:
+                print("\n".join([
+                    f"{x} = " + ["", "'"][int(isinstance(q[x], str))] + str(q[
+                        x]) + ["", "'"][int(isinstance(q[x], str))] 
+                    for x in q]))
             print("\n\n", self.adata[assay].obs if assay else self.adata)
         
             # Correct 10x CellRanger Guide Count Incorporation
@@ -462,7 +464,8 @@ class Crispr(object):
         if assay is None:
             assay = self._assay
         marks, figs_m = cr.ax.find_markers(
-            self.adata, assay=assay, plot=plot,
+            self.adata, assay=assay, method=method, n_genes=n_genes, 
+            layer=layer, key_reference=key_reference, plot=plot,
             col_cell_type=self._columns["col_cell_type"], **kwargs)
         print(marks)
         return marks, figs_m

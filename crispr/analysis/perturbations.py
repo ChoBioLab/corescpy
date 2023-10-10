@@ -491,59 +491,72 @@ def analyze_composition(adata, reference_cell_type,
     figs, results = {}, {}
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
+    if generate_sample_level is True and sample_identifier is None:
+        warnings.warn("""
+                      Can't generate sample level if `sample_identifier`=None. 
+                      Setting `generate_sample_level` to False.
+                      """)
+        generate_sample_level = False
+    mod = "coda"
     sccoda_model = pt.tl.Sccoda()
     sccoda_data = sccoda_model.load(
-        adata, type=analysis_type, 
+        adata.copy(), type=analysis_type, 
+        modality_key_1=assay if assay else "rna",
+        modality_key_2="coda",
         generate_sample_level=generate_sample_level,
         cell_type_identifier=col_cell_type, 
         sample_identifier=sample_identifier, 
-        covariate_obs=col_perturbation)  # load data
+        covariate_obs=[col_perturbation])  # load data
+    sccoda_data = sccoda_model.prepare(
+        sccoda_data, formula=col_perturbation, 
+        reference_cell_type=reference_cell_type)
     print(sccoda_data)
     print(sccoda_data["coda"].X)
     print(sccoda_data["coda"].obs)
+    # mod = assay if assay else list(set(sccoda_data.mod.keys()).difference(
+    #     set(["coda"])))[0]  # original modality
     if plot is True:
         figs[
             "find_reference"] = pt.pl.coda.rel_abundance_dispersion_plot(
-                sccoda_data, modality_key=assay, 
+                sccoda_data, modality_key=mod, 
                 abundant_threshold=0.9)  # helps choose rference cell type
         figs["proportions"] = pt.pl.coda.boxplots(
-            sccoda_data, modality_key=assay, 
+            sccoda_data, modality_key=mod, 
             feature_name=col_perturbation, add_dots=True)
     sccoda_data = sccoda_model.prepare(
-        sccoda_data, modality_key=assay, formula=col_perturbation,
+        sccoda_data, modality_key=mod, formula=col_perturbation,
         reference_cell_type=reference_cell_type)  # setup model
     sccoda_model.run_nuts(sccoda_data, 
-                          modality_key=assay)  # no-U-turn HMV sampling 
-    sccoda_model.summary(sccoda_data, modality_key=assay)  # result
+                          modality_key=mod)  # no-U-turn HMV sampling 
+    sccoda_model.summary(sccoda_data, modality_key=mod)  # result
     results["original"]["effects_credible"] = sccoda_model.credible_effects(
-        sccoda_data, modality_key=assay)  # filter credible effects
+        sccoda_data, modality_key=mod)  # filter credible effects
     results["original"]["intercept"] = sccoda_model.get_intercept_df(
-        sccoda_data, modality_key=assay)  # intercept df
+        sccoda_data, modality_key=mod)  # intercept df
     results["original"]["effects"] = sccoda_model.get_effect_df(
-        sccoda_data, modality_key=assay)  # effects df
+        sccoda_data, modality_key=mod)  # effects df
     if out_file is not None:
         sccoda_data.write_h5mu(out_file)
     if est_fdr is not None:
-        sccoda_model.set_fdr(sccoda_data, modality_key=assay, 
-                            est_fdr=est_fdr)  # adjust for expected FDR
-        sccoda_model.summary(sccoda_data, modality_key=assay)
+        sccoda_model.set_fdr(sccoda_data, modality_key=mod, 
+                             est_fdr=est_fdr)  # adjust for expected FDR
+        sccoda_model.summary(sccoda_data, modality_key=mod)
         results[f"fdr_{est_fdr}"]["intercept"] = sccoda_model.get_intercept_df(
-            sccoda_data, modality_key=assay)  # intercept df
+            sccoda_data, modality_key=mod)  # intercept df
         results[f"fdr_{est_fdr}"]["effects"] = sccoda_model.get_effect_df(
-            sccoda_data, modality_key=assay)  # effects df
+            sccoda_data, modality_key=mod)  # effects df
         results[f"fdr_{est_fdr}"][
             "effects_credible"] = sccoda_model.credible_effects(
-                sccoda_data, 
-                modality_key=assay)  # filter credible effects 
+                sccoda_data, modality_key=mod)  # filter credible effects
         if out_file is not None:
             sccoda_data.write_h5mu(f"{out_file}_{est_fdr}_fdr")
     if plot is True:
         figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
-            sccoda_data, modality_key=assay, 
+            sccoda_data, modality_key=mod, 
             feature_name=col_perturbation)
         plt.show()
         figs["effects"] = pt.pl.coda.effects_barplot(
-            sccoda_data, modality_key=assay, 
+            sccoda_data, modality_key=mod, 
             parameter="Final Parameter")
         data_arviz = sccoda_model.make_arviz(sccoda_data, 
                                              modality_key="coda_salm")

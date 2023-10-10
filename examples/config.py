@@ -214,12 +214,10 @@ col_batch_data = {
 
 kws_process_guide_rna_data = {
     "CRISPRi_scr": dict(feature_split="|", guide_split="-", 
-                        key_control_patterns=["CTRL"],
-                        remove_multi_transfected=True),
+                        key_control_patterns=["CTRL"]),
     "CRISPRi_wgs": None,
     "CRISPRi_ess": dict(feature_split=",", guide_split="-", 
-                        key_control_patterns=["CTRL"],
-                        remove_multi_transfected=True),
+                        key_control_patterns=["CTRL"]),
     "pool": None,
     "bulk": None,
     "screen": None,
