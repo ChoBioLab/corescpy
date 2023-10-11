@@ -270,6 +270,7 @@ class Crispr(object):
         fig = sns.catplot(data=dff, x="Percent of Cell Guides", y="Target",
                           kind="violin", **kwargs)
         fig.fig.suptitle("Guide RNA Counts by Cell Type")
+        fig.fig.tight_layout()
         return self._info["guide_rna"]["counts_unfiltered"], fig
     
     def preprocess(self, assay=None, assay_protein=None,
