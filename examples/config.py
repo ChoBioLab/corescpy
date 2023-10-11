@@ -79,7 +79,6 @@ col_split_by_data = {
     "ECCITE": "replicate",
     "coda": np.nan,
     "augur_ex": "nan"
-    
 }
 
 col_perturbation_data = {
@@ -116,23 +115,23 @@ key_treatment_data = {
     "bulk": np.nan,
     "screen": np.nan,
     "ECCITE": "KO",
-    "perturb-seq": "63(mod)_pBA580",
+    "perturb-seq": "KO",
     "coda": "Salmonella",
     "augur_ex": "Withdraw_48h_Cocaine"
 }
 
-key_nonperturbed_data = {
-    "CRISPRi_scr": "NP",
-    "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": np.nan,
-    "pool": np.nan,
-    "bulk": np.nan,
-    "screen": np.nan,
-    "ECCITE": "KO",
-    "perturb-seq": np.nan,
-    "coda": np.nan,
-    "augur_ex": np.nan
-}
+# key_nonperturbed_data = {
+#     "CRISPRi_scr": "NP",
+#     "CRISPRi_wgs": np.nan,
+#     "CRISPRi_ess": np.nan,
+#     "pool": np.nan,
+#     "bulk": np.nan,
+#     "screen": np.nan,
+#     "ECCITE": "KO",
+#     "perturb-seq": np.nan,
+#     "coda": np.nan,
+#     "augur_ex": np.nan
+# }
 
 col_target_genes_data = {
     "CRISPRi_scr": "target_gene_name",
@@ -141,7 +140,7 @@ col_target_genes_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
-    "perturb-seq": "perturbation",
+    "perturb-seq": "target_gene_name",
     "ECCITE": "gene_target",
     "coda": np.nan,
     "augur_ex": None
@@ -154,7 +153,7 @@ col_guide_rna_data = {
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
-    "perturb-seq": None,
+    "perturb-seq": "perturbation",
     "ECCITE": "guide_ID",
     "coda": np.nan,
     "augur_ex": None
@@ -163,7 +162,7 @@ col_guide_rna_data = {
 col_num_umis_data = {
     "CRISPRi_scr": "num_umis",
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": np.nan,
+    "CRISPRi_ess": "UMI Count",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,
@@ -173,18 +172,18 @@ col_num_umis_data = {
     "augur_ex": None
 }
 
-layer_perturbation_data = {
-    "CRISPRi_scr": np.nan,
-    "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "X_pert",
-    "pool": np.nan,
-    "bulk": np.nan,
-    "screen": np.nan,
-    "perturb-seq": None,
-    "ECCITE": "X_pert",
-    "coda": None, 
-    "augur_ex": None
-}
+# layer_perturbation_data = {
+#     "CRISPRi_scr": np.nan,
+#     "CRISPRi_wgs": np.nan,
+#     "CRISPRi_ess": "X_pert",
+#     "pool": np.nan,
+#     "bulk": np.nan,
+#     "screen": np.nan,
+#     "perturb-seq": None,
+#     "ECCITE": "X_pert",
+#     "coda": None, 
+#     "augur_ex": None
+# }
 
 col_sample_id_data = {
     "CRISPRi_scr": None,
@@ -221,7 +220,8 @@ kws_process_guide_rna_data = {
     "pool": None,
     "bulk": None,
     "screen": None,
-    "perturb-seq": None,
+    "perturb-seq": dict(feature_split=None, guide_split="_",
+                        key_control_patterns=[np.nan]),
     "ECCITE": None,
     "coda": None, 
     "augur_ex": None

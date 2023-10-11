@@ -388,6 +388,8 @@ def detect_guide_targets(adata, col_guide_rna="guide_ID",
     targets = adata.obs[col_guide_rna].str.strip(" ").replace("", np.nan)
     if np.nan in key_control_patterns:  # if NAs mean control sgRNAs
         key_control_patterns = list(pd.Series(key_control_patterns).dropna())
+        if len(key_control_patterns) == 0:
+            key_control_patterns = [key_control]
         targets = targets.replace(
             np.nan, key_control)  # NaNs replaced w/ control key
     else:  # if NAs mean unperturbed cells
@@ -465,6 +467,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         feature_split (str, optional): For designs with multiple guides,
             the character that splits guide names in `col_guide_rna`. 
             For instance, "|" for `STAT1-1|CNTRL-1|CDKN1A`. Defaults to "|".
+            If only single guides, set to None.
         guide_split (str, optional): The character that separates 
             guide (rather than gene target)-specific IDs within gene. 
             For instance, guides targeting STAT1 may include 
@@ -499,8 +502,18 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         (which should be avoided), be sure to change throughout the package.
     """
     # Extract Guide RNA Information
+    ann = adata.copy()
+    if feature_split is None:
+        feature_split = "|"
+        if ann.obs[col_guide_rna].apply(lambda x: feature_split in x).any():
+            raise ValueError(
+                f"""For single-guide designs, the character {feature_split}
+                cannot be found in any of the guide names ({col_guide_rna})""")
+        ann.obs.loc[:, col_guide_rna] = ann.obs[col_guide_rna].apply(
+            lambda x: np.nan if pd.isnull(x) else str(x) + feature_split
+        )  # add dummy feature_split to make single-guide case work
     tg_info = find_guide_info(
-        adata.copy(), col_guide_rna, col_num_umis=col_num_umis, 
+        ann.copy(), col_guide_rna, col_num_umis=col_num_umis, 
         feature_split=feature_split, guide_split=guide_split, 
         key_control_patterns=key_control_patterns, 
         key_control=key_control, **kwargs)
@@ -525,7 +538,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
                             cols[1]: list(x.reset_index("g")["u"])}))
     tg_info = tg_info.join(filt, lsuffix="_all", rsuffix="_filtered")  # join
-    tg_info = tg_info.dropna().loc[adata.obs.index.intersection(
+    tg_info = tg_info.dropna().loc[ann.obs.index.intersection(
         tg_info.dropna().index)]  # re-order according to adata index
     
     # # Determine Exclusion Criteria Met per gRNA
