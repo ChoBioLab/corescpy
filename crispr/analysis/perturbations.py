@@ -361,6 +361,9 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
                 kwargs.update({"legend_loc": "on_data"})
             if "frameon" not in kwargs:
                 kwargs.update({"frameon": False})
+            figs["perturbation_score_umap"] = sc.pl.umap(
+                data, color=["augur_score", col_cell_type], 
+                cmap="coolwarm", vcenter=0, vmax=1)
             figs["perturbation_effect_by_cell_type"] = pt.pl.ag.lollipop(
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?
