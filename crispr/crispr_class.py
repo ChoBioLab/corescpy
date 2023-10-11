@@ -71,8 +71,7 @@ class Crispr(object):
                 col_guide_rna, col_num_umis=col_num_umis,
                 key_control=key_control, **kws_process_guide_rna
                 )  # process (e.g., multi-probe names) & filter by sgRNA counts
-            self._info["guide_rna"]["counts_unfiltered"] = feats_n.loc[
-                self.adata.obs.index]
+            self._info["guide_rna"]["counts_unfiltered"] = feats_n
             for q in [col_guide_rna, 
                       col_num_umis]:  # replace w/ processed entries
                 tg_info.loc[:, q] = tg_info[q + "_filtered"]

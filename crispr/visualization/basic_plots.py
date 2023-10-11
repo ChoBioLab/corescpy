@@ -23,11 +23,11 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
     if not isinstance(plot_types, str):
         raise TypeError("plot_types must be a string.")
     plot_types = plot_types.lower()  # so not case-sensitive
-    if method is None:
+    if method_cluster is None:
         if "leiden" in adata.uns: 
-            method = "leiden" 
+            method_cluster = "leiden" 
         elif "louvain" in adata.uns: 
-            method = "louvain"
+            method_cluster = "louvain"
         else:
             raise ValueError("No clustering method found in object.")
         warnings.warn("Clustering method unspecified. Using {method}.")
