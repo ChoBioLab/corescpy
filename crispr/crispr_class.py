@@ -72,6 +72,13 @@ class Crispr(object):
                 created via Crispr.cluster(). Defaults to "leiden" 
                 (e.g., if you expect this column to be created 
                 by running `self.cluster(...)` with `method_cluster="leiden"`).
+                In certain methods, you can specify a new column to use just
+                    for that function. For instance, if you have a column
+                    containing CellTypist annotations and want to use
+                    those clusters instead of the "leiden" ones for 
+                    the `run_dialogue()` method, you can specify in that method
+                    without changing the attribute that contains your 
+                    original specification here.
             col_sample_id (str, optional): Column in `.obs` with sample IDs. 
                 Defaults to "standard_sample_id".
             col_batch (str, optional): Column in `.obs` with batch IDs. 
@@ -485,12 +492,10 @@ class Crispr(object):
                      run_label="main",
                      test=False, plot=True, **kwargs):
         """
-        Identify perturbed cells based on target genes
-        and calculate posterior probabilities
-        (, e.g., KO) and
-        perturbation scores. 
+        Identify/classify and quantify perturbation of cells.
         
-        Optionally, perform LDA to cluster cells based on perturbation response.
+        Optionally, perform LDA to cluster cells 
+        based on perturbation response.
         Optionally, create figures related to differential gene 
         (and protein, if available) expression, perturbation scores, 
         and perturbation response-based clusters. 
@@ -513,42 +518,36 @@ class Crispr(object):
             assay (str, optional): Assay slot of adata 
                 ('rna' for `adata['rna']`). If not provided, will use
                 self._assay. Typically, users should not specify this argument.
-            assay_protein (str, optional): Protein assay slot name (if available).
-                Defaults to None.
-            protein_of_interest (str, optional): If assay_protein is not None 
+            assay_protein (str, optional): Protein assay slot name 
+                (if available). If True, use `self._assay_protein`. If None,
+                don't run extra protein expression analyses, even if 
+                protein expression modality is available.
+            protein_of_interest (str, optional): If assay_protein is not None  
                 and plot is True, will allow creation of violin plot of 
                 protein expression (y) by 
                 <target_gene_idents> perturbation category (x),
                 split/color-coded by Mixscape classification 
                 (`adata.obs['mixscape_class_global']`). Defaults to None.
-            col_guide_rna (str, optional): Name of column with 
-                guide RNA IDs (full).
-                Format may be something like STAT1-1|CNTRL-2-1. 
-                Defaults to "guide_ID".
-            guide_split (str, optional): Guide RNA ID # split character
-                before guide #(s) (as in "-" for "STAT3-1-2"). Same as used in
-                Crispr/crispr_class.py process guide RNA method. Defaults to "-".
-            target_gene_idents (list or bool, optional): List of names of genes 
-                whose perturbations will determine cell grouping 
+            target_gene_idents (list or bool, optional): List of names of 
+                genes whose perturbations will determine cell grouping 
                 for the above-described violin plot and/or
                 whose differential expression posterior probabilities 
                 will be plotted in a heatmap. Defaults to None.
-                True to plot all in `adata.uns["mixscape"]`.
-            layer_perturbation (str, optional): `adata.layers` slot name. 
-                Defaults to None.
-            min_de_genes (int, optional): Minimum number of genes a cell has 
+                True to plot all in `self.adata.uns["mixscape"]`.
+            min_de_genes (int, optional): Minimum number of genes a cell has
                 to express differentially to be labeled 'perturbed'. 
                 For Mixscape and LDA (if applicable). Defaults to 5.
             pval_cutoff (float, optional): Threshold for significance 
                 to identify differentially-expressed genes. 
                 For Mixscape and LDA (if applicable). Defaults to 5e-2.
-            logfc_threshold (float, optional): Will only test genes whose average 
-                logfold change across the two cell groups is at least this number. 
-                For Mixscape and LDA (if applicable). Defaults to 0.25.
-            n_comps_lda (int, optional): Number of principal components (e.g., 10)
-                for PCA xperformed as part of LDA for pooled CRISPR screen data. 
-                Defaults to None.
-            iter_num (float, optional): Iterations to run to converge if needed.
+            logfc_threshold (float, optional): Will only test genes whose 
+                average logfold change across the two cell groups is 
+                at least this number. For Mixscape and LDA (if applicable). 
+                Defaults to 0.25.
+            n_comps_lda (int, optional): Number of principal components
+                for PCA. Defaults to None (LDA not performed).
+            iter_num (float, optional): Iterations to run 
+                in order to converge (if needed).
             plot (bool, optional): Make plots? Defaults to True.
             
         Returns:
@@ -773,7 +772,7 @@ class Crispr(object):
     def run_dialogue(self, n_programs=3, col_cell_type=None,
                      cmap="coolwarm", vcenter=0, 
                      run_label="main", **kws_plot):
-        """Analyze multicellular programs."""
+        """Analyze <`n_programs`> multicellular programs."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         d_l = pt.tl.Dialogue(
@@ -1055,7 +1054,7 @@ class Crispr(object):
                 # _ = plt.gca().add_artist(l_1)
                 figs["umap_annotated"] = fump
         else:
-            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`. >>>")
+            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
         return figs
         
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
