@@ -24,6 +24,8 @@ COLOR_MAP = "coolwarm"
 
 class Crispr(object):
     """An object class for CRISPR analysis and visualization"""
+    
+    _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(self, file_path, 
                  assay=None, 
@@ -266,7 +268,8 @@ class Crispr(object):
         #                 len(self.adata.obs[col_cell_type].unique()))[1],
         #             col=col_cell_type, kind="violin", 
         #             **kwargs)
-        fig = sns.catplot(data=dff, x="Percent of Cell Guides", y="Target",
+        fig = sns.catplot(data=dff, y="Target",
+                          x=self._columns_created["guide_percent"],
                           kind="violin", **kwargs)
         fig.fig.suptitle("Guide RNA Counts by Cell Type")
         fig.fig.tight_layout()
