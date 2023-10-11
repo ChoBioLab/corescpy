@@ -20,9 +20,10 @@ urls.Source = "https://github.com/easlinger/crispr"
 urls.Home-page = "https://github.com/easlinger/crispr"
 dependencies = [
     "anndata",
-    "rich",
-    "scanpy[leiden]",
+    "scanpy[leiden]x",
     "muon",
+    "pertpy",
+    "rich",
     "requests",
     "ipywidgets",
     "switchlang",
