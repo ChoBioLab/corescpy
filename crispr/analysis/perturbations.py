@@ -33,12 +33,12 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                      plot=True, 
                      assay_protein=None,
                      protein_of_interest=None,
-                     guide_split="-", feature_split=None,
+                     guide_split="-",
                      target_gene_idents=None, **kwargs):
     """
     Identify perturbed cells based on target genes (`adata.obs['mixscape_class']`,
     `adata.obs['mixscape_class_global']`) and calculate posterior probabilities
-    (`adata.obs['mixscape_class_p_<label_perturbation_type>']`, e.g., KO) and
+    (`adata.obs['mixscape_class_p_<key_treatment>']`, e.g., KO) and
     perturbation scores. 
     
     Optionally, perform LDA to cluster cells based on perturbation response.
@@ -51,12 +51,14 @@ def perform_mixscape(adata, col_perturbation="perturbation",
 
     Args:
         adata (AnnData): Scanpy data object.
-        col_perturbation (str): Perturbation category column  of `adata.obs` 
+        col_perturbation (str): Perturbation category column of `adata.obs` 
             (should contain key_control).
-        key_control (str, optional): Control category key
-            (`adata.obs[col_perturbation]` entries).Defaults to "NT".
-        label_perturbation_type (str, optional): CRISPR perturbation type.
-            Used for labeling. Defaults to "KO".
+        key_control (str, optional): The label in `col_perturbation`
+            that indicates control condition. Defaults to "NT".
+        key_treatment (str, optional): The label in `col_perturbation`
+            that indicates a treatment condition (e.g., drug administration, 
+            CRISPR knock-out/down). Defaults to "KO".
+            Will also be 
         col_split_by (str, optional): `adata.obs` column name of 
             sample categories to calculate separately (e.g., replicates). 
             Defaults to None.
@@ -295,11 +297,6 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
     Returns:
         _type_: _description_
     """
-    # Setup
-    if kwargs:
-        print(f"\nUn-used Keyword Arguments: {kwargs}")
-    
-    # Run Augur
     if select_variance_features == "both":  
         # both methods: select genes based on...
         # - original Augur (True)
@@ -395,7 +392,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
 
 
 def perform_differential_prioritization(adata, col_perturbation="perturbation", 
-                                        label_treatments="NT",
+                                        key_treatment_list="NT",
                                         label_col="label",
                                         assay=None,
                                         n_permutations=1000,
@@ -412,7 +409,7 @@ def perform_differential_prioritization(adata, col_perturbation="perturbation",
     Args:
         adata (AnnData): Scanpy object.
         col_perturbation (str): Column used to indicate experimental condition.
-        label_treatments (list): List of two conditions 
+        key_treatment_list (list): List of two conditions 
             (values in col_perturbation).
         label_col (str, optional): _description_. Defaults to "label_col".
         assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
@@ -444,7 +441,7 @@ def perform_differential_prioritization(adata, col_perturbation="perturbation",
     augur_results, permuted_results = [], []  # to hold results
     if plot is True:
         figs["umap_augur"] = {}
-    for x in label_treatments:
+    for x in key_treatment_list:
         ag_rfc = pt.tl.Augur(classifier)
         ddd = ag_rfc.load(
             adata[assay] if assay else adata, 

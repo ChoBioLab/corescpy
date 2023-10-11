@@ -23,14 +23,13 @@ COLOR_MAP = "coolwarm"
 
 
 class Crispr(object):
-    """An object class for CRISPR analysis and visualization"""
+    """An object class for CRISPR analysis and visualization."""
     
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(self, file_path, 
                  assay=None, 
                  assay_protein=None,
-                 layer_perturbation=None, 
                  col_gene_symbols="gene_symbols", 
                  col_cell_type="leiden",
                  col_sample_id="standard_sample_id", 
@@ -40,16 +39,163 @@ class Crispr(object):
                  col_guide_rna="guide_ids",
                  col_num_umis="num_umis",
                  key_control="NT", 
-                 key_treatment="perturbed", 
+                 key_treatment="KO", 
                  key_nonperturbed="NP", 
                  kws_process_guide_rna=None,
                  remove_multi_transfected=True,
                  **kwargs):
-        """CRISPR class initialization."""
+        """_summary_Args:
+            file_path (str, AnnData, or dictionary): 
+                Path to a 10x directory 
+                    (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz),
+                path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible),
+                an AnnData or MuData object (e.g., already loaded with Scanpy),
+                    or
+                a dictionary containing keyword arguments to pass to
+                `crispr.pp.combine_matrix_protospacer()` 
+                (in order to load information about perturbations from
+                other file(s); see function documentation).
+            assay (str, optional): Name of the gene expression assay if
+                loading a multi-modal data object (e.g., "rna"). 
+                Defaults to None (i.e., `self.adata` is single-modal).
+            assay_protein (str, optional): Name of the assay containing 
+                the protein expression modality, if available. For instance, 
+                if `assay_protein="adt"`, self.adata["mod"] would be expected
+                to contain the AnnData object for the protein modality.
+                ONLY FOR MULTI-MODAL DATA for certain bonus visualization
+                methods. Defaults to None.
+            col_gene_symbols (str, optional): Column name in `.var` 
+                for gene symbols. Defaults to "gene_symbols".
+            col_cell_type (str, optional): Column name in `.obs` for cell type, 
+                whether pre-existing in data (e.g., pre-run clustering column 
+                or manual annotations) or a column expected to be 
+                created via Crispr.cluster(). Defaults to "leiden" 
+                (e.g., if you expect this column to be created 
+                by running `self.cluster(...)` with `method_cluster="leiden"`).
+            col_sample_id (str, optional): Column in `.obs` with sample IDs. 
+                Defaults to "standard_sample_id".
+            col_batch (str, optional): Column in `.obs` with batch IDs. 
+                Defaults to None.
+            col_perturbation (str, optional): Column where class methods will
+                be able to find the experimental/perturbation condition, 
+                whether
+                    (a) that column is already in `self.adata.obs` 
+                        (when the file is loaded in  as an object, 
+                        if `file` is a file path), or 
+                    (b) that column must be created by specifying 
+                    `kws_process_guide_rna` as a dictionary of arguments 
+                    (which'll be passed to `crispr.pp.filter_by_guide_counts()`)
+                    in order to process the guide IDs (see function docstring) 
+                    and make a binary perturbed/control column 
+                    (with entries in that column following your specifications 
+                    in `key_control` and `key_treatment` arguments).
+                    All entries containing the patterns specified in
+                    `kws_process_guide_rna["key_control_patterns"]` will
+                    be changed to `key_control`, and all cells with
+                    targeting guides will be changed to `key_treatment`. 
+                If a pre-existing column, should consist of entries 
+                that are either `key_control` or `key_treatment`
+                (i.e., a binary version of `col_target_genes` and `col_guide_rna`). 
+                Defaults to "perturbation".
+            col_target_genes (str, optional): The column where each guide RNA's
+                target gene is or will be stored, whether pre-existing or 
+                (if `kws_process_guide_rna` is not None) created 
+                during the Crispr object initialization by passing 
+                `kws_process_guide_rna` to
+                `crispr.pp.filter_by_guide_counts()`. Defaults to None.
+            col_guide_rna (str, optional): Column in `.obs` with guide RNA IDs.
+                Entries in this column should be gene names in 
+                `self.adata.var_names`, plus, optionally, 
+                suffixes separating guide #s (e.g., STAT1-1-2, CTRL-1) and/or
+                with a character that splits separate guide RNAs within that cell
+                (if multiply-transfected cells are present). These characters
+                should be specified in `kws_process_guide_rna["guide_split"]`
+                and `kws_process_guide_rna["feature_split"]`, respectively.
+                For instance, they would be "-" and "|", if `col_guide_rna`
+                entries for a cell multiply transfected by two sgRNAs 
+                targeting STAT1, two control guide RNAs, and a guide targeting 
+                CCL5  would look like "STAT1-1-1|STAT1-1-2|CNTRL-1-1|CCL5-1".
+                Currently, everything after the first dash is discarded when
+                creating `col_target_genes`, so keep that in mind.
+                This column will be stored as `<col_guide_rna>_original` if 
+                `kws_process_guide_rna` is not None, as that will result in 
+                a processed version of this column being stored under 
+                `.obs[<col_guide_rna>]`. Defaults to "guide_ids".
+            col_num_umis (str, optional): Name of column in `.obs` with the 
+                UMI counts. This should be specified if `kws_process_guide_rna`
+                is not None. Defaults to "num_umis".
+            key_control (str, optional): The label in `col_target_genes`
+                and in `col_guide_rna`
+                The name you want the control 
+                entries to be categorized as under the new `col_guide_rna`. 
+                for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be replaced 
+                by "Control" if that's what you specify here. 
+                Defaults to "NT".
+            key_treatment (str, optional): What entries in `col_perturbation`
+                indicate a treatment condition (e.g., drug administration, 
+                CRISPR knock-out/down), etiher already in `.obs` in the object
+                as passed to `file` or loaded using hte file specified in `file`,
+                or to be used in the column(s) created by 
+                `crispr.pp.filter_by_guide_counts()` 
+                if `kws_process_guide_rna` is not None.
+                Defaults to "KO".
+            key_nonperturbed (str, optional): What will be stored in the 
+                `mixscape_class_global` and related columns/labels after
+                running Mixscape methods for cells without a detectible
+                perturbation. Defaults to "NP".
+            kws_process_guide_rna (dict, optional): Dictionary of keyword
+                arguments to pass to `crispr.pp.filter_by_guide_counts()`. 
+                (See below and crispr.processing.preprocessing documentation). 
+                Defaults to None.
+            remove_multi_transfected (bool, optional): In designs with 
+                multiple guides per cell, remove multiply-transfected cells
+                (i.e., cells where more than one target guide survived 
+                application of any filtering criteria set 
+                in `kws_process_guide_rna`).
+                If `kws_process_guide_rna["max_percent_umis_control_drop"]`
+                    is greater than 0, then cells with one target guide
+                    and control guides which together make up less than 
+                    `max_percent_umis_control_drop`% of total UMI counts 
+                    will be considered pseudo-single-transfected 
+                    for the target guide.
+                Defaults to True. Some functionality may be limited if
+                set to False and if multiply-transfected cells remain in data. 
+            
+        Notes:
+            kws_process_guide_rna:
+                key_control_patterns (list, optional): List (or single string) 
+                    of patterns in guide RNA column entries that correspond to a 
+                    control. For instance, if control entries in the original 
+                    `col_guide_rna` column include `NEGCNTRL` and
+                    `Control.D`, you should specify ['Control', 'CNTRL'] 
+                    (assuming no non-control sgRNA names contain those patterns). 
+                    If blank entries should be interpreted as control guides, 
+                    then include np.nan/numpy.nan in this list.
+                    Defaults to None, but you almost certainly shouldn't leave this 
+                    blank if you're using this function.
+            max_percent_umis_control_drop (int, optional): If control UMI counts 
+                are less than or equal to this percentage of the total counts for 
+                that cell, and if a non-control sgRNA is also present and 
+                meets other filtering criteria, then consider that cell 
+                pseudo-single-transfected (non-control gene). Defaults to 75.
+            min_percent_umis (int, optional): sgRNAs with counts below this 
+                percentage will be considered noise for that guide. 
+                Defaults to 40.
+            feature_split (str, optional): For designs with multiple guides,
+                the character that splits guide names in `col_guide_rna`. 
+                For instance, "|" for `STAT1-1|CNTRL-1|CDKN1A`. Defaults to "|".
+                If only single guides, set to None.
+            guide_split (str, optional): The character that separates 
+                guide (rather than gene target)-specific IDs within gene. 
+                For instance, guides targeting STAT1 may include 
+                STAT1-1, STAT1-2, etc.; the argument would be "-" so the 
+                function can identify all of those as targeting 
+                STAT1. Defaults to "-".
+        """
         print("\n\n<<<INITIALIZING CRISPR CLASS OBJECT>>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
-        self._layer_perturbation = layer_perturbation
+        self._layer_perturbation = "X_pert"
         self._file_path = file_path
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
@@ -73,6 +219,8 @@ class Crispr(object):
                 col_guide_rna, col_num_umis=col_num_umis,
                 key_control=key_control, **kws_process_guide_rna
                 )  # process (e.g., multi-probe names) & filter by sgRNA counts
+            kws_process_guide_rna["feature_split"] = tg_info.feature_split.iloc[0]
+            self._info["guide_rna"]["keywords"] = kws_process_guide_rna
             self._info["guide_rna"]["counts_unfiltered"] = feats_n
             for q in [col_guide_rna, 
                       col_num_umis]:  # replace w/ processed entries
@@ -135,10 +283,7 @@ class Crispr(object):
                               key_treatment=key_treatment,
                               key_nonperturbed=key_nonperturbed)
             for q in [self._columns, self._keys]:
-                print("\n".join([
-                    f"{x} = " + ["", "'"][int(isinstance(q[x], str))] + str(q[
-                        x]) + ["", "'"][int(isinstance(q[x], str))] 
-                    for x in q]))
+                cr.tl.print_pretty_dictionary(q)
             print("\n\n", self.adata[assay].obs if assay else self.adata)
         
             # Correct 10x CellRanger Guide Count Incorporation
@@ -163,6 +308,7 @@ class Crispr(object):
     #         self._adata = value
     
     def describe(self, group_by=None, plot=False):
+        """Describe data."""
         desc, figs = {}, {}
         gbp = [self._columns["col_cell_type"]]
         if group_by:
@@ -338,7 +484,92 @@ class Crispr(object):
                      col_split_by=None, min_de_genes=5,
                      run_label="main",
                      test=False, plot=True, **kwargs):
-        """Run Mixscape.""" 
+        """
+        Identify perturbed cells based on target genes
+        and calculate posterior probabilities
+        (, e.g., KO) and
+        perturbation scores. 
+        
+        Optionally, perform LDA to cluster cells based on perturbation response.
+        Optionally, create figures related to differential gene 
+        (and protein, if available) expression, perturbation scores, 
+        and perturbation response-based clusters. 
+        
+        Runs a differential expression analysis and creates a heatmap
+        sorted by the posterior probabilities.
+
+        Args:
+            adata (AnnData): Scanpy data object.
+            col_perturbation (str): The name of the column containing 
+                the perturbation information. If not provided, 
+                `self._columns["col_perturbation"]` will be used.
+                Usually, this argument should not be provided. 
+                Allowing specification here rather than just 
+                using `self._columns["col_perturbation"]`
+                is just meant to allow the user maximum flexibility.
+            col_split_by (str, optional): `adata.obs` column name of 
+                sample categories to calculate separately (e.g., replicates).
+                Defaults to None.
+            assay (str, optional): Assay slot of adata 
+                ('rna' for `adata['rna']`). If not provided, will use
+                self._assay. Typically, users should not specify this argument.
+            assay_protein (str, optional): Protein assay slot name (if available).
+                Defaults to None.
+            protein_of_interest (str, optional): If assay_protein is not None 
+                and plot is True, will allow creation of violin plot of 
+                protein expression (y) by 
+                <target_gene_idents> perturbation category (x),
+                split/color-coded by Mixscape classification 
+                (`adata.obs['mixscape_class_global']`). Defaults to None.
+            col_guide_rna (str, optional): Name of column with 
+                guide RNA IDs (full).
+                Format may be something like STAT1-1|CNTRL-2-1. 
+                Defaults to "guide_ID".
+            guide_split (str, optional): Guide RNA ID # split character
+                before guide #(s) (as in "-" for "STAT3-1-2"). Same as used in
+                Crispr/crispr_class.py process guide RNA method. Defaults to "-".
+            target_gene_idents (list or bool, optional): List of names of genes 
+                whose perturbations will determine cell grouping 
+                for the above-described violin plot and/or
+                whose differential expression posterior probabilities 
+                will be plotted in a heatmap. Defaults to None.
+                True to plot all in `adata.uns["mixscape"]`.
+            layer_perturbation (str, optional): `adata.layers` slot name. 
+                Defaults to None.
+            min_de_genes (int, optional): Minimum number of genes a cell has 
+                to express differentially to be labeled 'perturbed'. 
+                For Mixscape and LDA (if applicable). Defaults to 5.
+            pval_cutoff (float, optional): Threshold for significance 
+                to identify differentially-expressed genes. 
+                For Mixscape and LDA (if applicable). Defaults to 5e-2.
+            logfc_threshold (float, optional): Will only test genes whose average 
+                logfold change across the two cell groups is at least this number. 
+                For Mixscape and LDA (if applicable). Defaults to 0.25.
+            n_comps_lda (int, optional): Number of principal components (e.g., 10)
+                for PCA xperformed as part of LDA for pooled CRISPR screen data. 
+                Defaults to None.
+            iter_num (float, optional): Iterations to run to converge if needed.
+            plot (bool, optional): Make plots? Defaults to True.
+            
+        Returns:
+            dict: A dictionary containing figures visualizing
+                results, for instance, 
+        
+        Notes:
+            - Classifications are stored in 
+            `self.adata.obs['mixscape_class_global']`
+            (detectible perturbation (`self._keys["key_treatment"]`) vs. 
+            non-detectible perturbation (`self._keys["key_nonperturbed"]`) 
+            vs. control (`self._keys["key_control"]`)) and in
+            `self.adata.obs['mixscape_class']` (like the previous, 
+                but specific to target genes, e.g., "STAT1 KO" vs. just "KO"). 
+            - Posterial p-values are stored in 
+                `self.adata.obs['mixscape_class_p_<key_treatment>']`.
+            - Other result output will be stored in `self.figures` and 
+                `self.results` under the `run_label` key under `mixscape`
+                (e.g., `self.figures["main"]["mixscape"]`).
+            
+        """
         if assay is None:
             assay = self._assay
         figs_mix = cr.ax.perform_mixscape(
@@ -361,8 +592,69 @@ class Crispr(object):
                   subsample_size=20, n_threads=True, 
                   select_variance_features=False, 
                   seed=1618, plot=True, run_label="main", test=False,
-                  **kwargs):
-        """Run Augur."""
+                  **kwargs):        
+        """
+        Runs the Augur perturbation scoring and prediction analysis.
+
+        Parameters:
+            assay (str): The name of the gene expression assay 
+                (for multi-modal data objects). 
+                If not provided, `self._assay` will be used.
+            col_perturbation (str): The name of the column containing 
+                the perturbation information. If not provided, 
+                `self._columns["col_perturbation"]` will be used.
+                Usually, this argument should not be provided. 
+                Allowing specification here rather than just 
+                using `self._columns["col_perturbation"]`
+                is just meant to allow the user maximum flexibility,
+                but it is expected the most users will not need
+                to specify this argument.
+            key_treatment (str): The key used to identify the treatment group
+                or cells perturbed by targeting guide RNAs.
+                If not provided, the default key will be used...which, again, 
+                is the expected scenario, but the argument is available
+                for rare cases where needed. For instance,
+                for experimental conditions that have
+                multiple levels (e.g., control, drug A treatment, 
+                drug B treatment), allowing this argument 
+                (and `col_perturbation`, for instance, 
+                if self._columns["col_perturbation"] 
+                is a binary treatment vs. drug column, and you want to use 
+                the more specific column for Augur)
+                to be specified allows for more flexibility in analysis.
+            augur_mode (str, optional): Augur or permute? 
+                Defaults to "default". (See pertpy documentation.)
+            classifier (str): The classifier to be used for the analysis. 
+                Defaults to "random_forest_classifier".
+            kws_augur_predict (dict): Additional keyword arguments to be 
+                passed to the `perform_augur()` function.
+            n_folds (int): The number of folds to be used for cross-validation.
+                Defaults to 3. Should be >= 3 as a matter of best practices.
+            subsample_size (int, optional): Per Pertpy code: 
+                "number of cells to subsample randomly per type 
+                from each experimental condition." Defaults to 20.
+            n_threads (bool): The number of threads to be used for 
+                parallel processing. If set to True, the available 
+                CPUs minus 1 will be used. Defaults to True.
+            select_variance_features (bool, optional): Use Augur to select 
+                genes (True), or Scanpy's  highly_variable_genes (False). 
+                Defaults to False.
+            seed (int): The random seed to be used for reproducibility. 
+                Defaults to 1618.
+            plot (bool): Whether to plot the results. Defaults to True.
+            run_label (str): The label for the current run. Defaults to "main".
+            test (bool): Whether the function is being called as a test run. 
+                If True,self.adata will be copied so 
+                that no alterations are made inplace via Augur,
+                and results are not stored in object attributes.
+                Defaults to False.
+            **kwargs: Additional keyword arguments to be passed to 
+                the `crispr.ax.perform_augur()` function.
+
+        Returns:
+            tuple: A tuple containing the data, results, and figures 
+                generated by the Augur analysis.
+        """
         if key_treatment is None:
             key_treatment = self._keys["key_treatment"]
         if col_perturbation is None:
@@ -401,7 +693,31 @@ class Crispr(object):
     def compute_distance(self, distance_type="edistance", method="X_pca", 
                          kws_plot=None, highlight_real_range=False,
                          run_label="main", plot=True):
-        """Compute and visualize distance metrics."""
+        """
+        Compute and visualize distance metrics.
+
+        Args:
+            distance_type (str, optional): The type of distance 
+                calculation to perform. Defaults to "edistance".
+            method (str, optional): The method to use for 
+                dimensionality reduction. Defaults to "X_pca".
+            kws_plot (dict, optional): Additional keyword arguments 
+                for plotting. Defaults to None.
+            highlight_real_range (bool, optional): Whether to highlight 
+                the real range by setting minimum and maximum color scaling
+                based on properties of the data. Defaults to False.
+            run_label (str, optional): The label for the current run. Affects
+                the key under which results and figures are stored in internal 
+                attributes. Defaults to "main".
+            plot (bool, optional): Whether to create plots. 
+                Defaults to True.
+
+        Returns:
+            output: A tuple containing output from `cr.ax.compute_distance()`, 
+                including distance matrices, figures, etc. 
+                See function documentation.
+
+        """
         output = cr.ax.compute_distance(
             self.adata, **self._columns, **self._keys,
             distance_type=distance_type, method=method,
@@ -486,7 +802,7 @@ class Crispr(object):
              kws_gex=None, kws_clustering=None, 
              kws_gex_violin=None, kws_gex_matrix=None, 
              run_label="main"):
-        
+        """Create a variety of plots."""
         # Setup  Arguments & Empty Output
         figs = {}
         if kws_clustering is None:
@@ -609,7 +925,6 @@ class Crispr(object):
             except Exception as err:
                 warnings.warn(f"{err}\n\nCould not plot GEX violins.")
                 figs["gene_expression_violin"] = err
-                
                 
         # Gene Expression Dot Plot
         figs["gene_expression_dot"] = sc.pl.dotplot(

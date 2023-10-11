@@ -162,7 +162,7 @@ col_guide_rna_data = {
 col_num_umis_data = {
     "CRISPRi_scr": "num_umis",
     "CRISPRi_wgs": np.nan,
-    "CRISPRi_ess": "UMI Count",
+    "CRISPRi_ess": "UMI count",
     "pool": np.nan,
     "bulk": np.nan,
     "screen": np.nan,

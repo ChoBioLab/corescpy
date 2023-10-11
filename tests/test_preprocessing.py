@@ -1,6 +1,5 @@
 import crispr as cr
-import numpy as np
-
+import numpy as np    
 
 class GuideRNATests:
     file = "data/adamson_2016_pilot.h5ad"
@@ -8,16 +7,12 @@ class GuideRNATests:
         "assay": None, "assay_protein": None, "col_cell_type": "celltype",
         "col_gene_symbols": "gene_symbol", "col_sample_id": None, 
         "col_batch": None, "col_perturbation": "perturbation", 
-        "col_guide_rna": "perturbation", "col_num_umis": None, 
+        "col_guide_rna": "perturbation", "col_num_umis": "UMI count", 
         "kws_process_guide_rna": dict(
-            feature_split="", guide_split="_", key_control_patterns=[np.nan]), 
+            feature_split=None, guide_split="_", key_control_patterns=[np.nan]), 
         "col_target_genes": "perturbation", "key_control": "Control", 
-        "key_treatment": "63(mod)_pBA580", "remove_multi_transfected": True}
+        "key_treatment": "KO", "remove_multi_transfected": True}
     
-    for x in kwargs_init["kws_process_guide_rna"]:
-        print(f"{x}='{[x]}'" if isinstance(kws[x], str) else f"{x}={kws[x]}")
-
-
     adata = cr.pp.create_object(file, **kwargs_init)
     
     out = cr.pp.filter_by_guide_counts(

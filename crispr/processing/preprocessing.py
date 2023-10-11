@@ -74,8 +74,9 @@ def combine_matrix_protospacer(
     
     Example
     -------
+    >>> data_dir = "/home/asline01/projects/crispr/examples/data"
     >>> adata = combine_matrix_protospacer(
-    ... "/home/asline01/projects/crispr/examples/data/crispr-screening/HH03, 
+    ... f"{data_dir}/crispr-screening/HH03", 
     ... "filtered_feature_bc_matrix", col_gene_symbols="gene_symbols", 
     ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
     ... col_barcode="cell_barcode")
@@ -83,8 +84,9 @@ def combine_matrix_protospacer(
     Or using create_object(), with directory/file-related arguments in 
     a dictionary passed to the "file" argument:
     
+    >>> data_dir = "/home/asline01/projects/crispr/examples/data"
     >>> adata = create_object(
-    ... dict(directory="/home/asline01/projects/crispr/examples/data/crispr-screening/HH03, 
+    ... dict(directory=f"{data_dir}/crispr-screening/HH03", 
     ... subdirectory_mtx="filtered_feature_bc_matrix", 
     ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv"),
     ... col_barcode="cell_barcode", col_gene_symbols="gene_symbols")
@@ -382,10 +384,17 @@ def detect_guide_targets(adata, col_guide_rna="guide_ID",
     if key_control_patterns is None:
         key_control_patterns = [
             key_control]  # if already converted, pattern=key itself
+    ann = adata.copy()
+    if feature_split is None:
+        feature_split = "|"
+        if ann.obs[col_guide_rna].apply(lambda x: feature_split in x).any():
+            raise ValueError(
+                f"""For single-guide designs, the character {feature_split}
+                cannot be found in any of the guide names ({col_guide_rna})""")
     if isinstance(key_control_patterns, str) or pd.isnull(
-        key_control_patterns):
+        key_control_patterns) and not isinstance(key_control_patterns, list):
         key_control_patterns = [key_control_patterns]
-    targets = adata.obs[col_guide_rna].str.strip(" ").replace("", np.nan)
+    targets = ann.obs[col_guide_rna].str.strip(" ").replace("", np.nan)
     if np.nan in key_control_patterns:  # if NAs mean control sgRNAs
         key_control_patterns = list(pd.Series(key_control_patterns).dropna())
         if len(key_control_patterns) == 0:
@@ -403,10 +412,14 @@ def detect_guide_targets(adata, col_guide_rna="guide_ID",
             feature_split)]) for j, p in enumerate([
                 f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$'])
                         ]  # each entry -> list of target genes
+    # print(key_control_patterns)
     targets = targets.apply(
         lambda x: [i if i in keys_leave else key_control if any(
                 (k in i for k in key_control_patterns)) else i 
             for i in x])  # find control keys among targets
+    # targets = targets.apply(
+    #     lambda x: [[x[0]] if len(x) == 2 and x[1] == "" else x
+    #     for i in x])  # in case all single-transfected
     grnas = targets.to_frame("t").join(nums.to_frame("n")).apply(
         lambda x: [i + guide_split + "_".join(np.array(
             x["n"])[np.where(np.array(x["t"]) == i)[0]]) 
@@ -424,8 +437,15 @@ def find_guide_info(adata, col_guide_rna, col_num_umis=None,
     """Process guide names/counts (see `filter_by_guide_counts` docstring).""" 
     if isinstance(key_control_patterns, str):
         key_control_patterns = [key_control_patterns]
+    ann = adata.copy()
+    if feature_split is None:
+        feature_split = "|"
+        if ann.obs[col_guide_rna].apply(lambda x: feature_split in x).any():
+            raise ValueError(
+                f"""For single-guide designs, the character {feature_split}
+                cannot be found in any of the guide names ({col_guide_rna})""")
     targets, grnas = detect_guide_targets(
-        adata, col_guide_rna=col_guide_rna,
+        ann, col_guide_rna=col_guide_rna,
         feature_split=feature_split, guide_split=guide_split, 
         key_control_patterns=key_control_patterns, 
         key_control=key_control, **kwargs)  # target genes
@@ -434,11 +454,11 @@ def find_guide_info(adata, col_guide_rna, col_num_umis=None,
             targets.to_frame(col_guide_rna + "_list"))
     if col_num_umis is not None:
         tg_info = tg_info.join(
-            adata.obs[[col_num_umis]].apply(
+            ann.obs[[col_num_umis]].apply(
                 lambda x: [float(i) for i in str(x[col_num_umis]).split(
                     feature_split)], axis=1).to_frame(
                         col_num_umis + "_list"))
-    tg_info = adata.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
+    tg_info = ann.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
     tg_info = tg_info.join(tg_info[col_num_umis + "_list"].dropna().apply(
         sum).to_frame(col_num_umis + "_total"))  # total UMIs/cell
     return tg_info
@@ -475,9 +495,12 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             can identify all of those as targeting STAT1. Defaults to "-".
         key_control_patterns (list, optional): List (or single string) 
             of patterns in guide RNA column entries that correspond to a 
-            control. For instance, if control entries in `` include `NEGCNTRL`, 
-            `CNTRL.D`, you may specify 'CNTRL' or ['NEG', 'CNTRL'] 
+            control. For instance, if control entries in the original 
+            `col_guide_rna` column include `NEGCNTRL` and
+            `Control.D`, you should specify ['Control', 'CNTRL'] 
             (assuming no non-control sgRNA names contain those patterns). 
+            If blank entries should be interpreted as control guides, 
+            then include np.nan/numpy.nan in this list.
             Defaults to None, but you almost certainly shouldn't leave this 
             blank if you're using this function.
         key_control (str, optional): The name you want the control 
@@ -503,15 +526,17 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     """
     # Extract Guide RNA Information
     ann = adata.copy()
+    if guide_split is None:
+        guide_split = "$"
     if feature_split is None:
         feature_split = "|"
         if ann.obs[col_guide_rna].apply(lambda x: feature_split in x).any():
             raise ValueError(
                 f"""For single-guide designs, the character {feature_split}
                 cannot be found in any of the guide names ({col_guide_rna})""")
-        ann.obs.loc[:, col_guide_rna] = ann.obs[col_guide_rna].apply(
-            lambda x: np.nan if pd.isnull(x) else str(x) + feature_split
-        )  # add dummy feature_split to make single-guide case work
+        # ann.obs.loc[:, col_guide_rna] = ann.obs[col_guide_rna].apply(
+        #     lambda x: np.nan if pd.isnull(x) else str(x) + feature_split
+        # )  # add dummy feature_split to make single-guide case work
     tg_info = find_guide_info(
         ann.copy(), col_guide_rna, col_num_umis=col_num_umis, 
         feature_split=feature_split, guide_split=guide_split, 
@@ -564,12 +589,16 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     
     # Re-Make String Versions of New Columns with List Entries
     for q in [col_guide_rna, col_num_umis]:  # string versions of list entries 
-        tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply(
+        tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply( 
             lambda x: feature_split.join(str(i) for i in x)
             )  # join names of processed/filtered gRNAs by `feature_split`
+        
+    # DON'T CHANGE THESE!
     rnd = {"g": "Gene", "t": "Total Guides in Cell", 
            "p": "Percent of Cell Guides", "n": "Number in Cell"}
     # Crispr.get_guide_counts() depends on the names in "rnd"
+    
     feats_n = feats_n.reset_index().rename(rnd, axis=1).set_index(
         [feats_n.index.names[0], rnd["g"]])
+    tg_info = tg_info.assign(feature_split=feature_split)
     return tg_info, feats_n
