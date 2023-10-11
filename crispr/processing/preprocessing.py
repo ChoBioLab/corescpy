@@ -511,11 +511,11 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         dict(zip(pd.unique(x[cols[0]]), [sum(np.array(x[cols[1]])[
             np.where(np.array(x[cols[0]]) == i)[0]]) for i in pd.unique(
                 x[cols[0]])]))), axis=1).stack().rename_axis(["bc", "g"])
-
-    # Actual Filtering
     feats_n = feats_n.to_frame("n").join(feats_n.groupby(
         "bc").sum().to_frame("t"))  # sum w/i-cell # gRNAs w/ same target gene 
     feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
+
+    # Actual Filtering
     filt = feats_n.groupby(["bc", "g"]).apply(
         lambda x: np.nan if x.name[1] == key_control and float(
             x["p"]) <= max_percent_umis_control_drop else np.nan if float(
@@ -554,4 +554,9 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply(
             lambda x: feature_split.join(str(i) for i in x)
             )  # join names of processed/filtered gRNAs by `feature_split`
-    return tg_info
+    rnd = {"g": "Gene", "t": "Total Guides in Cell", 
+           "p": "Percent of Cell Guides", "n": "Number in Cell"}
+    # Crispr.get_guide_counts() depends on the names in "rnd"
+    feats_n = feats_n.reset_index().rename(rnd, axis=1).set_index(
+        [feats_n.index.names[0], rnd["g"]])
+    return tg_info, feats_n

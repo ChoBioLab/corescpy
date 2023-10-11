@@ -66,16 +66,18 @@ class Crispr(object):
         self._info["guide_rna"]["keywords"] = kws_process_guide_rna
         if kws_process_guide_rna is not None:
             print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
-            tg_info = cr.pp.filter_by_guide_counts(
+            tg_info, feats_n = cr.pp.filter_by_guide_counts(
                 self.adata[assay] if assay else self.adata, 
                 col_guide_rna, col_num_umis=col_num_umis,
                 key_control=key_control, **kws_process_guide_rna
                 )  # process (e.g., multi-probe names) & filter by sgRNA counts
+            self._info["guide_rna"]["counts_unfiltered"] = feats_n.loc[
+                self.adata.obs.index]
             for q in [col_guide_rna, 
                       col_num_umis]:  # replace w/ processed entries
                 tg_info.loc[:, q] = tg_info[q + "_filtered"]
             if remove_multi_transfected is True:
-                self._info["guide_rna"]["counts_raw"] = tg_info.copy()
+                self._info["guide_rna"]["counts_single_multi"] = tg_info.copy()
                 tg_info = tg_info.loc[tg_info[
                     f"{col_guide_rna}_list_filtered"].apply(
                         lambda x: np.nan if len(x) > 1 else x).dropna().index]
@@ -213,6 +215,62 @@ class Crispr(object):
         #     warnings.warn(f"{err}\n\n\nCould not describe cell counts.")
         self._info["descriptives"].update(desc)
         return figs
+    
+    def get_guide_rna_counts(self, target_gene_idents=None, group_by=None,
+                             col_cell_type=None, **kwargs):
+        """Plot guide RNA counts by cell type & up to 1 other variable."""
+        if isinstance(target_gene_idents, str):
+            target_gene_idents = [target_gene_idents]
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if group_by is None:
+            group_by = [col_cell_type]
+        if isinstance(group_by, str):
+            group_by = [group_by]
+        if group_by is True:
+            group_by = [col_cell_type]
+        if len(group_by) > 1:
+            kwargs.update({"row": group_by[1]})
+        if "share_x" not in kwargs: 
+            kwargs.update({"share_x": True})
+        # sufxs = ["all", "filtered"]
+        # cols = [self._columns[x] for x in ["col_guide_rna", "col_num_umis"]] 
+        # grna = [self._info["guide_rna"]["counts_raw"][
+        #     [f"{i}_list_{x}" for i in cols]] for x in sufxs]
+        # for g in grna:
+        #     g.columns = cols
+        # grna = pd.concat(grna, keys=sufxs, names=["version", "bc"])
+        # dff = grna.loc["all"].apply(
+        #     lambda x: pd.Series([np.nan] * x.shape[0], index=x.index) 
+        #     if len(pd.unique(x[cols[0]])) > 1 else pd.Series(
+        #         pd.unique(x[cols[1]], index=pd.unique(x[cols[0]]))), 
+        #         axis=1).dropna()
+        # dff = dff.apply(
+        #     lambda x: pd.Series(x[cols[1]], index=x[cols[0]]), 
+        #     axis=1).stack().sort_index().rename_axis(
+        #         ["b", "Target"]).to_frame("N gRNAs").join(
+        #             self.adata.obs[[col_cell_type]].rename_axis(
+        #                 "b")).reset_index()
+        dff = self._info["guide_rna"]["counts_unfiltered"].reset_index(
+            "Gene").rename({"Gene": "Target"}, axis=1).join(
+                self.adata.obs[group_by])  # gRNA counts + cell types
+        if target_gene_idents:
+            dff = dff[dff.Target.isin(target_gene_idents)]
+        if group_by is not None:
+            kwargs.update({"col": group_by[0]})
+        if len(group_by) == 1:
+            kwargs.update({"col_wrap": cr.pl.square_grid(len(
+                dff[group_by[0]].unique()))[1]})
+        # fig = sns.catplot(data=dff[dff.Target.isin(
+        #     target_gene_idents)] if target_gene_idents else dff, 
+        #             x="N gRNAs", y="Target", col_wrap=cr.pl.square_grid(
+        #                 len(self.adata.obs[col_cell_type].unique()))[1],
+        #             col=col_cell_type, kind="violin", 
+        #             **kwargs)
+        fig = sns.catplot(data=dff, x="Percent of Cell Guides", y="Target",
+                          kind="violin", **kwargs)
+        fig.fig.suptitle("Guide RNA Counts by Cell Type")
+        return self._info["guide_rna"]["counts_unfiltered"], fig
     
     def preprocess(self, assay=None, assay_protein=None,
                    clustering=False, run_label="main", 
