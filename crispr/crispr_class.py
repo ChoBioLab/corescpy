@@ -436,7 +436,7 @@ class Crispr(object):
             assay_protein = self._assay_protein
         if assay is None:
             assay = self._assay
-        _, figs = cr.pp.process_data(
+        self.adata, figs = cr.pp.process_data(
             self.adata, assay=assay, assay_protein=assay_protein, 
             remove_doublets=remove_doublets, **self._columns,
             **kwargs)  # preprocess

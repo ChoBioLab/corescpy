@@ -120,7 +120,6 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # Initial Information
     print(adata)
-    adata.layers["raw_original"] = adata.X
     if col_gene_symbols == adata.var.index.names[0]:
         col_gene_symbols = None
     if col_cell_type is not None and col_cell_type in adata.obs:
@@ -209,14 +208,15 @@ def process_data(adata, assay=None, assay_protein=None,
             warnings.warn(f"\n\n{'=' * 80}\n\nCould not filter: {err_f}")
     
     # Normalize
+    adata.layers["raw_original"] = adata.X
     print("\n<<< NORMALIZING >>>")
     scales_counts = sc.pp.normalize_total(
         adata[assay] if assay else adata, 
         target_sum=target_sum, inplace=False)  # count-normalize
     adata.layers["log1p_norm"] = sc.pp.log1p(scales_counts["X"], copy=True)
-    adata.X = adata.layers["log1p_norm"]
-    adata.raw = adata  # freeze normalized & filtered adata
+    # adata.X = adata.layers["log1p_norm"]
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
+    adata.raw = adata  # freeze normalized & filtered adata
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     p_1 = seaborn.histplot(adata.obs["total_counts"], bins=100, 
                            kde=False, ax=axes[0])
@@ -228,7 +228,6 @@ def process_data(adata, assay=None, assay_protein=None,
     figs["normalization"] = fig
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
-        
         
     # Variable Genes
     if kws_hvg is not None:
