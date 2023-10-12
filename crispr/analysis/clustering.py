@@ -10,6 +10,7 @@ Preprocessing CRISPR experiment data.
 import pertpy as pt
 import muon as mu
 import warnings
+import celltypist
 import pandas as pd
 import scanpy as sc
 
@@ -118,3 +119,21 @@ def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])
     return ranks, figs
+
+
+def perform_celltypist(adata, model, col_cell_type=None, 
+                       majority_voting=False, **kwargs):
+    """Annotate cell types using CellTypist."""
+    try:
+        mod = celltypist.models.Model.load(
+            model=model if ".pkl" in model else model + ".pkl")  # load model
+    except Exception as err:
+        print(f"{err}\n\nFailed to load CellTypist model {model}. Try:\n\n")
+        print(celltypist.models.models_description())
+    preds = celltypist.annotate(
+        adata, model=model, majority_voting=majority_voting, **kwargs)  # run
+    if col_cell_type is not None:  # compare to a different cell type label
+        celltypist.dotplot(preds, use_as_reference=col_cell_type, 
+                           use_as_prediction="predicted_labels")
+    return preds
+

@@ -13,10 +13,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 import pertpy as pt
-import pandas as pd
-import numpy as np
 import crispr as cr
 from crispr.defaults import (names_layers)
+import pandas as pd
+import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -474,6 +474,15 @@ class Crispr(object):
                 self.figures[run_label] = {}
             self.figures[run_label].update({"clustering": figs_cl})
         return figs_cl
+    
+    def annotate_clusters(self, model, **kwargs):
+        preds = {}
+        for m in [True, False]:
+            lab = "majority_voting" if m is True else "predicted_labels"
+            preds[lab] = cr.ax.perform_celltypist(
+                self.adata[self._assay] if self._assay else self.adata,
+                model, majority_voting=m, **kwargs)
+        return preds
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 
