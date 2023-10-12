@@ -15,6 +15,7 @@ import muon
 import warnings
 import scipy
 import seaborn
+import matplotlib.pyplot as plt
 import collections      
 import scipy.sparse as sp_sparse
 import h5py
@@ -119,6 +120,7 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # Initial Information
     print(adata)
+    adata.layers["raw_original"] = adata.X
     if col_gene_symbols == adata.var.index.names[0]:
         col_gene_symbols = None
     if col_cell_type is not None and col_cell_type in adata.obs:
@@ -197,7 +199,6 @@ def process_data(adata, assay=None, assay_protein=None,
         if assay is None:
             adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts, :]
             adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
-            adata.raw = adata  # freeze normalized & filtered adata
         else:
             adata[assay] = adata[assay][
                 adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
@@ -209,11 +210,25 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # Normalize
     print("\n<<< NORMALIZING >>>")
-    sc.pp.normalize_total(adata[assay] if assay else adata, 
-                          target_sum=target_sum)  # count-normalize
+    scales_counts = sc.pp.normalize_total(
+        adata[assay] if assay else adata, 
+        target_sum=target_sum, inplace=False)  # count-normalize
+    adata.layers["log1p_norm"] = sc.pp.log1p(scales_counts["X"], copy=True)
+    adata.X = adata.layers["log1p_norm"]
+    adata.raw = adata  # freeze normalized & filtered adata
     sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    p_1 = seaborn.histplot(adata.obs["total_counts"], bins=100, 
+                           kde=False, ax=axes[0])
+    axes[0].set_title("Total Counts")
+    p_2 = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
+                           kde=False, ax=axes[1])
+    axes[1].set_title("Shifted Logarithm")
+    plt.show()
+    figs["normalization"] = fig
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
+        
         
     # Variable Genes
     if kws_hvg is not None:
