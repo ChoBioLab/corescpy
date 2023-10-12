@@ -476,27 +476,37 @@ class Crispr(object):
         return figs_cl
     
     def annotate_clusters(self, model, **kwargs):
-        preds = {}
-        for m in [True, False]:
-            lab = "majority_voting" if m is True else "predicted_labels"
-            preds[lab] = cr.ax.perform_celltypist(
-                self.adata[self._assay] if self._assay else self.adata,
-                model, majority_voting=m, **kwargs)
+        """Use CellTypist to annotate clusters."""
+        preds = cr.ax.perform_celltypist(
+            self.adata[self._assay] if self._assay else self.adata,
+            model, majority_voting=True, **kwargs)  # annotate
+        self.results["celltypist"] = preds
+        self.adata.obs = self.adata.obs.join(preds.predicted_labels, 
+                                             lsuffix="_last")
+        if self._assay:
+            self.adata[self._assay].obs = self.adata[self._assay].obs.join(
+                preds.predicted_labels)
+        sc.pl.umap(self.adata, color=[self._columns["col_cell_type"]] + list(
+            preds.predicted_labels.columns))  # UMAP
         return preds
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 
-                     plot=True, **kwargs):
+                     plot=True, col_cell_type=None, **kwargs):
         if assay is None:
             assay = self._assay
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
         marks, figs_m = cr.ax.find_markers(
             self.adata, assay=assay, method=method, n_genes=n_genes, 
             layer=layer, key_reference=key_reference, plot=plot,
-            col_cell_type=self._columns["col_cell_type"], **kwargs)
+            col_cell_type=col_cell_type, **kwargs)
         print(marks)
         return marks, figs_m
         
-    def run_mixscape(self, assay=None, target_gene_idents=True, 
+    def run_mixscape(self, assay=None, col_cell_type=None,
+                     col_perturbation=None,
+                     target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
                      run_label="main",
                      test=False, plot=True, **kwargs):
@@ -521,6 +531,8 @@ class Crispr(object):
                 Allowing specification here rather than just 
                 using `self._columns["col_perturbation"]`
                 is just meant to allow the user maximum flexibility.
+            col_cell_type (str, optional): Column name in `.obs` for cell type.
+                If unspecified, will use `self._columns["col_cell_type"]`.
             col_split_by (str, optional): `adata.obs` column name of 
                 sample categories to calculate separately (e.g., replicates).
                 Defaults to None.
@@ -580,9 +592,14 @@ class Crispr(object):
         """
         if assay is None:
             assay = self._assay
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if col_perturbation is None:
+            col_perturbation = self._columns["col_perturbation"]
         figs_mix = cr.ax.perform_mixscape(
             self.adata.copy() if test is True else self.adata, assay=assay,
-            **self._columns, **self._keys,
+            **{**self._columns, "col_perturbation": col_perturbation,
+               "col_cell_type": col_cell_type}, **self._keys,
             layer_perturbation=self._layer_perturbation, 
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
@@ -593,7 +610,7 @@ class Crispr(object):
             self.figures[run_label].update({"mixscape": figs_mix})
         return figs_mix
     
-    def run_augur(self, assay=None, 
+    def run_augur(self, assay=None, col_cell_type=None,
                   col_perturbation=None, key_treatment=None,
                   augur_mode="default", classifier="random_forest_classifier", 
                   kws_augur_predict=None, n_folds=3,
@@ -667,6 +684,8 @@ class Crispr(object):
             key_treatment = self._keys["key_treatment"]
         if col_perturbation is None:
             col_perturbation = self._columns["col_perturbation"]
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
         if n_threads is True:
             n_threads = os.cpu_count() - 1 # use available CPUs - 1
         if assay is None:
@@ -683,7 +702,8 @@ class Crispr(object):
             augur_mode=augur_mode, subsample_size=subsample_size,
             select_variance_features=select_variance_features, 
             n_folds=n_folds,
-            **{**self._columns, "col_perturbation": col_perturbation},  
+            **{**self._columns, "col_perturbation": col_perturbation,
+               "col_cell_type": col_cell_type},  
             kws_augur_predict=kws_augur_predict,
             key_control=self._keys["key_control"], key_treatment=key_treatment,
             layer=self._layer_perturbation,
@@ -726,9 +746,15 @@ class Crispr(object):
                 See function documentation.
 
         """
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if col_perturbation is None:
+            col_perturbation = self._columns["col_perturbation"]
         output = cr.ax.compute_distance(
-            self.adata, **self._columns, **self._keys,
-            distance_type=distance_type, method=method,
+            self.adata, **{
+                **self._columns, "col_perturbation": col_perturbation,
+                "col_cell_type": col_cell_type}, 
+            **self._keys, distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
             plot=plot)
         if plot is True:
