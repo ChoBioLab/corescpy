@@ -109,16 +109,16 @@ def process_data(adata, assay=None, assay_protein=None,
                  col_gene_symbols=None,
                  col_cell_type=None,
                  # remove_doublets=True,
-                 target_sum=1e4,
                  outlier_mads=None,
                  cell_filter_pmt=5,
                  cell_filter_ncounts=None, 
                  cell_filter_ngene=None,
                  gene_filter_ncell=None,
-                 gene_count_range=None,
-                 scale=10,  # or scale=True for no clipping
+                 target_sum=1e4,
+                 logarithmize=True,
+                 kws_hvg=True,
+                 scale=10, kws_scale=None,
                  regress_out=regress_out_vars, 
-                 kws_hvg=None, kws_scale=None,
                  **kwargs):
     """
     Perform various data processing steps.
@@ -165,10 +165,21 @@ def process_data(adata, assay=None, assay_protein=None,
             If True, filtering criteria are derived from the data
                 (i.e., outlier calculation).
             Defaults to None (no filtering on this property performed).
-        scale (int or bool, optional): The scaling factor or True for no clipping. Defaults to 10.
-        regress_out (list or None, optional): The variables to regress out. Defaults to regress_out_vars.
-        kws_hvg (dict or bool, optional): The keyword arguments for detecting variable genes or True for default arguments. Defaults to None.
-        kws_scale (dict, optional): The keyword arguments for scaling. Defaults to None.
+        logarithmize (bool, optional): Whether to log-transform 
+            the data after total-count normalization. Defaults to True.
+        kws_hvg (dict or bool, optional): The keyword arguments for 
+            detecting variable genes or True for default arguments. 
+            To calculate HVGs without filtering by them, include an 
+            extra argument in this dictionary: {"filter": False}.
+            That way, the highly_variable column is created and can
+            be used in clustering, but non-HVGs will be retained in 
+            the data for other uses. Defaults to True.
+        scale (int or bool, optional): The scaling factor or True 
+            for no clipping. Defaults to 10.
+        kws_scale (dict, optional): The keyword arguments for 
+            scaling. Defaults to None.
+        regress_out (list or None, optional): The variables to 
+            regress out. Defaults to regress_out_vars.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -232,35 +243,38 @@ def process_data(adata, assay=None, assay_protein=None,
     #     # TODO: doublets
     
     # Plot Post-Filtering Metrics + Shifted Logarithm
-    scales_counts = sc.pp.normalize_total(
-        adata[assay] if assay else adata, target_sum=target_sum, 
-        inplace=False)  # count-normalize (not in-place yet)
-    if assay:
-        adata[assay].layers["log1p_norm"] = sc.pp.log1p(
-            scales_counts["X"], copy=True)  # set as layer
-    else:
-        adata.layers["log1p_norm"] = sc.pp.log1p(
-            scales_counts["X"], copy=True)  # set as layer
-    fff, axes = plt.subplots(1, 2, figsize=(10, 5))
-    _ = seaborn.histplot((adata[assay] if assay else adata).obs[
-        "total_counts"], bins=100, kde=False, ax=axes[0])
-    axes[0].set_title("Total Counts (Post-Filtering)")
-    _ = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
-                         kde=False, ax=axes[1])
-    axes[1].set_title("Shifted Logarithm")
-    plt.show()
-    figs["normalization"] = fff
+    # scales_counts = sc.pp.normalize_total(
+    #     adata[assay] if assay else adata, target_sum=target_sum, 
+    #     inplace=False)  # count-normalize (not in-place yet)
+    # if assay:
+    #     adata[assay].layers["log1p_norm"] = sc.pp.log1p(
+    #         scales_counts["X"], copy=True)  # set as layer
+    # else:
+    #     adata.layers["log1p_norm"] = sc.pp.log1p(
+    #         scales_counts["X"], copy=True)  # set as layer
+    # fff, axes = plt.subplots(1, 2, figsize=(10, 5))
+    # _ = seaborn.histplot((adata[assay] if assay else adata).obs[
+    #     "total_counts"], bins=100, kde=False, ax=axes[0])
+    # axes[0].set_title("Total Counts (Post-Filtering)")
+    # _ = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
+    #                      kde=False, ax=axes[1])
+    # axes[1].set_title("Shifted Logarithm")
+    # plt.show()
+    # figs["normalization"] = fff
     
     # Normalize (Actually Modify Object Now)
-    print("\n<<< LOG-NORMALIZING >>>")
     if target_sum is not None:
-        scales_counts = sc.pp.normalize_total(
+        print("\n<<< TOTAL-COUNT-NORMALIZING >>>")
+        sc.pp.normalize_total(
             adata[assay] if assay else adata, target_sum=target_sum, 
-            inplace=False)  # count-normalize (not in-place yet)
-    if assay:
-        adata[assay] = sc.pp.log1p(adata[assay].layers["log1p_norm"])
+            inplace=True)  # count-normalize (not in-place yet)
     else:
-        adata = sc.pp.log1p(adata.layers["log1p_norm"])
+        print("\n<<< ***NOT*** TOTAL-COUNT-NORMALIZING >>>")
+    if logarithmize is True:
+        print("\n<<< LOG-NORMALIZING >>>")
+        sc.pp.log1p(adata[assay] if assay else adata)
+    else:
+        print("\n<<< ***NOT*** LOG-NORMALIZING >>>")
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
         
@@ -275,14 +289,17 @@ def process_data(adata, assay=None, assay_protein=None,
         print("\n<<< DETECTING VARIABLE GENES >>>")
         if kws_hvg is True:
             kws_hvg = {}
+        filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else True
         sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
                                     **kws_hvg)  # highly variable genes 
         try:
-            if assay is None:
-                adata= adata[:, adata.var.highly_variable]  # filter by HVGs
-            else:
-                adata[assay]= adata[:, adata[
-                    assay].var.highly_variable]  # filter by HVGs
+            if filter_hvgs is True:
+                if assay is None:
+                    adata = adata[:, adata.var.highly_variable
+                                  ]  # filter by HVGs
+                else:
+                    adata[assay]= adata[:, adata[
+                        assay].var.highly_variable]  # filter by HVGs
         except (TypeError, IndexError) as err_h:
                 warnings.warn(f"""\n\n{'=' * 80}\n\n Could not subset 
                               by highly variable genes: {err_h}""")

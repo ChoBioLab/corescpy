@@ -426,6 +426,7 @@ class Crispr(object):
             self.adata[self._assay] = value
         else:
             self.adata = value
+            
     @property
     def obs(self):
         """Get `.obs` attribute of AnnData."""
@@ -437,7 +438,7 @@ class Crispr(object):
             
     @property
     def uns(self):
-        """Get `.uns` attribute of .adata's gene expression modality."""
+        """Get `.uns` attribute of adata's gene expression modality."""
         return self.adata[self._assay].uns if self._assay else self.adata.uns
 
     @uns.setter
