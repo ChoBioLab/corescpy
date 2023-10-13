@@ -148,3 +148,42 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
         os.system(f"{'cp' if overwrite is False else 'mv'} {f} {new_path}")
         if os.path.splitext(new_path)[-1] == ".gz" and unzip is True:
             os.system(f"gunzip {new_path}")  # unzip if needed
+
+
+def get_matrix_from_h5(file, gex_genes_return=None):
+    """Get matrix from 10X h5 file (modified from 10x code)."""
+    FeatureBCMatrix = collections.namedtuple("FeatureBCMatrix", [
+        "feature_ids", "feature_names", "barcodes", "matrix"])
+    with h5py.File(file) as f:
+        if u"version" in f.attrs:
+            version = f.attrs["version"]
+            if version > 2:
+                print(f"Version = {version}")
+                raise ValueError(f"HDF5 format version version too new.")
+        else:
+            raise ValueError(f"HDF5 format version ({version}) too old.")
+        feature_ids = [x.decode("ascii", "ignore") 
+                       for x in f["matrix"]["features"]["id"]]
+        feature_names = [x.decode("ascii", "ignore") 
+                         for x in f["matrix"]["features"]["name"]]        
+        barcodes = list(f["matrix"]["barcodes"][:])
+        matrix = sp_sparse.csr_matrix((f["matrix"]["data"], 
+                                       f["matrix"]["indices"], 
+                                       f["matrix"]["indptr"]), 
+                                      shape=f["matrix"]["shape"])
+        fbm = FeatureBCMatrix(feature_ids, feature_names, barcodes, matrix)
+        if gex_genes_return is not None:
+            gex = {}
+            for g in gex_genes_return:
+                try:
+                    gene_index = fbm.feature_names.index(g)
+                except ValueError:
+                    raise Exception(f"{g} not found in list of gene names.")
+                gex.update({g: fbm.matrix[gene_index, :].toarray(
+                    ).squeeze()})  # gene expression
+        else:
+            gex = None
+        barcodes = [x.tostring().decode() for x in fbm.barcodes]
+        genes = pd.Series(fbm.feature_names).to_frame("gene").join(
+            pd.Series(fbm.feature_ids).to_frame("gene_ids"))
+    return fbm, gex, barcodes, genes

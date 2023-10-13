@@ -12,6 +12,11 @@ DIR = os.path.join(DIR, "data")
 
 files_data = {
     "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH03"),
+    "CRISPRi_scr_multi": {
+        "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
+        "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
+        "HH-Hu-CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4")
+    },
     "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS) 
     "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq
     "pool": f"{DIR}/norman_2019_raw.h5ad",
@@ -28,6 +33,7 @@ files_data = {
 
 col_cell_type_data = {
     "CRISPRi_scr": "leiden",  # because unannotated
+    "CRISPRi_scr_multi": "majority_voting",
     "CRISPRi_wgs": "leiden",
     "CRISPRi_ess": "leiden",
     "pool": "",
@@ -42,6 +48,7 @@ col_cell_type_data = {
 
 col_gene_symbols_data = {
     "CRISPRi_scr": "gene_symbols",
+    "CRISPRi_scr_multi": "gene_symbols",
     "CRISPRi_wgs": "gene",  # ?
     "CRISPRi_ess": "gene_symbols",
     "pool": "gene_symbols",
@@ -56,6 +63,7 @@ col_gene_symbols_data = {
 
 assays_data = {
     "CRISPRi_scr": None,
+    "CRISPRi_scr_multi": None,
     "CRISPRi_wgs": None,
     "CRISPRi_ess": None,
     "pool": None,
@@ -70,6 +78,7 @@ assays_data = {
 
 col_split_by_data = {
     "CRISPRi_scr": None,
+    "CRISPRi_scr_multi": None,
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": None,
     "pool": np.nan,
@@ -83,6 +92,7 @@ col_split_by_data = {
 
 col_perturbed_data = {
     "CRISPRi_scr": "perturbation",
+    "CRISPRi_scr_multi": "perturbation",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "perturbation",
     "pool": np.nan,
@@ -96,6 +106,7 @@ col_perturbed_data = {
 
 key_control_data = {
     "CRISPRi_scr": "NT",
+    "CRISPRi_scr_multi": "NT",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "NT",  # must modify NaNs in guide_ids column
     "pool": np.nan,
@@ -109,6 +120,7 @@ key_control_data = {
 
 key_treatment_data = {
     "CRISPRi_scr": "KD",
+    "CRISPRi_scr_multi": "KD",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": None,
     "pool": np.nan,
@@ -135,6 +147,7 @@ key_treatment_data = {
 
 col_condition_data = {
     "CRISPRi_scr": "target_gene_name",
+    "CRISPRi_scr_multi": "target_gene_name",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "target_gene",
     "pool": np.nan,
@@ -148,6 +161,7 @@ col_condition_data = {
 
 col_guide_rna_data = {
     "CRISPRi_scr": "feature_call",
+    "CRISPRi_scr_multi": "feature_call",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "guide_ids",
     "pool": np.nan,
@@ -161,6 +175,7 @@ col_guide_rna_data = {
 
 col_num_umis_data = {
     "CRISPRi_scr": "num_umis",
+    "CRISPRi_scr_multi": "num_umis",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "UMI count",
     "pool": np.nan,
@@ -187,6 +202,7 @@ col_num_umis_data = {
 
 col_sample_id_data = {
     "CRISPRi_scr": None,
+    "CRISPRi_scr_multi": (None, "orig.ident"),
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "gemgroup",
     "pool": np.nan,
@@ -200,6 +216,7 @@ col_sample_id_data = {
 
 col_batch_data = {
     "CRISPRi_scr": None,
+    "CRISPRi_scr_multi": None,
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "gemgroup",
     "pool": np.nan,
@@ -214,6 +231,8 @@ col_batch_data = {
 kws_process_guide_rna_data = {
     "CRISPRi_scr": dict(feature_split="|", guide_split="-", 
                         key_control_patterns=["CTRL"]),
+    "CRISPRi_scr_multi": dict(feature_split="|", guide_split="-",
+                              key_control_patterns=["CTRL"]),
     "CRISPRi_wgs": None,
     "CRISPRi_ess": dict(feature_split=",", guide_split="-", 
                         key_control_patterns=["CTRL"]),

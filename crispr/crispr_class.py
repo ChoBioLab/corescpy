@@ -58,9 +58,23 @@ class Crispr(object):
                     - an AnnData or MuData object (e.g., already 
                         loaded with Scanpy or Muon), or
                     - a dictionary containing keyword arguments to 
-                        pass to  `crispr.pp.combine_matrix_protospacer()` 
-                    (in order to load information about perturbations 
-                    from other file(s); see function documentation).
+                        pass to `crispr.pp.combine_matrix_protospacer` 
+                        (in order to load information about 
+                        perturbations from other file(s); see 
+                        function documentation), or
+                    - to concatenate multiple datasets, a dictionary 
+                        (keyed by your desired subject/sample names 
+                        to be used in `col_sample_id`) consisting 
+                        of whatever objects you would pass to 
+                        `create_object()`'s `file` argument for the 
+                        individual objects. You must also specify 
+                        `col_sample` (a tuple as described in the 
+                        documentation below). The other arguments 
+                        passed to the `crispr.pp.create_object()` 
+                        function (e.g., `col_gene_symbols`) can be 
+                        specified as normal if they are common across 
+                        samples; otherwise, specify them as lists in 
+                        the same order as the `file` dictionary. 
             assay (str, optional): Name of the gene expression assay if 
                 loading a multi-modal data object (e.g., "rna"). 
                 Defaults to None.
@@ -79,8 +93,17 @@ class Crispr(object):
                 - pre-existing in data (e.g., pre-run clustering column 
                     or manual annotations), or 
                 - expected to be created via `Crispr.cluster()`. 
-            col_sample_id (str, optional): Column in `.obs` with sample 
-                IDs. Defaults to "standard_sample_id".
+            col_sample_id (str or tuple, optional): Column in `.obs` 
+                with sample IDs. Defaults to "standard_sample_id". 
+                If this column does not yet exist in your data and 
+                needs to be created by concatenating datasets, 
+                you must provide `file_path` as a dictionary keyed
+                by desired `col_sample_id` values as well as signal
+                that this needs to happen by specifying col_sample_id
+                as a tuple, with the second element containing a
+                dictionary of keyword arguments to pass to the
+                concatenation preprocessing function (e.g., batch
+                effect removal).
             col_batch (_type_, optional):  Column in `.obs` with batch 
                 IDs. Defaults to None.
             col_condition (str, optional): Either the name of an 
@@ -294,9 +317,28 @@ class Crispr(object):
                       "guide_rna": {}}  # extra info to store by methods
         
         # Create Object & Store Raw Counts
+        if isinstance(col_sample_id, (list, tuple)):  # multi-sample
+            kws_process_batches, col_sample_id = col_sample_id
+            col_sample_arg = col_sample_id
+        else:  # only 1 sample
+            kws_process_batches = None
+            col_sample_arg = None  # even if col_sample_id is specified...
+            # ...we don't want to pass to create_object because it will
+            # assume we need that column created through concatenation
+            # when it's actually already in the dataset
         self.adata = cr.pp.create_object(
-            self._file_path, assay=None, col_gene_symbols=col_gene_symbols)
+            self._file_path, assay=None, col_gene_symbols=col_gene_symbols,
+            col_sample_id=col_sample_arg, 
+            kws_process_guide_rna={
+                **kws_process_guide_rna,
+                "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis, 
+                "key_control": key_control, 
+                "col_guide_rna_new": col_condition,
+                "remove_multi_transfected": remove_multi_transfected}
+            if kws_process_guide_rna else None)  # make AnnData
         self.rna.layers['counts'] = self.rna.X.copy()
+        if kws_process_guide_rna is not None:
+            self.rna.loc[:, col_condition] = self.rna.uns["guide_rna"]
         
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [
@@ -322,52 +364,52 @@ class Crispr(object):
         
         # Process Guide RNAs
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-        if kws_process_guide_rna is not None:
-            print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
-            tg_info, feats_n = cr.pp.filter_by_guide_counts(
-                self.rna, col_guide_rna, col_num_umis=col_num_umis,
-                key_control=key_control, **kws_process_guide_rna
-                )  # process (e.g., multi-probe names) & filter by # gRNA
-            kws_process_guide_rna[
-                "feature_split"] = tg_info.feature_split.iloc[0]
-            feature_split = kws_process_guide_rna["feature_split"]
-            self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-            self.info["guide_rna"]["counts_unfiltered"] = feats_n
-            for q in [col_guide_rna, 
-                      col_num_umis]:  # replace w/ processed entries
-                tg_info.loc[:, q] = tg_info[q + "_filtered"]
-            if remove_multi_transfected is True:
-                self.info["guide_rna"]["counts_single_multi"] = tg_info.copy()
-                tg_info = tg_info.loc[tg_info[
-                    f"{col_guide_rna}_list_filtered"].apply(
-                        lambda x: np.nan if len(x) > 1 else x).dropna().index] 
-            self.info["guide_rna"]["counts"] = tg_info.copy()
-            self.rna.obs = self.rna.obs.join(tg_info[
-                f"{col_guide_rna}_list_all"].apply(
-                    lambda x: feature_split.join(x) if isinstance(
-                        x, (np.ndarray, list, set, tuple)) else x).to_frame(
-                            col_guide_rna), lsuffix="_original"
-                        )  # processed full gRNA string without guide_split...
-            self.rna.obs = self.rna.obs.join(
-                tg_info[col_guide_rna].to_frame(col_condition), 
-                lsuffix="_original")  # condition column=filtered target genes
-            self.rna.obs = self.rna.obs.join(
-                tg_info[col_num_umis].to_frame(col_num_umis), 
-                lsuffix="_original")  # filtered UMI (summed across same gene)
-            if remove_multi_transfected is True:
-                self.rna = self.rna[~self.rna.obs[col_condition].isnull()]
-        if col_guide_rna in self.rna.obs:  # i.e., if CRISPR...
-            if col_condition not in self.rna.obs:  # must create target col? 
-                self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_guide_rna].copy()  # target gene column = gRNA column
-        else:  # if other experimental design (e.g., drug)...
-            if col_guide_rna is not None and col_guide_rna in self.rna.obs:
-                warnings.warn("`kws_process_guide_rna=None` "
-                              "HIGHLY DISCOURAGED for CRISPR designs.")
-                if remove_multi_transfected is True:
-                    warnings.warn("`kws_process_guide_rna=None` "
-                                "so unable to drop multi-transfected cells.")
-            
+        # if kws_process_guide_rna is not None:
+        #     print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
+        #     tg_info, feats_n = cr.pp.filter_by_guide_counts(
+        #         self.rna, col_guide_rna, col_num_umis=col_num_umis,
+        #         key_control=key_control, **kws_process_guide_rna
+        #         )  # process (e.g., multi-probe names) & filter by # gRNA
+        #     kws_process_guide_rna[
+        #         "feature_split"] = tg_info.feature_split.iloc[0]
+        #     feature_split = kws_process_guide_rna["feature_split"]
+        #     self.info["guide_rna"]["keywords"] = kws_process_guide_rna
+        #     self.info["guide_rna"]["counts_unfiltered"] = feats_n
+        #     for q in [col_guide_rna, 
+        #               col_num_umis]:  # replace w/ processed entries
+        #         tg_info.loc[:, q] = tg_info[q + "_filtered"]
+        #     if remove_multi_transfected is True:
+        #         self.info["guide_rna"]["counts_single_multi"] = tg_info.copy()
+        #         tg_info = tg_info.loc[tg_info[
+        #             f"{col_guide_rna}_list_filtered"].apply(
+        #                 lambda x: np.nan if len(x) > 1 else x).dropna().index] 
+        #     self.info["guide_rna"]["counts"] = tg_info.copy()
+        #     self.rna.obs = self.rna.obs.join(tg_info[
+        #         f"{col_guide_rna}_list_all"].apply(
+        #             lambda x: feature_split.join(x) if isinstance(
+        #                 x, (np.ndarray, list, set, tuple)) else x).to_frame(
+        #                     col_guide_rna), lsuffix="_original"
+        #                 )  # processed full gRNA string without guide_split...
+        #     self.rna.obs = self.rna.obs.join(
+        #         tg_info[col_guide_rna].to_frame(col_condition), 
+        #         lsuffix="_original")  # condition column=filtered target genes
+        #     self.rna.obs = self.rna.obs.join(
+        #         tg_info[col_num_umis].to_frame(col_num_umis), 
+        #         lsuffix="_original")  # filtered UMI (summed across same gene)
+        #     if remove_multi_transfected is True:
+        #         self.rna = self.rna[~self.rna.obs[col_condition].isnull()]
+        # if col_guide_rna in self.rna.obs:  # i.e., if CRISPR...
+        #     if col_condition not in self.rna.obs:  # must create target col? 
+        #         self.rna.obs.loc[:, col_condition] = self.rna.obs[
+        #             col_guide_rna].copy()  # target gene column = gRNA column
+        # else:  # if other experimental design (e.g., drug)...
+        #     if col_guide_rna is not None and col_guide_rna in self.rna.obs:
+        #         warnings.warn("`kws_process_guide_rna=None` "
+        #                       "HIGHLY DISCOURAGED for CRISPR designs.")
+        #         if remove_multi_transfected is True:
+        #             warnings.warn("`kws_process_guide_rna=None` "
+        #                         "so unable to drop multi-transfected cells.")
+
         # Binary Perturbation Column
         if (col_perturbed not in 
             self.rna.obs):  # if col_perturbed doesn't exist yet...
@@ -392,6 +434,7 @@ class Crispr(object):
                               key_treatment=key_treatment,
                               key_nonperturbed=key_nonperturbed)
             for q in [self._columns, self._keys]:
+                print("\n\n")
                 cr.tl.print_pretty_dictionary(q)
             print("\n\n", self.rna)
         

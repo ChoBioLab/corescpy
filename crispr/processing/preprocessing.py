@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import collections      
 import scipy.sparse as sp_sparse
 import h5py
-# import anndata
+from anndata import AnnData
 import crispr as cr
 import pandas as pd
 import numpy as np
@@ -28,10 +28,41 @@ import numpy as np
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
-                  col_barcode=None, **kwargs):
-    """Create object from Scanpy- or Muon-compatible file."""
+                  col_barcode=None, col_sample_id=None, 
+                  kws_process_guide_rna=None, **kwargs):
+    """
+    Create object from Scanpy- or Muon-compatible file(s).
+    
+    Provide as a dictionary (keyed by your desired 
+    subject/sample names) consisting of whatever objects you would pass 
+    to `create_object()`'s `file` argument if you want to concatenate
+    multiple datasets. You must also specify col_sample (a string
+    with the desired name of the sample/subject ID column). The 
+    other arguments of this function can be specified as normal
+    if they are common across samples; otherwise, specify them as 
+    lists in the same order as the `file` dictionary.
+    """
     # extension = os.path.splitext(file)[1]
-    if isinstance(file, (str, os.PathLike)) and os.path.splitext(
+    if col_sample_id is not None:  # concatenate multiple datasets
+        adatas = [None] * len(file)
+        batch_categories = list(file.keys())  # keys = sample IDs
+        file = [file[f] for f in file]  # turn to list 
+        for f in range(len(file)):
+            print(f"\t*** Creating object {f + 1} of {len(file)}")
+            adatas[f] = cr.pp.create_object(
+                file[f], assay=None if isinstance(assay, str) or assay is None
+                else assay[f], col_gene_symbols=col_gene_symbols 
+                if isinstance(col_gene_symbols, str) or 
+                col_gene_symbols is None else assay[f])
+            if kws_process_guide_rna is not None:
+                kpr = kws_process_guide_rna[f] if isinstance(
+                    kws_process_guide_rna, list) else kws_process_guide_rna
+                adatas[f] = cr.pp.process_guide_rna(adatas[f].copy(), **kpr)
+        adata = AnnData.concatenate(
+            *adatas, join="inner", batch_key=col_sample_id, uns_merge="same", 
+            index_unique="-",  batch_categories=batch_categories,
+            fill_value=None)  # concatenate adata objects
+    elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
         print(f"\n<<< LOADING FILE {file} with muon.read()>>>")
         adata = muon.read(file)
@@ -60,7 +91,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     if col_gene_symbols not in adata.var.columns:
         adata.var = adata.var.rename_axis(col_gene_symbols)
     if assay is not None:
-        adata = adata[assay]  # subset by assay if desired 
+        adata = adata[assay]  # subset by assay if desired
     print("\n\n", adata)
     return adata
 
@@ -501,59 +532,14 @@ def filter_qc(adata, outlier_mads=None,
         return adata
         
 
-
 def explore_h5_file(file):
     """Explore an H5 file's format (thanks to ChatGPT)."""
     with h5py.File(file, "r") as h5_file:
-        # List all top-level groups in the HDF5 file
         top_level_groups = list(h5_file.keys())
-        # Explore the groups and datasets within each group
         for group_name in top_level_groups:
-            group = h5_file[group_name]
             print(f"Group: {group_name}")
-            # List datasets within the group
-            datasets = list(group.keys())
-            for dataset_name in datasets:
-                print(f"  Dataset: {dataset_name}")
-
-
-def get_matrix_from_h5(file, gex_genes_return=None):
-    """Get matrix from 10X h5 file (modified from 10x code)."""
-    FeatureBCMatrix = collections.namedtuple("FeatureBCMatrix", [
-        "feature_ids", "feature_names", "barcodes", "matrix"])
-    with h5py.File(file) as f:
-        if u"version" in f.attrs:
-            version = f.attrs["version"]
-            if version > 2:
-                print(f"Version = {version}")
-                raise ValueError(f"HDF5 format version version too new.")
-        else:
-            raise ValueError(f"HDF5 format version ({version}) too old.")
-        feature_ids = [x.decode("ascii", "ignore") 
-                       for x in f["matrix"]["features"]["id"]]
-        feature_names = [x.decode("ascii", "ignore") 
-                         for x in f["matrix"]["features"]["name"]]        
-        barcodes = list(f["matrix"]["barcodes"][:])
-        matrix = sp_sparse.csr_matrix((f["matrix"]["data"], 
-                                       f["matrix"]["indices"], 
-                                       f["matrix"]["indptr"]), 
-                                      shape=f["matrix"]["shape"])
-        fbm = FeatureBCMatrix(feature_ids, feature_names, barcodes, matrix)
-        if gex_genes_return is not None:
-            gex = {}
-            for g in gex_genes_return:
-                try:
-                    gene_index = fbm.feature_names.index(g)
-                except ValueError:
-                    raise Exception(f"{g} not found in list of gene names.")
-                gex.update({g: fbm.matrix[gene_index, :].toarray(
-                    ).squeeze()})  # gene expression
-        else:
-            gex = None
-        barcodes = [x.tostring().decode() for x in fbm.barcodes]
-        genes = pd.Series(fbm.feature_names).to_frame("gene").join(
-            pd.Series(fbm.feature_ids).to_frame("gene_ids"))
-    return fbm, gex, barcodes, genes
+            for g in h5_file[group_name]:
+                print(f"  Dataset: {g}")
 
 
 def assign_guide_rna(adata, col_num_umis="num_umis", 
@@ -766,6 +752,11 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         feature_split=feature_split, guide_split=guide_split, 
         key_control_patterns=key_control_patterns, 
         key_control=key_control, **kwargs)
+    if tg_info[col_guide_rna].isnull().any() and (~any(
+        [pd.isnull(x) for x in key_control_patterns])):
+        warnings.warn(f"NaNs present in {col_guide_rna} column. "
+                      f"Dropping {tg_info[col_guide_rna].isnull().sum()} "
+                      f"out of {tg_info.shape[0]} rows.")
 
     # Sum Up gRNA UMIs
     cols = [col_guide_rna + "_list", col_num_umis + "_list"]
@@ -826,3 +817,45 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         [feats_n.index.names[0], rnd["g"]])
     tg_info = tg_info.assign(feature_split=feature_split)
     return tg_info, feats_n
+
+def process_guide_rna(adata, col_guide_rna="guide_id", 
+                      col_num_umis="UMI count",
+                      key_control="NT", col_guide_rna_new="target", 
+                      **kws_process_guide_rna):
+    """Process guide RNA & add results to `.uns`."""
+    print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
+    adata.uns["guide_rna"] = {}
+    remove_multi_transfected = kws_process_guide_rna.pop(
+        "remove_multi_transfected")
+    tg_info, feats_n = cr.pp.filter_by_guide_counts(
+        adata, col_guide_rna, col_num_umis=col_num_umis,
+        key_control=key_control, **kws_process_guide_rna
+        )  # process (e.g., multi-probe names) & filter by # gRNA
+    kws_process_guide_rna["feature_split"] = tg_info.feature_split.iloc[0]
+    feature_split = kws_process_guide_rna["feature_split"]
+    for q in [col_guide_rna, col_num_umis]:  # replace w/ processed
+        tg_info.loc[:, q] = tg_info[q + "_filtered"]
+    if remove_multi_transfected is True:
+        adata.uns["guide_rna"]["counts_single_multi"] = tg_info.copy()
+        tg_info = tg_info.loc[tg_info[
+            f"{col_guide_rna}_list_filtered"].apply(
+                lambda x: np.nan if len(x) > 1 else x).dropna().index] 
+    adata.uns["guide_rna"]["counts"] = tg_info.copy()
+    adata.obs = adata.obs.join(tg_info[
+        f"{col_guide_rna}_list_all"].apply(
+            lambda x: feature_split.join(x) if isinstance(
+                x, (np.ndarray, list, set, tuple)) else x).to_frame(
+                    col_guide_rna), lsuffix="_original"
+                )  # processed full gRNA string without guide_split...
+    # adata.obs = adatas[f].obs.join(
+    #     tg_info[col_guide_rna].to_frame(col_condition), 
+    #     lsuffix="_original")  # condition column=filtered target genes
+    adata.obs = adata.obs.join(
+        tg_info[col_num_umis].to_frame(col_num_umis), 
+        lsuffix="_original")  # filtered UMI (summed across same gene)
+    adata.obs = adata.obs.join(
+        tg_info[col_guide_rna].to_frame(col_guide_rna_new), 
+        lsuffix="_original")  # filtered UMI (summed across same gene)
+    adata.uns["guide_rna"]["keywords"] = kws_process_guide_rna
+    adata.uns["guide_rna"]["counts_unfiltered"] = feats_n
+    return adata
