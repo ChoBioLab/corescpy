@@ -334,7 +334,8 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         figs = {}
         for i, x in enumerate([True, False]):  # iterate over methods
             data[i], results[i], figs[str(i)] = perform_augur(
-                adata.copy(), assay=assay, layer_perturbation=None,
+                adata.copy(), assay=assay, 
+                layer_perturbation=layer_perturbation,
                 select_variance_features=x, classifier=classifier,
                 augur_mode=augur_mode, subsample_size=subsample_size,
                 n_threads=n_threads, n_folds=n_folds,
@@ -353,10 +354,6 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         adata_pert = adata[assay].copy() if assay else adata.copy()
         if layer_perturbation is not None:
             adata_pert.X = adata_pert.layers[layer_perturbation]
-        # if adata_pert.var_names[0] != adata_pert.var.reset_index()[
-        #     col_gene_symbols][0]:  # so gene names plots use if index differs
-        #     adata_pert.var_names = pd.Index(adata_pert.var.reset_index()[
-        #         col_gene_symbols])
         
         # Unfortunately, Augur renames columns INPLACE
         # Prevent this from overwriting existing column names
