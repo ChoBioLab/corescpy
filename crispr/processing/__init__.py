@@ -3,4 +3,5 @@ from .preprocessing import (create_object,
                             get_matrix_from_h5,
                             assign_guide_rna,
                             filter_by_guide_counts,
-                            find_guide_info)
+                            find_guide_info, 
+                            perform_qc, filter_qc)

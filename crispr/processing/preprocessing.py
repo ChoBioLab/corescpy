@@ -135,7 +135,8 @@ def process_data(adata, assay=None, assay_protein=None,
             in `.obs` containing cell types. Defaults to None.
         target_sum (float, optional): Total-count normalize to
             <target_sum> reads per cell, allowing between-cell 
-            comparability of counts. Defaults to 1e4.
+            comparability of counts. If None, total count-normalization
+            will not be performed. Defaults to 1e4.
         outlier_mads (float or int or dict): To calculate outliers
             based on MADs (see SC Best Practices). If a dictionary,
             key based on names of columns added by QC. Filtering
@@ -194,8 +195,8 @@ def process_data(adata, assay=None, assay_protein=None,
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
-    min_pct_mt, max_pct_mt = cell_filter_pmt
     print(col_gene_symbols, assay, n_top)
+    print((adata[assay] if assay else adata).var.describe())
 
     # Basic Filtering (DO FIRST)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
@@ -214,97 +215,52 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
-    print("\n\t\t* Detecting mitochondrial, ribosomal, & hemoglobin genes...") 
-    figs["qc_metrics"] = calculate_qc_metrics(
+    figs["qc_metrics"] = perform_qc(
         adata[assay] if assay else adata)  # calculate & plot QC
     
     # Filtering
-    if outlier_mads is not None:  # automatic filtering using outlier stats
-        outliers = adata[assay].obs[outlier_mads.keys()]
-        for x in outlier_mads:
-            outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
-                adata[assay].obs, outlier_mads[x])
-        if assay:
-            cols_outlier = list(set(
-                outliers.columns.difference(adata[assay].obs.columns)))
-        else:
-            cols_outlier = list(set(outliers.columns.difference(
-                adata.obs.columns)))
-        outliers.loc[:, "outlier"] = outliers[cols_outlier].any()
-        if assay:
-            adata[assay].obs = adata[assay].obs.join(outliers[["outlier"]])
-        else:
-            adata.obs = adata.obs.join(outliers[["outlier"]])
-        print(f"Total Cell Count: {(adata[assay] if assay else adata).n_obs}")
-        if assay:
-            adata[assay] = adata[assay][~adata[assay].obs.outlier].copy()
-        else:
-            adata = adata[(~adata.obs.outlier) & (
-                ~adata.obs.mt_outlier)].copy()
-        print("Post-Filtering Cell Count: "
-              f"{(adata[assay] if assay else adata).n_obs}")
-    else:  # manual filtering
-        print(f"Total Cell Count: {(adata[assay] if assay else adata).n_obs}")
-        qc_mets = ["pct_counts_mt", "n_genes_by_counts"]
-        if assay:
-            adata[assay] = adata[assay][(adata[
-                assay].obs.pct_counts_mt < max_pct_mt) * (
-                    adata[assay].obs.pct_counts_mt > min_pct_mt)
-                ]  # filter based on MT %
-        else:
-            adata = adata[(adata.obs.pct_counts_mt < max_pct_mt) * (
-                adata.obs.pct_counts_mt > min_pct_mt)]  # filter based on MT %
-        sc.pp.filter_cells(adata[assay] if assay else adata, 
-                           min_genes=cell_filter_ngene[0])
-        sc.pp.filter_cells(adata[assay] if assay else adata, 
-                           max_genes=cell_filter_ngene[1])
-        # if cell_filter_ngene[0] is not None:
-        sc.pp.filter_cells(adata[assay] if assay else adata, 
-                           min_counts=cell_filter_ncounts[0])
-        # if cell_filter_ngene[1] is not None:
-        sc.pp.filter_cells(adata[assay] if assay else adata, 
-                           max_counts=cell_filter_ncounts[1])
-        # if gene_filter_ncell[0] is not None:
-        sc.pp.filter_genes(adata[assay] if assay else adata, 
-                           min_cells=gene_filter_ncell[0])
-        # if gene_filter_ncell[1] is not None:
-        sc.pp.filter_genes(adata[assay] if assay else adata, 
-                           max_cells=gene_filter_ncell[1])
-        print("Post-Filtering Cell Count: "
-              f"{(adata[assay] if assay else adata).n_obs}")
+    filter_qc(adata[assay] if assay else adata, outlier_mads=outlier_mads, 
+              cell_filter_pmt=cell_filter_pmt,
+              cell_filter_ncounts=cell_filter_ncounts,
+              cell_filter_ngene=cell_filter_ngene, 
+              gene_filter_ncell=gene_filter_ncell)
     
-    # Filtering
-        
     # Doublets
     # doublets = detect_doublets(adata[assay] if assay else adata)
     # if remove_doublets is True:
     #     adata
     #     # TODO: doublets
     
-    # Normalize
-    print("\n<<< NORMALIZING >>>")
+    # Plot Post-Filtering Metrics + Shifted Logarithm
     scales_counts = sc.pp.normalize_total(
-        adata[assay] if assay else adata, 
-        target_sum=target_sum, inplace=False)  # count-normalize
+        adata[assay] if assay else adata, target_sum=target_sum, 
+        inplace=False)  # count-normalize (not in-place yet)
     if assay:
         adata[assay].layers["log1p_norm"] = sc.pp.log1p(
-            scales_counts["X"], copy=True)
-    # adata.X = adata.layers["log1p_norm"]
-    if assay:
-        adata[assay] = sc.pp.log1p(adata[assay].layers[
-            "log1p_norm"])  # log-normalize
+            scales_counts["X"], copy=True)  # set as layer
     else:
-        adata = sc.pp.log1p(adata.layers["log1p_norm"])  # log-normalize
-    adata.raw = adata  # freeze normalized & filtered adata
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    p_1 = seaborn.histplot((adata[assay] if assay else adata).obs[
+        adata.layers["log1p_norm"] = sc.pp.log1p(
+            scales_counts["X"], copy=True)  # set as layer
+    fff, axes = plt.subplots(1, 2, figsize=(10, 5))
+    _ = seaborn.histplot((adata[assay] if assay else adata).obs[
         "total_counts"], bins=100, kde=False, ax=axes[0])
-    axes[0].set_title("Total Counts")
-    p_2 = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
-                           kde=False, ax=axes[1])
+    axes[0].set_title("Total Counts (Post-Filtering)")
+    _ = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
+                         kde=False, ax=axes[1])
     axes[1].set_title("Shifted Logarithm")
     plt.show()
-    figs["normalization"] = fig
+    figs["normalization"] = fff
+    
+    # Normalize (Actually Modify Object Now)
+    print("\n<<< LOG-NORMALIZING >>>")
+    if target_sum is not None:
+        scales_counts = sc.pp.normalize_total(
+            adata[assay] if assay else adata, target_sum=target_sum, 
+            inplace=False)  # count-normalize (not in-place yet)
+    if assay:
+        adata[assay] = sc.pp.log1p(adata[assay].layers["log1p_norm"])
+    else:
+        adata = sc.pp.log1p(adata.layers["log1p_norm"])
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
         
@@ -314,14 +270,13 @@ def process_data(adata, assay=None, assay_protein=None,
     else:
         adata.raw = adata.copy()
         
-    # Filter by Gene Count & Variability 
+    # Filter by Gene Variability 
     if kws_hvg is not None:
         print("\n<<< DETECTING VARIABLE GENES >>>")
         if kws_hvg is True:
             kws_hvg = {}
-        figs["highly_variable_genes"] = sc.pp.highly_variable_genes(
-            adata[assay] if assay else adata, 
-            **kws_hvg)  # highly variable genes 
+        sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
+                                    **kws_hvg)  # highly variable genes 
         try:
             if assay is None:
                 adata= adata[:, adata.var.highly_variable]  # filter by HVGs
@@ -349,7 +304,8 @@ def process_data(adata, assay=None, assay_protein=None,
             
     # Cell Counts (Post-Processing)
     if col_cell_type is not None and col_cell_type in adata.obs:
-        print(f"\n\n{'=' * 80}\nCell Counts (Post-Processing)\n{'=' * 80}\n\n")
+        print(f"\n\n{'=' * 80}\nCell Counts (Post-Processing)"
+              "\n{'=' * 80}\n\n")
         print(adata.obs[col_cell_type].value_counts())
         
     # Gene Expression Heatmap
@@ -377,67 +333,150 @@ def process_data(adata, assay=None, assay_protein=None,
     return adata, figs
 
 
-def calculate_qc_metrics(adata, assay=None):
+def perform_qc(adata):
     """Calculate & plot quality control metrics."""
     figs = {}
     patterns = dict(zip(["mt", "ribo", "hb"], 
                         [("MT-", "mt-"), ("RPS", "RPL"), ("^HB[^(P)]")]))
-    if assay is None:
-        for k in patterns:
-            try:
-                adata.var[k] = adata.var_names.str.startswith(patterns[k])
-            except Exception as err:
-                warnings.warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
-    else:
-        for k in patterns:
-            try:
-                adata[assay].var[k] = adata[assay].var_names.str.startswith(
-                    patterns[k])
-            except Exception as err:
-                warnings.warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
-    qc_vars = list(set(patterns.keys()).intersection((
-        adata[assay] if assay else adata).var.keys()))  # available QC metrics 
-    pct_counts_vars = dict(zip(qc_vars, [f"pct_counts_{k}" for k in qc_vars]))
-    # p1 = sns.displot(adata.obs["total_counts"], bins=100, kde=False)
-    # sc.pl.violin(adata, 'total_counts')
-    # p2 = sc.pl.violin(adata, "pct_counts_mt")
-    # p3 = sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", 
-    #                    color="pct_counts_mt")
-    print("\n\t\t* Calculating & plotting QC metrics...\n\n") 
-    sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                               qc_vars=qc_vars, percent_top=None, log1p=True,
-                               inplace=True)  # calculate QC metrics
+    patterns_names = dict(zip(patterns, ["Mitochondrial", "Ribosomal", 
+                                         "Hemoglobin"]))
+    p_names = [patterns_names[k] for k in patterns_names]
+    print(f"\n\t*** Detecting {', '.join(p_names)} genes...") 
+    for k in patterns:
+        try:
+            adata.var[k] = adata.var_names.str.startswith(patterns[k])
+        except Exception as err:
+            warnings.warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
+    qc_vars = list(set(patterns.keys()).intersection(
+        adata.var.keys()))  # available QC metrics 
+    pct_ns = [f"pct_counts_{k}" for k in qc_vars]
+    # pct_counts_vars = dict(zip(qc_vars, pct_ns))
+    print("\n\t*** Calculating & plotting QC metrics...\n\n") 
+    sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
+                               log1p=True, inplace=True)  # QC metrics
     for k in qc_vars:
-        try:
-            figs[f"qc_pct_counts_{k}_hist"] = seaborn.histplot(
-                (adata[assay] if assay else adata).obs[pct_counts_vars[k]])
-        except Exception as err:
-            figs[f"qc_pct_counts_{k}_hist"] = err
-            print(err)
-        try:
-            figs["qc_metrics_violin"] = sc.pl.violin(
-                adata[assay] if assay else adata, 
-                ["n_genes_by_counts", "total_counts"] + pct_counts_vars,
-                jitter=0.4, multi_panel=True)
-        except Exception as err:
-            figs["qc_metrics_violin"] = err
-            print(err)
-        for v in [pct_counts_vars[k] for k in pct_counts_vars] + [
-            "n_genes_by_counts"]:
+        for v in pct_ns + ["n_genes_by_counts"]:
             try:
                 figs[f"qc_{v}_scatter"] = sc.pl.scatter(
-                    adata[assay] if assay else adata, x="total_counts", y=v)
+                    adata, x="total_counts", y=v)
             except Exception as err:
                 figs[f"qc_{v}_scatter"] = err
                 print(err)
     try:
+        varm = pct_ns + ["n_genes_by_counts"]
+        figs["pairplot"] = seaborn.pairplot(
+            adata.obs[varm].rename_axis("Metric", axis=1).rename({
+                "total_counts": "Total Counts", **patterns_names}, axis=1), 
+            diag_kind="kde", diag_kws=dict(fill=True, cut=0))
+    except Exception as err:
+        figs["pairplot"] = err
+        print(err)
+    try:
+        figs["pct_counts_kde"] = seaborn.displot(
+            adata.obs[pct_ns].rename_axis("Metric", axis=1).rename(
+                patterns_names, axis=1).stack().to_frame("Percent Counts"), 
+            x="Percent Counts", col="Metric", kind="kde", cut=0, fill=True)
+    except Exception as err:
+        figs["pct_counts_kde"] = err
+        print(err)
+    try:
+        figs["metrics_violin"] = sc.pl.violin(
+            adata, ["n_genes_by_counts", "total_counts"] + pct_ns,
+            jitter=0.4, multi_panel=True)
+    except Exception as err:
+        figs["qc_metrics_violin"] = err
+        print(err)
+    try:
         figs["qc_log"] = seaborn.jointplot(
-            data=adata[assay].obs if assay else adata.obs,
-            x="log1p_total_counts", y="log1p_n_genes_by_counts", kind="hex")
+            data=adata.obs, x="log1p_total_counts", 
+            y="log1p_n_genes_by_counts", kind="hex")
     except Exception as err:
         figs["qc_log"] = err
         print(err)
+    print(adata.var.describe())
     return figs
+
+
+def filter_qc(adata, outlier_mads=None, 
+              cell_filter_pmt=None,
+              cell_filter_ncounts=None,
+              cell_filter_ngene=None, 
+              gene_filter_ncell=None):
+    """Filter low-quality/outlier cells & genes."""
+    if cell_filter_pmt is None:
+        cell_filter_pmt = [0, 
+                           100]  # so doesn't filter MT but calculates metrics
+    min_pct_mt, max_pct_mt = cell_filter_pmt
+    if outlier_mads is not None:  # automatic filtering using outlier stats
+        outliers = adata.obs[outlier_mads.keys()]
+        print(f"\n<<< DETECTING OUTLIERS {outliers.columns} >>>") 
+        for x in outlier_mads:
+            outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
+                adata.obs, outlier_mads[x])  # separate metric outlier columns
+        cols_outlier = list(set(
+            outliers.columns.difference(adata.obs.columns)))
+        outliers.loc[:, "outlier"] = outliers[cols_outlier].any()  # binary
+        print(f"\n<<< FILTERING OUTLIERS ({cols_outlier}) >>>") 
+        adata.obs = adata.obs.join(outliers[["outlier"]])  # + outlier column
+        print(f"Total Cell Count: {adata.n_obs}")
+        adata = adata[(~adata.obs.outlier) & (~adata.obs.mt_outlier)
+                      ].copy()  # drop outliers
+        print(f"Post-Filtering Cell Count: {adata.n_obs}")
+    else:  # manual filtering
+        print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>") 
+        print(f"\nTotal Cell Count: {adata.n_obs}")
+        print("\n\t*** Filtering cells by mitochondrial gene percentage...") 
+        print(f"\n\tMinimum: {min_pct_mt}\n\tMaximum: {max_pct_mt}...")
+        adata = adata[(adata.obs.pct_counts_mt <= max_pct_mt) * (
+            adata.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
+        print(f"\tNew Count: {adata.n_obs}")
+        print("\n\t*** Filtering genes based on # of genes expressed...")
+        if cell_filter_ngene[0] is not None:
+            print(f"\n\tMinimum: {cell_filter_ngene[0]}...")
+            sc.pp.filter_cells(adata, min_genes=cell_filter_ngene[0])
+            print(f"\tNew Count: {adata.n_obs}")
+        else:
+            print("\n\tNo minimum")
+        if cell_filter_ngene[1] is not None:
+            print(f"\tMaximum: {cell_filter_ngene[1]}")
+            sc.pp.filter_cells(adata, 
+                # min_genes=None, min_counts=None, max_counts=None,
+                max_genes=cell_filter_ngene[1])
+            print(f"\tNew Count: {adata.n_obs}")
+        print("\n\t*** Filtering cells based on # of reads...")
+        if cell_filter_ncounts[0] is not None:
+            print(f"\n\tMinimum: {cell_filter_ncounts[0]}")
+            sc.pp.filter_cells(adata, 
+                # min_genes=None, max_genes=None, max_counts=None,
+                min_counts=cell_filter_ncounts[0])
+            print(f"\tNew Count: {adata.n_obs}")
+        else:
+            print("\n\tNo minimum")
+        if cell_filter_ncounts[1] is not None:
+            print(f"\n\tMaximum: {cell_filter_ncounts[1]}")
+            sc.pp.filter_cells(adata,
+                # min_genes=None, max_genes=None, min_counts=None,
+                max_counts=cell_filter_ncounts[1])
+            print(f"\tNew Count: {adata.n_obs}")
+        else:
+            print("\n\tNo maximum")
+        print("\n\t*** Filtering genes based on # of cells in which they "
+              "are expressed...")
+        if gene_filter_ncell[0] is not None:
+            print(f"\n\tMinimum: {gene_filter_ncell[0]}")
+            sc.pp.filter_genes(adata, min_cells=gene_filter_ncell[0])
+            print(f"\tNew Count: {adata.n_obs}")
+        else:
+            print("\n\tNo minimum")
+        if gene_filter_ncell[1] is not None:
+            print(f"\n\tMaximum: {gene_filter_ncell[1]}")
+            sc.pp.filter_genes(adata, max_cells=gene_filter_ncell[1])
+            print(f"\tNew Count: {adata.n_obs}")
+        else:
+            print("\n\tNo maximum")
+        print(f"\nPost-Filtering Cell Count: {adata.n_obs}")
+        return adata
+        
 
 
 def explore_h5_file(file):
