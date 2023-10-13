@@ -132,6 +132,10 @@ def perform_mixscape(adata, col_perturbed="perturbation",
     adata_pert = (adata[assay] if assay else adata).copy()
     if layer_perturbation is not None:
         adata_pert.X = adata_pert.layers[layer_perturbation]
+    adata_pert.raw = None  
+    # so scanpy.tl.rank_genes_groups doesn't use raw 
+    # pertpy doesn't specify use_raw, so if raw available
+    # layer and use_raw=True are both specified -> error
     mix = pt.tl.Mixscape()
     adata_pert = adata_pert[adata_pert.obs[col_perturbed].isin(
         [key_treatment, key_control])].copy()  # ensure in perturbed/control
