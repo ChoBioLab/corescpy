@@ -530,61 +530,37 @@ class Crispr(object):
         self.info["descriptives"].update(desc)
         return figs
     
-    def get_guide_rna_counts(self, target_gene_idents=None, group_by=None,
-                             col_cell_type=None, **kwargs):
-        """Plot guide RNA counts by cell type & up to 1 other variable."""
-        if isinstance(target_gene_idents, str):
-            target_gene_idents = [target_gene_idents]
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
-        if group_by is None:
-            group_by = [col_cell_type]
+    def get_guide_rna_counts(self, target_gene_idents=None, 
+                             group_by=None, **kwargs):
+        """Plot guide RNA counts by cell type & 0-2 other variables."""
         if isinstance(group_by, str):
             group_by = [group_by]
-        if group_by is True:
-            group_by = [col_cell_type]
-        if len(group_by) > 1:
-            kwargs.update({"row": group_by[1]})
-        if "share_x" not in kwargs: 
-            kwargs.update({"share_x": True})
-        # sufxs = ["all", "filtered"]
-        # cols = [self._columns[x] for x in ["col_guide_rna", "col_num_umis"]] 
-        # grna = [self.info["guide_rna"]["counts_raw"][
-        #     [f"{i}_list_{x}" for i in cols]] for x in sufxs]
-        # for g in grna:
-        #     g.columns = cols
-        # grna = pd.concat(grna, keys=sufxs, names=["version", "bc"])
-        # dff = grna.loc["all"].apply(
-        #     lambda x: pd.Series([np.nan] * x.shape[0], index=x.index) 
-        #     if len(pd.unique(x[cols[0]])) > 1 else pd.Series(
-        #         pd.unique(x[cols[1]], index=pd.unique(x[cols[0]]))), 
-        #         axis=1).dropna()
-        # dff = dff.apply(
-        #     lambda x: pd.Series(x[cols[1]], index=x[cols[0]]), 
-        #     axis=1).stack().sort_index().rename_axis(
-        #         ["b", "Target"]).to_frame("N gRNAs").join(
-        #             self.adata.obs[[col_cell_type]].rename_axis(
-        #                 "b")).reset_index()
+        if isinstance(target_gene_idents, str):
+            target_gene_idents = [target_gene_idents]
+        cols = [self._columns["col_target_genes"]]
+        if group_by:  # join group_by variables from adata
+            cols += group_by
+        cols = list(pd.unique(cols))
         dff = self.info["guide_rna"]["counts_unfiltered"].reset_index(
-            "Gene").rename({"Gene": "Target"}, axis=1).join(
-                self.adata.obs[group_by])  # gRNA counts + cell types
+            "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
-            dff = dff[dff.Target.isin(target_gene_idents)]
-        if group_by is not None:
-            kwargs.update({"col": group_by[0]})
-        if len(group_by) == 1:
-            kwargs.update({"col_wrap": cr.pl.square_grid(len(
-                dff[group_by[0]].unique()))[1]})
-        # fig = sns.catplot(data=dff[dff.Target.isin(
-        #     target_gene_idents)] if target_gene_idents else dff, 
-        #             x="N gRNAs", y="Target", col_wrap=cr.pl.square_grid(
-        #                 len(self.adata.obs[col_cell_type].unique()))[1],
-        #             col=col_cell_type, kind="violin", 
-        #             **kwargs)
-        fig = sns.catplot(data=dff, y="Target",
+            dff = dff[dff[self._columns["col_target_genes"]].isin(
+                target_gene_idents)]
+        kws_plot = dict(
+            share_x=True, share_y=False, figsize=(30, 30), split=True, 
+            col=group_by[0] if group_by else None,
+            hue=group_by[1] if group_by and len(group_by) > 2 else None,
+            row=group_by[2] if group_by and len(group_by) > 2 else None,
+            col_wrap=cr.pl.square_grid(
+                len(dff[group_by[0]].unique()))[1] if group_by and len(
+                    group_by) < 3 else None)  # default plot options
+        kws_plot.update(kwargs)  # overwrite with any user specifications
+        fig = sns.catplot(data=dff.dropna(
+            subset=self._columns_created["guide_percent"]), y="Guide", 
                           x=self._columns_created["guide_percent"],
-                          kind="violin", **kwargs)
-        fig.fig.suptitle("Guide RNA Counts by Cell Type")
+                          kind="violin", **kws_plot)
+        fig.fig.suptitle("Guide RNA Counts" + str(
+            f" by {', '.join(group_by)}" if group_by else ""))
         fig.fig.tight_layout()
         return self.info["guide_rna"]["counts_unfiltered"], fig
     

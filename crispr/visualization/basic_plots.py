@@ -46,7 +46,8 @@ def square_grid(number):
     if isinstance(number, (np.ndarray, list, set, tuple, pd.Series)):
         number = len(number)  # if provided actual object, calculate length
     rows = int(np.sqrt(number))  # number of rows
-    cols = math.ceil(number / rows)  # number of columns
+    cols = rows if rows * 2 == number else math.ceil(
+        number / rows)  # number of columns
     return rows, cols
 
 
