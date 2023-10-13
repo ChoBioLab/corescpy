@@ -34,3 +34,20 @@ class GuideRNATests:
         {col_gp} not in `cr.pp.filter_by_guide_counts` 
         as expected by Crispr class methods.
         Columns in 2nd element of output:\n{feats_n.columns}"""
+        
+        
+# class Preprocessing:
+    
+#     def test_filtering(adata):
+#         self.preprocess(adata)
+#         if assay is None:
+#             adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts, 
+#                           :]
+#             adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
+#         else:
+#             adata[assay] = adata[assay][
+#                 adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
+#             adata[assay] = adata[assay][
+#                 adata[assay].obs.pct_counts_mt < max_pct_mt, :]  # MT counts
+#             adata[assay].raw = adata[assay
+#                                      ]  # freeze normalized, filtered data

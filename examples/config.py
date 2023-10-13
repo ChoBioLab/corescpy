@@ -81,7 +81,7 @@ col_split_by_data = {
     "augur_ex": "nan"
 }
 
-col_perturbation_data = {
+col_perturbed_data = {
     "CRISPRi_scr": "perturbation",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "perturbation",
@@ -133,7 +133,7 @@ key_treatment_data = {
 #     "augur_ex": np.nan
 # }
 
-col_target_genes_data = {
+col_condition_data = {
     "CRISPRi_scr": "target_gene_name",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "target_gene",
@@ -143,7 +143,7 @@ col_target_genes_data = {
     "perturb-seq": "target_gene_name",
     "ECCITE": "gene_target",
     "coda": np.nan,
-    "augur_ex": None
+    "augur_ex": "label"
 }
 
 col_guide_rna_data = {
@@ -262,7 +262,7 @@ def load_example_data(file, col_gene_symbols, write_public=False):
                 # adata = pertpy.data.replogle_2022_rpe1()
                 # adata = pertpy.data.adamson_2016_upr_perturb_seq()  # ~8 min.
             elif file == "CRISPRi_ess":
-                print(f"Setting {col_perturbation_data}")
+                print(f"Setting {col_perturbed_data}")
                 adata = pertpy.data.replogle_2022_k562_essential()  # HJ design
             elif file == "screen":  # Perturb-seq CRISPR screen Pertpy data
                 adata = pertpy.data.dixit_2016_raw()

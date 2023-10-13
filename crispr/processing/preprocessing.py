@@ -107,9 +107,12 @@ def combine_matrix_protospacer(
 def process_data(adata, assay=None, assay_protein=None,
                  col_gene_symbols=None,
                  col_cell_type=None,
-                 remove_doublets=True,
-                 target_sum=1e4,  max_genes_by_counts=2500, max_pct_mt=5,
-                 min_genes=200, min_cells=3, 
+                 # remove_doublets=True,
+                 target_sum=1e4, max_pct_mt=5,
+                 cell_count_range=None, 
+                 cell_gene_count_range=None,
+                 gene_cell_count_range=None,
+                 gene_count_range=None,
                  scale=10,  # or scale=True for no clipping
                  regress_out=regress_out_vars, 
                  kws_hvg=None, kws_scale=None, kws_crispr=None,
@@ -120,8 +123,16 @@ def process_data(adata, assay=None, assay_protein=None,
     
     # Initial Information
     print(adata)
+    if assay:
+        adata[assay].layers["raw_original"] = adata[assay].X 
+    else:
+        adata.layers["raw_original"] = adata.X
     if col_gene_symbols == adata.var.index.names[0]:
         col_gene_symbols = None
+    cell_gene_count_range, cell_count_range = [x if x else None for x in [
+        cell_gene_count_range, cell_count_range]]
+    gene_cell_count_range, gene_count_range = [x if x else None for x in [
+        gene_cell_count_range, gene_count_range]]
     if col_cell_type is not None and col_cell_type in adata.obs:
         print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
         print(adata.obs[col_cell_type].value_counts())
@@ -146,80 +157,52 @@ def process_data(adata, assay=None, assay_protein=None,
         kws_scale = {}
 
     # Filtering
+    
+    # QC Metrics
+    print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
+    print("\n\t\t* Detecting mitochondrial, ribosomal, & hemoglobin genes...") 
+    figs["qc_metrics"] = calculate_qc_metrics(adata[assay] if assay else adata)
+    
+    # Filtering Cells
     print("\n<<< FILTERING >>>")
+    print(f"\t\t\tOriginal # Cells: {(adata[assay] if assay else adata).n_obs}")
     sc.pp.filter_cells(adata[assay] if assay else adata, min_genes=min_genes)
     sc.pp.filter_genes(adata[assay] if assay else adata, min_cells=min_cells)
     
-    # Mitochondrial Count QC
-    print("\n<<< DETECTING MITOCHONDRIAL GENES >>>")
-    no_mt = False
-    if assay is None:
-        adata.var["mt"] = adata.var_names.str.startswith(
-            "MT-")  # annotate mitochondrial genes
+    # Drop Low Quality Cells
+    raise ValueError("GO BACK AND DO SC BETS PRACTICES OUTLIER FILTERING")
+    if filter_by_outliers is True:
+        outliers = cr.pp.find_outliers()
     else:
-        try:
-            adata[assay].var["mt"] = adata[assay].var_names.str.startswith(
-                "MT-")  # annotate mitochondrial genes
-        except TypeError as err_mt:
-            warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign MT: {err_mt}")
-            no_mt = True
+        sc.pp.filter_cells(
+            adata[assay] if assay else adata, min_counts=cell_count_range[0], 
+            min_genes=cell_count_range[1], max_counts=cell_count_range[1], 
+            max_genes=gene_count_range[1], inplace=True)  # filter cells
     
-    # Quality Control
-    print("\n<<< PERFORMING QUALITY CONTROL >>>")
-    if no_mt is False:
-        sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
-                                   qc_vars=["mt"], percent_top=None, 
-                                   log1p=True, inplace=True)
-        try:
-            figs["qc_pct_counts_mt_hist"] = seaborn.histplot(
-                adata[assay].obs["pct_counts_mt"] if assay else adata.obs[
-                    "pct_counts_mt"])
-        except Exception as err:
-            print(err)
-        try:
-            figs["qc_metrics_violin"] = sc.pl.violin(
-                adata[assay] if assay else adata, 
-                ["n_genes_by_counts", "total_counts", "pct_counts_mt"],
-                jitter=0.4, multi_panel=True)
-        except Exception as err:
-            print(err)
-        for v in ["pct_counts_mt", "n_genes_by_counts"]:
-            try:
-                figs[f"qc_{v}_scatter"] = sc.pl.scatter(
-                    adata[assay] if assay else adata, x="total_counts", y=v)
-            except Exception as err:
-                print(err)
-    figs["qc_log"] = seaborn.jointplot(
-        data=adata[assay].obs if assay else adata.obs,
-        x="log1p_total_counts", y="log1p_n_genes_by_counts", kind="hex")
-        
     # More Filtering
     try:
-        if assay is None:
-            adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts, :]
-            adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
-        else:
-            adata[assay] = adata[assay][
-                adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
-            adata[assay] = adata[assay][
-                adata[assay].obs.pct_counts_mt < max_pct_mt, :]  # MT counts
-            adata[assay].raw = adata[assay]  # freeze normalized, filtered data
     except TypeError as err_f:
             warnings.warn(f"\n\n{'=' * 80}\n\nCould not filter: {err_f}")
+    adata[assay].raw = adata[assay]  # freeze normalized, filtered data
     
     # Normalize
-    adata.layers["raw_original"] = adata.X
     print("\n<<< NORMALIZING >>>")
     scales_counts = sc.pp.normalize_total(
         adata[assay] if assay else adata, 
         target_sum=target_sum, inplace=False)  # count-normalize
-    adata.layers["log1p_norm"] = sc.pp.log1p(scales_counts["X"], copy=True)
+    if assay:
+        adata[assay].layers["log1p_norm"] = sc.pp.log1p(
+            scales_counts["X"], copy=True)
     # adata.X = adata.layers["log1p_norm"]
-    sc.pp.log1p(adata[assay] if assay else adata)  # log-normalize
+    if assay:
+        adata[assay] = sc.pp.log1p(adata[assay].layers[
+            "log1p_norm"])  # log-normalize
+    else:
+        adata = sc.pp.log1p(adata.layers["log1p_norm"])  # log-normalize
     adata.raw = adata  # freeze normalized & filtered adata
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    p_1 = seaborn.histplot(adata.obs["total_counts"], bins=100, 
-                           kde=False, ax=axes[0])
+    p_1 = seaborn.histplot((adata[assay] if assay else adata).obs[
+        "total_counts"], bins=100, kde=False, ax=axes[0])
     axes[0].set_title("Total Counts")
     p_2 = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
                            kde=False, ax=axes[1])
@@ -229,7 +212,7 @@ def process_data(adata, assay=None, assay_protein=None,
     if assay_protein is not None:  # if includes protein assay
         muon.prot.pp.clr(adata[assay_protein])
         
-    # Variable Genes
+    # Filter by Gene Count & Variability 
     if kws_hvg is not None:
         print("\n<<< DETECTING VARIABLE GENES >>>")
         if kws_hvg is True:
@@ -292,6 +275,66 @@ def process_data(adata, assay=None, assay_protein=None,
     return adata, figs
 
 
+def calculate_qc_metrics(adata):
+    """Calculate & plot quality control metrics."""
+    if patterns is None:
+        patterns = dict(zip(["mt", "ribo", "hb"], 
+                            ["MT-", ("RPS", "RPL"), ("^HB[^(P)]")]))
+    for k in patterns:
+        try:
+            adata.var[k] = adata.var_names.str.startswith(patterns[k])
+    else:
+        try:
+            for k in patterns:
+                adata[assay].var[k] = adata[assay].var_names.str.startswith(
+                    patterns[k])
+        except TypeError as err_mt:
+            warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign {k}: {err_mt}") 
+    qc_vars = list(set(patterns.keys()).intersection((
+        adata[assay] if assay else adata).var.keys()))  # available QC metrics 
+    pct_counts_vars = dict(zip(qc_vars, [f"pct_counts_{k}" for k in qc_vars]))
+                
+    # p1 = sns.displot(adata.obs["total_counts"], bins=100, kde=False)
+    # # sc.pl.violin(adata, 'total_counts')
+    # p2 = sc.pl.violin(adata, "pct_counts_mt")
+    # p3 = sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", 
+    #                    color="pct_counts_mt")
+    
+    print("\n\t\t* Calculating & plotting QC metrics...\n\n") 
+    sc.pp.calculate_qc_metrics(adata[assay] if assay else adata, 
+                               qc_vars=qc_vars, percent_top=None, log1p=True,
+                               inplace=True)  # calculate QC metrics
+    for k in qc_vars:
+        try:
+            figs[f"qc_pct_counts_{k}_hist"] = seaborn.histplot(
+                (adata[assay] if assay else adata).obs[pct_counts_vars[k]])
+        except Exception as err:
+            figs[f"qc_pct_counts_{k}_hist"] = err
+            print(err)
+        try:
+            figs["qc_metrics_violin"] = sc.pl.violin(
+                adata[assay] if assay else adata, 
+                ["n_genes_by_counts", "total_counts"] + pct_counts_vars,
+                jitter=0.4, multi_panel=True)
+        except Exception as err:
+            figs["qc_metrics_violin"] = err
+            print(err)
+        for v in pct_counts_vars + ["n_genes_by_counts"]:
+            try:
+                figs[f"qc_{v}_scatter"] = sc.pl.scatter(
+                    adata[assay] if assay else adata, x="total_counts", y=v)
+            except Exception as err:
+                figs[f"qc_{v}_scatter"] = err
+                print(err)
+    try:
+        figs["qc_log"] = seaborn.jointplot(
+            data=adata[assay].obs if assay else adata.obs,
+            x="log1p_total_counts", y="log1p_n_genes_by_counts", kind="hex")
+    except Exception as err:
+        figs["qc_log"] = err
+        print(err)
+
+
 def explore_h5_file(file):
     """Explore an H5 file's format (thanks to ChatGPT)."""
     with h5py.File(file, "r") as h5_file:
@@ -347,8 +390,7 @@ def get_matrix_from_h5(file, gex_genes_return=None):
 
 
 def assign_guide_rna(adata, col_num_umis="num_umis", 
-                     assignment_threshold=5, method="max",
-                     plot=False, **kwargs):
+                     assignment_threshold=5, method="max"):
     """Assign guide RNAs to cells (based on pertpy tutorial notebook)."""
     layer, out_layer = "guide_counts", "assigned_guides"
     gdo = adata.copy()
@@ -515,8 +557,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             (assuming no non-control sgRNA names contain those patterns). 
             If blank entries should be interpreted as control guides, 
             then include np.nan/numpy.nan in this list.
-            Defaults to None, but you almost certainly shouldn't leave this 
-            blank if you're using this function.
+            Defaults to None -> [np.nan].
         key_control (str, optional): The name you want the control 
             entries to be categorized as under the new `col_guide_rna`. 
             for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be replaced by 
@@ -542,6 +583,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     ann = adata.copy()
     if guide_split is None:
         guide_split = "$"
+    if key_control_patterns is None:
+        key_control_patterns = [np.nan]
     if feature_split is None:
         feature_split = "|"
         if ann.obs[col_guide_rna].apply(lambda x: feature_split in x).any():

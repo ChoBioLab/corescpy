@@ -6,5 +6,8 @@ kws_process_guide_rna_default = {"feature_split": None, "guide_split": "-",
 
 col_multi_transfection = "transfection"
 
+# Filtering Criteria
+default_gene_count_range = [200, 2500]
+
 # feature_split_convention = "|"
 # guide_split_convention = "g"  # required by pertpy functions

@@ -18,14 +18,14 @@ COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
     
     
-def perform_mixscape(adata, col_perturbation="perturbation",
+def perform_mixscape(adata, col_perturbed="perturbation",
                      key_control="NT",
                      key_treatment="perturbed",
                      assay=None,
-                     layer_perturbation=None,
                      col_guide_rna="guide_ID",
                      col_split_by=None,
-                     col_target_genes="gene_target", 
+                     col_target_genes="gene_target",
+                     layer_perturbation="X_pert", 
                      iter_num=10,
                      min_de_genes=5, pval_cutoff=5e-2, logfc_threshold=0.25,
                      subsample_number=300,
@@ -34,7 +34,9 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                      assay_protein=None,
                      protein_of_interest=None,
                      guide_split="-",
-                     target_gene_idents=None, **kwargs):
+                     target_gene_idents=None, 
+                     kws_perturbation_signature=None,
+                     **kwargs):
     """
     Identify perturbed cells based on target genes (`adata.obs['mixscape_class']`,
     `adata.obs['mixscape_class_global']`) and calculate posterior probabilities
@@ -51,11 +53,11 @@ def perform_mixscape(adata, col_perturbation="perturbation",
 
     Args:
         adata (AnnData): Scanpy data object.
-        col_perturbation (str): Perturbation category column of `adata.obs` 
+        col_perturbed (str): Perturbation category column of `adata.obs` 
             (should contain key_control).
-        key_control (str, optional): The label in `col_perturbation`
+        key_control (str, optional): The label in `col_perturbed`
             that indicates control condition. Defaults to "NT".
-        key_treatment (str, optional): The label in `col_perturbation`
+        key_treatment (str, optional): The label in `col_perturbed`
             that indicates a treatment condition (e.g., drug administration, 
             CRISPR knock-out/down). Defaults to "KO".
             Will also be 
@@ -102,23 +104,36 @@ def perform_mixscape(adata, col_perturbation="perturbation",
             Defaults to None.
         iter_num (float, optional): Iterations to run to converge if needed.
         plot (bool, optional): Make plots? Defaults to True.
+        kws_perturbation_signature (dict, optional): Optional keyword arguments
+             to pass to `pertpy.tl.PerturbationSignature()` 
+             (also see Pertpy documentation).
+            "n_neighbors" (# of unperturbed neighbors to use for comparison
+                when calculating perturbation signature), 
+            "n_pcs", "use_rep" (`X` or any `.obsm` keys), 
+            "batch_size" (if None, use full data, which is memory-intensive,
+                or specify an integer to calculate signature in batches,
+                which is inefficient for sparse data).
     """
     figs = {}
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
-    
+    if kws_perturbation_signature is None:
+        kws_perturbation_signature = {}
+        
     # Perturbation Signature
     mix = pt.tl.Mixscape()
-    mix.perturbation_signature(
-        adata[assay] if assay else adata, col_perturbation, 
-        key_control, split_by=col_split_by)  # perturbation signature
-    adata_pert = adata[assay].copy() if assay else adata.copy()
-    adata_pert = adata_pert[adata_pert.obs[col_perturbation].isin(
+    adata_pert = mix.perturbation_signature(
+        adata[assay] if assay else adata, col_perturbed, 
+        key_control, split_by=col_split_by, copy=True,
+        **kws_perturbation_signature
+        )  # subtract GEX of perturbed cells from their unperturbed neighbors
+    adata_pert = adata_pert[adata_pert.obs[col_perturbed].isin(
         [key_treatment, key_control])].copy()  # ensure in perturbed/control
     adata_pert = adata_pert[~adata_pert.obs[
         col_target_genes].isnull()].copy()  # ensure no NA target genes
-    adata_pert.X = adata_pert.layers["X_pert"]
-    layer_perturbation = "X_pert"
+    if layer_perturbation != "X_pert":
+        adata_pert.layers[layer_perturbation] = adata_pert.layers["X_pert"]
+    adata_pert.X = adata_pert.layers[layer_perturbation]
     
     # Mixscape Classification & Perturbation Scoring
     mix.mixscape(adata=adata_pert, 
@@ -191,6 +206,7 @@ def perform_mixscape(adata, col_perturbation="perturbation",
                 layer=layer_perturbation, control=key_control, 
                 min_de_genes=min_de_genes,
                 split_by=col_split_by, 
+                copy=False,
                 perturbation_type=key_treatment,
                 mixscape_class_global="mixscape_class_global",
                 n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
@@ -254,7 +270,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
                   subsample_size=20, n_folds=3,
                   select_variance_features=False, 
                   col_cell_type="leiden",
-                  col_perturbation=None, 
+                  col_perturbed=None, 
                   col_gene_symbols="gene_symbols",
                   key_control="NT", key_treatment=None,
                   seed=1618, plot=True, n_threads=None,
@@ -279,11 +295,11 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             Defaults to False.
         col_cell_type (str, optional): Column name for cell type. 
             Defaults to "cell_type_col".
-        col_perturbation (str, optional): Experimental condition column name. 
+        col_perturbed (str, optional): Experimental condition column name. 
             Defaults to None.
         key_control (str, optional): Control category key
-            (`adata.obs[col_perturbation]` entries).Defaults to "NT".
-        key_treatment (str, optional): Name of value within col_perturbation. 
+            (`adata.obs[col_perturbed]` entries).Defaults to "NT".
+        key_treatment (str, optional): Name of value within col_perturbed. 
             Defaults to None.
         seed (int, optional): Random state (for reproducibility). 
             Defaults to 1618.
@@ -295,7 +311,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             to the relevant
 
     Returns:
-        _type_: _description_
+        tuple: Augur AnnData object, results from Augur predict, figures
     """
     if select_variance_features == "both":  
         # both methods: select genes based on...
@@ -305,11 +321,11 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         figs = {}
         for i, x in enumerate([True, False]):  # iterate over methods
             data[i], results[i], figs[str(i)] = perform_augur(
-                adata.copy(), assay=None, layer_perturbation=None,
+                adata.copy(), assay=assay, layer_perturbation=None,
                 select_variance_features=x, classifier=classifier,
                 augur_mode=augur_mode, subsample_size=subsample_size,
                 n_threads=n_threads, n_folds=n_folds,
-                col_cell_type=col_cell_type, col_perturbation=col_perturbation,
+                col_cell_type=col_cell_type, col_perturbed=col_perturbed,
                 col_gene_symbols=col_gene_symbols, 
                 key_control=key_control, key_treatment=key_treatment,
                 seed=seed, plot=plot, **kwargs, 
@@ -332,7 +348,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         # Unfortunately, Augur renames columns INPLACE
         # Prevent this from overwriting existing column names
         col_pert_new, col_cell_new = "label", "cell_type"
-        adata_pert.obs[col_pert_new] = adata_pert.obs[col_perturbation].copy()
+        adata_pert.obs[col_pert_new] = adata_pert.obs[col_perturbed].copy()
         adata_pert.obs[col_cell_new] = adata_pert.obs[col_cell_type].copy()
         print(adata_pert)
         
@@ -353,7 +369,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             **kws_augur_predict)  # AUGUR model prediction
         print(results["summary_metrics"])  # results summary
         
-        # Plotting
+        # Plotting & Output
         if plot is True:
             if "vcenter" not in kwargs:
                 kwargs.update({"vcenter": 0})
@@ -371,18 +387,18 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             kws_neighbors = kwargs.pop(
                 "kws_neighbors") if "kws_neighbors" in kwargs else {}
             try:
-                # def_pal = {col_perturbation: dict(zip(
+                # def_pal = {col_perturbed: dict(zip(
                 #     [key_control, key_treatment], ["black", "red"]))}
                 sc.pp.neighbors(data, **kws_neighbors)
                 sc.tl.umap(data, **kws_umap)
                 figs["perturbation_effect_umap"] = sc.pl.umap(
                     data, color=["augur_score", col_cell_type, 
-                                 col_perturbation],
+                                 col_perturbed],
                     color_map=kwargs[
                         "color_map"] if "color_map" in kwargs else "reds",
                     palette=kwargs[
                         "palette"] if "palette" in kwargs else None,
-                    title=["Augur Score", col_cell_type, col_perturbation]
+                    title=["Augur Score", col_cell_type, col_perturbed]
                 )  # scores super-imposed on UMAP
             except Exception as err:
                 figs["perturbation_effect_umap"] = err
@@ -391,10 +407,11 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # most important genes for prioritization
             figs["perturbation_scores"] = {}
+        adata_pert
     return data, results, figs
 
 
-def perform_differential_prioritization(adata, col_perturbation="perturbation", 
+def perform_differential_prioritization(adata, col_perturbed="perturbation", 
                                         key_treatment_list="NT",
                                         label_col="label",
                                         assay=None,
@@ -407,13 +424,13 @@ def perform_differential_prioritization(adata, col_perturbation="perturbation",
     """
     Determine differential prioritization based on which cell types 
     were most accurately (AUC) classified as (not) perturbed in different
-    runs of Augur (different values of col_perturbation).
+    runs of Augur (different values of col_perturbed).
 
     Args:
         adata (AnnData): Scanpy object.
-        col_perturbation (str): Column used to indicate experimental condition.
+        col_perturbed (str): Column used to indicate experimental condition.
         key_treatment_list (list): List of two conditions 
-            (values in col_perturbation).
+            (values in col_perturbed).
         label_col (str, optional): _description_. Defaults to "label_col".
         assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
             Defaults to None (works if only one assay).
@@ -448,13 +465,13 @@ def perform_differential_prioritization(adata, col_perturbation="perturbation",
         ag_rfc = pt.tl.Augur(classifier)
         ddd = ag_rfc.load(
             adata[assay] if assay else adata, 
-            condition_label=col_perturbation, 
+            condition_label=col_perturbed, 
             treatment_label=x,
             cell_type_col=col_cell_type,
             label_col=label_col
             )  # add dummy variables, rename cell type & label columns
         ddd = ag_rfc.load(adata[assay] if assay else adata, 
-                          condition_label=col_perturbation, treatment_label=x)
+                          condition_label=col_perturbed, treatment_label=x)
         dff_a, res_a = ag_rfc.predict(ddd, augur_mode="augur", 
                                       **kws_augur_predict)  # augur
         dff_p, res_p = ag_rfc.predict(ddd, augur_mode="permute", 
@@ -483,7 +500,7 @@ def analyze_composition(adata, reference_cell_type,
                         generate_sample_level=True, 
                         col_cell_type="cell_type",
                         sample_identifier="batch",
-                        col_perturbation="condition",
+                        col_perturbed="condition",
                         est_fdr=0.05,
                         plot=True,
                         out_file=None, **kwargs):
@@ -506,9 +523,9 @@ def analyze_composition(adata, reference_cell_type,
         generate_sample_level=generate_sample_level,
         cell_type_identifier=col_cell_type, 
         sample_identifier=sample_identifier, 
-        covariate_obs=[col_perturbation])  # load data
+        covariate_obs=[col_perturbed])  # load data
     sccoda_data = sccoda_model.prepare(
-        sccoda_data, formula=col_perturbation, 
+        sccoda_data, formula=col_perturbed, 
         reference_cell_type=reference_cell_type)
     print(sccoda_data)
     print(sccoda_data["coda"].X)
@@ -522,9 +539,9 @@ def analyze_composition(adata, reference_cell_type,
                 abundant_threshold=0.9)  # helps choose rference cell type
         figs["proportions"] = pt.pl.coda.boxplots(
             sccoda_data, modality_key=mod, 
-            feature_name=col_perturbation, add_dots=True)
+            feature_name=col_perturbed, add_dots=True)
     sccoda_data = sccoda_model.prepare(
-        sccoda_data, modality_key=mod, formula=col_perturbation,
+        sccoda_data, modality_key=mod, formula=col_perturbed,
         reference_cell_type=reference_cell_type)  # setup model
     sccoda_model.run_nuts(sccoda_data, 
                           modality_key=mod)  # no-U-turn HMV sampling 
@@ -553,7 +570,7 @@ def analyze_composition(adata, reference_cell_type,
     if plot is True:
         figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
             sccoda_data, modality_key=mod, 
-            feature_name=col_perturbation)
+            feature_name=col_perturbed)
         plt.show()
         figs["effects"] = pt.pl.coda.effects_barplot(
             sccoda_data, modality_key=mod, 
