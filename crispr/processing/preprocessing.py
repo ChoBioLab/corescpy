@@ -354,14 +354,17 @@ def perform_qc(adata):
     print("\n\t*** Calculating & plotting QC metrics...\n\n") 
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
                                log1p=True, inplace=True)  # QC metrics
-    for k in qc_vars:
-        for v in pct_ns + ["n_genes_by_counts"]:
-            try:
-                figs[f"qc_{v}_scatter"] = sc.pl.scatter(
-                    adata, x="total_counts", y=v)
-            except Exception as err:
-                figs[f"qc_{v}_scatter"] = err
-                print(err)
+    rrs, ccs = cr.pl.square_grid(len(pct_ns + ["n_genes_by_counts"]))  # dims
+    fff, axs = plt.subplots(rrs, ccs, figsize=(5 * rrs, 5 * ccs))  # subplots
+    for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
+        try:  # unravel axes to get coordinates, then scatterplot facet
+            # aaa = np.unravel_index(a.get_subplotspec().num1, (rrs, ccs))
+            # a_x = fff.add_subplot(a)
+            sc.pl.scatter(adata, x="total_counts", y=v, ax=a, show=False)
+        except Exception as err:
+            print(err)
+    plt.show()
+    figs[f"qc_{v}_scatter"] = fff
     try:
         varm = pct_ns + ["n_genes_by_counts"]
         figs["pairplot"] = seaborn.pairplot(
@@ -426,7 +429,7 @@ def filter_qc(adata, outlier_mads=None,
         print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>") 
         print(f"\nTotal Cell Count: {adata.n_obs}")
         print("\n\t*** Filtering cells by mitochondrial gene percentage...") 
-        print(f"\n\tMinimum: {min_pct_mt}\n\tMaximum: {max_pct_mt}...")
+        print(f"\n\tMinimum: {min_pct_mt}\n\tMaximum: {max_pct_mt}")
         adata = adata[(adata.obs.pct_counts_mt <= max_pct_mt) * (
             adata.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
         print(f"\tNew Count: {adata.n_obs}")
