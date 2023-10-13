@@ -124,6 +124,7 @@ def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
 def perform_celltypist(adata, model, col_cell_type=None, 
                        majority_voting=False, **kwargs):
     """Annotate cell types using CellTypist."""
+    figs = {}
     try:
         mod = celltypist.models.Model.load(
             model=model if ".pkl" in model else model + ".pkl")  # load model
@@ -133,7 +134,8 @@ def perform_celltypist(adata, model, col_cell_type=None,
     preds = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, **kwargs)  # run
     if col_cell_type is not None:  # compare to a different cell type label
-        celltypist.dotplot(preds, use_as_reference=col_cell_type, 
-                           use_as_prediction="predicted_labels")
-    return preds
+        figs = celltypist.dotplot(
+            preds, use_as_reference=col_cell_type,
+            use_as_prediction="predicted_labels")
+    return preds, figs
 

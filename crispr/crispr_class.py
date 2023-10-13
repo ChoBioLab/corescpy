@@ -281,8 +281,9 @@ class Crispr(object):
         print("\n\n<<<INITIALIZING CRISPR CLASS OBJECT>>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
-        self._layer_perturbation = "X_pert"
         self._file_path = file_path
+        self._layers = {"layer_original": "original", 
+                        "layer_perturbation": "X_pert"}
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
         
@@ -597,7 +598,8 @@ class Crispr(object):
             assay = self._assay
         self.adata, figs = cr.pp.process_data(
             self.adata, assay=assay, assay_protein=assay_protein, 
-            remove_doublets=remove_doublets, **self._columns,
+            remove_doublets=remove_doublets, 
+            **self._columns, **self._layers,
             **kwargs)  # preprocess
         if run_label not in self.figures:
             self.figures[run_label] = {}
@@ -636,7 +638,7 @@ class Crispr(object):
     
     def annotate_clusters(self, model, **kwargs):
         """Use CellTypist to annotate clusters."""
-        preds = cr.ax.perform_celltypist(
+        preds, ct_dot = cr.ax.perform_celltypist(
             self.adata[self._assay] if self._assay else self.adata,
             model, majority_voting=True, **kwargs)  # annotate
         self.results["celltypist"] = preds
@@ -647,7 +649,7 @@ class Crispr(object):
                 preds.predicted_labels)
         sc.pl.umap(self.adata, color=[self._columns["col_cell_type"]] + list(
             preds.predicted_labels.columns))  # UMAP
-        return preds
+        return preds, ct_dot
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 
@@ -664,6 +666,7 @@ class Crispr(object):
         return marks, figs_m
         
     def run_mixscape(self, assay=None, assay_protein=None,
+                     col_cell_type=None,
                      target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
                      run_label="main",
@@ -767,15 +770,20 @@ class Crispr(object):
         """
         if assay is None:
             assay = self._assay
-        for x in [self._columns, self._keys]:
+        if assay_protein is None:
+            assay_protein = self._assay
+        for x in [self._columns, self._keys, self._layers]:
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if "col_cell_type" in kwargs:
+            _ = kwargs.pop("col_cell_type")
         figs_mix = cr.ax.perform_mixscape(
             self.adata.copy() if test is True else self.adata, 
-            assay=assay if assay else self._assay,
-            assay_protein=assay_protein if (
-                assay_protein) else self._assay_protein,
+            assay=assay, assay_protein=assay_protein,
+            col_cell_type=col_cell_type,
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
             plot=plot, **kwargs)
@@ -1079,7 +1087,7 @@ class Crispr(object):
             lab = f"gene_expression_{i}" if i else "gene_expression"
             if i is None:
                 hm_title = "Gene Expression"
-            elif i == self._layer_perturbation:
+            elif i == self._layers["layer_perturbation"]:
                 hm_title = f"Gene Expression (Perturbation Layer)"
             else:
                 hm_title = f"Gene Expression ({i})"

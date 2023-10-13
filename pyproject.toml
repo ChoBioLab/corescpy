@@ -23,6 +23,7 @@ dependencies = [
     "scanpy[leiden]",
     "muon",
     "pertpy",
+    "celltypist",
     "rich",
     "requests",
     "ipywidgets",

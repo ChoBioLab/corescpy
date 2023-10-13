@@ -19,13 +19,13 @@ COLOR_MAP = "coolwarm"
     
     
 def perform_mixscape(adata, col_perturbed="perturbation",
+                     layer_perturbation=None,
                      key_control="NT",
                      key_treatment="perturbed",
                      assay=None,
                      col_guide_rna="guide_ID",
                      col_split_by=None,
                      col_target_genes="gene_target",
-                     layer_perturbation="X_pert", 
                      iter_num=10,
                      min_de_genes=5, pval_cutoff=5e-2, logfc_threshold=0.25,
                      subsample_number=300,
@@ -38,12 +38,14 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                      kws_perturbation_signature=None,
                      **kwargs):
     """
-    Identify perturbed cells based on target genes (`adata.obs['mixscape_class']`,
-    `adata.obs['mixscape_class_global']`) and calculate posterior probabilities
-    (`adata.obs['mixscape_class_p_<key_treatment>']`, e.g., KO) and
-    perturbation scores. 
+    Identify perturbed cells based on target genes 
+    (`adata.obs['mixscape_class']`,
+    `adata.obs['mixscape_class_global']`) and calculate posterior 
+    probabilities (`adata.obs['mixscape_class_p_<key_treatment>']`,
+    and perturbation scores. 
     
-    Optionally, perform LDA to cluster cells based on perturbation response.
+    Optionally, perform LDA to cluster cells based on perturbation 
+    response and gene expression jointly.
     Optionally, create figures related to differential gene 
     (and protein, if available) expression, perturbation scores, 
     and perturbation response-based clusters. 
@@ -53,65 +55,71 @@ def perform_mixscape(adata, col_perturbed="perturbation",
 
     Args:
         adata (AnnData): Scanpy data object.
-        col_perturbed (str): Perturbation category column of `adata.obs` 
-            (should contain key_control).
+        layer_perturbation (str, optional): Layer in `adata` that 
+            contains the data you want to use for the 
+            perturbation analysis.
+        col_perturbed (str): Perturbation category column of 
+            `adata.obs` (should contain key_control).
+        assay (str, optional): Assay slot of adata 
+            ('rna' for `adata['rna']`). 
+            Defaults to None (works if only one assay).
+        assay_protein (str, optional): Protein assay slot name 
+            (if available). Defaults to None.
         key_control (str, optional): The label in `col_perturbed`
             that indicates control condition. Defaults to "NT".
         key_treatment (str, optional): The label in `col_perturbed`
-            that indicates a treatment condition (e.g., drug administration, 
-            CRISPR knock-out/down). Defaults to "KO".
-            Will also be 
+            that indicates a treatment condition (e.g., drug 
+            administration, CRISPR knock-out/down). Defaults to "KO".
         col_split_by (str, optional): `adata.obs` column name of 
-            sample categories to calculate separately (e.g., replicates). 
-            Defaults to None.
-        col_target_genes (str, optional): Name of column with target genes. 
-            Defaults to "gene_target".
-        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
-            Defaults to None (works if only one assay).
-        assay_protein (str, optional): Protein assay slot name (if available).
-            Defaults to None.
-        protein_of_interest (str, optional): If assay_protein is not None 
-            and plot is True, will allow creation of violin plot of 
-            protein expression (y) by 
+            sample categories to calculate separately 
+            (e.g., replicates). Defaults to None.
+        col_target_genes (str, optional): Name of column with target 
+            genes. Defaults to "gene_target".
+        protein_of_interest (str, optional): If assay_protein is not 
+            None and plot is True, will allow creation of violin plot 
+            of protein expression (y) by 
             <target_gene_idents> perturbation category (x),
             split/color-coded by Mixscape classification 
             (`adata.obs['mixscape_class_global']`). Defaults to None.
-        col_guide_rna (str, optional): Name of column with guide RNA IDs (full).
-            Format may be something like STAT1-1|CNTRL-2-1. 
-            Defaults to "guide_ID".
+        col_guide_rna (str, optional): Name of column with guide 
+            RNA IDs (full). Format may be something like 
+            STAT1-1|CNTRL-2-1. Defaults to "guide_ID".
         guide_split (str, optional): Guide RNA ID # split character
-            before guide #(s) (as in "-" for "STAT3-1-2"). Same as used in
-            Crispr/crispr_class.py process guide RNA method. Defaults to "-".
-        target_gene_idents (list or bool, optional): List of names of genes 
-            whose perturbations will determine cell grouping 
+            before guide #(s) (as in "-" for "STAT3-1-2"). 
+            Same as used in Crispr/crispr_class.py process guide RNA 
+            method. Defaults to "-".
+        target_gene_idents (list or bool, optional): List of names of
+            genes whose perturbations will determine cell grouping 
             for the above-described violin plot and/or
             whose differential expression posterior probabilities 
             will be plotted in a heatmap. Defaults to None.
             True to plot all in `adata.uns["mixscape"]`.
-        layer_perturbation (str, optional): `adata.layers` slot name. 
-            Defaults to None.
-        min_de_genes (int, optional): Minimum number of genes a cell has 
-            to express differentially to be labeled 'perturbed'. 
+        min_de_genes (int, optional): Minimum number of genes a cell 
+            has to express differentially to be labeled 'perturbed'. 
             For Mixscape and LDA (if applicable). Defaults to 5.
         pval_cutoff (float, optional): Threshold for significance 
             to identify differentially-expressed genes. 
             For Mixscape and LDA (if applicable). Defaults to 5e-2.
-        logfc_threshold (float, optional): Will only test genes whose average 
-            logfold change across the two cell groups is at least this number. 
-            For Mixscape and LDA (if applicable). Defaults to 0.25.
-        n_comps_lda (int, optional): Number of principal components (e.g., 10)
-            for PCA xperformed as part of LDA for pooled CRISPR screen data. 
-            Defaults to None.
-        iter_num (float, optional): Iterations to run to converge if needed.
-        plot (bool, optional): Make plots? Defaults to True.
-        kws_perturbation_signature (dict, optional): Optional keyword arguments
-             to pass to `pertpy.tl.PerturbationSignature()` 
-             (also see Pertpy documentation).
-            "n_neighbors" (# of unperturbed neighbors to use for comparison
-                when calculating perturbation signature), 
+        logfc_threshold (float, optional): Will only test genes whose 
+            average logfold change across the two cell groups is at 
+            least this number. For Mixscape and LDA (if applicable). 
+            Defaults to 0.25.
+        n_comps_lda (int, optional): Number of principal components 
+            (e.g., 10) for PCA xperformed as part of LDA for pooled 
+            CRISPR screen data. Defaults to None.
+        iter_num (float, optional): Iterations to run to converge 
+            if needed.
+        plot (bool, optional): Make plots? 
+            Defaults to True.
+        kws_perturbation_signature (dict, optional): Optional keyword 
+            arguments to pass to `pertpy.tl.PerturbationSignature()` 
+            (also see Pertpy documentation). "n_neighbors" 
+            (# of unperturbed neighbors to use for comparison
+            when calculating perturbation signature), 
             "n_pcs", "use_rep" (`X` or any `.obsm` keys), 
-            "batch_size" (if None, use full data, which is memory-intensive,
-                or specify an integer to calculate signature in batches,
+            "batch_size" (if None, use full data, which is 
+                memory-intensive, or specify an integer to calculate 
+                signature in batches, 
                 which is inefficient for sparse data).
     """
     figs = {}
@@ -121,25 +129,29 @@ def perform_mixscape(adata, col_perturbed="perturbation",
         kws_perturbation_signature = {}
         
     # Perturbation Signature
+    adata_pert = (adata[assay] if assay else adata).copy()
+    if layer_perturbation is not None:
+        adata_pert.X = adata_pert.layers[layer_perturbation]
     mix = pt.tl.Mixscape()
-    adata_pert = mix.perturbation_signature(
-        adata[assay] if assay else adata, col_perturbed, 
-        key_control, split_by=col_split_by, copy=True,
-        **kws_perturbation_signature
-        )  # subtract GEX of perturbed cells from their unperturbed neighbors
     adata_pert = adata_pert[adata_pert.obs[col_perturbed].isin(
         [key_treatment, key_control])].copy()  # ensure in perturbed/control
     adata_pert = adata_pert[~adata_pert.obs[
         col_target_genes].isnull()].copy()  # ensure no NA target genes
-    if layer_perturbation != "X_pert":
-        adata_pert.layers[layer_perturbation] = adata_pert.layers["X_pert"]
-    adata_pert.X = adata_pert.layers[layer_perturbation]
+    print("\n<<< CALCULATING PERTURBATION SIGNATURE >>>") 
+    mix.perturbation_signature(
+        adata_pert, col_perturbed, key_control, split_by=col_split_by, 
+        **kws_perturbation_signature
+        )  # subtract GEX of perturbed cells from their unperturbed neighbors
+    layer = "X_pert"
+    adata_pert.layers[layer] = adata_pert.layers[layer_perturbation]
+    adata_pert.X = adata_pert.layers[layer]
     
     # Mixscape Classification & Perturbation Scoring
+    print("\n<<< RUNNING MIXSCAPE ROUTINE >>>") 
     mix.mixscape(adata=adata_pert, 
                  # adata=adata_pert,
                  labels=col_target_genes, control=key_control, 
-                 layer=layer_perturbation, 
+                 layer=layer,
                  perturbation_type=key_treatment,
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
@@ -171,7 +183,7 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                             adata=adata_pert, 
                             subsample_number=subsample_number,
                             labels=col_target_genes, target_gene=g, 
-                            layer=layer_perturbation, control=key_control
+                            layer=layer, control=key_control
                             )  # differential expression heatmap ordered by PPs
                 except Exception as err:
                     figs["mixscape_DEX_ordered_by_ppp_heat"][g] = err
@@ -199,6 +211,7 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                 groupby="mixscape_class")  # gene: perturbed, NP, control
             
     # Perturbation-Specific Cell Clusters
+    print("\n<<< RUNNING LINEAR DISCRIMINANT ANALYSIS (CLUSTERING) >>>") 
     try:
         mix.lda(adata=adata_pert, 
                 # adata=adata_pert,

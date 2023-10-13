@@ -106,6 +106,7 @@ def combine_matrix_protospacer(
     
 
 def process_data(adata, assay=None, assay_protein=None,
+                 layer_original="original",
                  col_gene_symbols=None,
                  col_cell_type=None,
                  # remove_doublets=True,
@@ -129,6 +130,8 @@ def process_data(adata, assay=None, assay_protein=None,
             (for multi-modal data only). Defaults to None.
         assay_protein (str, optional): The name of the protein assay. 
             (for multi-modal data only). Defaults to None.
+        layer_original (str, optional): The name of the AnnData layer 
+            to store the original data. Defaults to "raw".
         col_gene_symbols (str, optional): The name of the column or 
             index in `.var` containing gene symbols. Defaults to None.
         col_cell_type (str, optional): The name of the column 
@@ -189,9 +192,9 @@ def process_data(adata, assay=None, assay_protein=None,
     # Initial Information
     print(adata)
     if assay:
-        adata[assay].layers["raw_original"] = adata[assay].X 
+        adata[assay].layers[layer_original] = adata[assay].X
     else:
-        adata.layers["raw_original"] = adata.X
+        adata.layers[layer_original] = adata.X
     if outlier_mads is not None:  # if filtering based on calculating outliers 
         if isinstance(outlier_mads, (int, float)):  # same MADs, all metrics
             qc_mets = ["log1p_total_counts", "log1p_n_genes_by_counts",
