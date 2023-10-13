@@ -286,55 +286,75 @@ class Crispr(object):
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
         
+        # Create Attributes to Store Results/Figures
+        self.figures = {"main": {}}
+        self.results = {"main": {}}
+        self.info = {"descriptives": {}, 
+                      "guide_rna": {}}  # extra info to store by methods
+        
         # Create Object & Store Raw Counts
         self.adata = cr.pp.create_object(
             self._file_path, assay=None, col_gene_symbols=col_gene_symbols)
-        self.adata.layers['counts'] = self.adata.X.copy()
+        self.rna.layers['counts'] = self.rna.X.copy()
         
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [
             col_guide_rna, col_perturbed, col_condition])):
-            pass
+            if col_perturbed in self.rna.obs and (
+                col_condition in self.rna.obs):
+                raise ValueError("col_perturbed and col_condition cannot "
+                                 "both be in `.obs`. col_perturbed must be "
+                                 "created from col_condition.")
+            if col_perturbed in self.rna.obs:
+                warnings.warn(f"col_perturbed {col_perturbed} already "
+                              " in `.obs`. Assuming perturbation is binary "
+                              "(i.e., only has two conditions, including "
+                              "control), so col_condition will be "
+                              "equivalent.")
+                self.rna.obs.loc[:, col_condition] = self.rna.obs[
+                    col_perturbed]
         else:
             raise ValueError("col_condition or "
                              "col_guide_rna must be in `.obs`.")
-        
-        # Create Attributes to Store Results/Figures
-        self.figures = {"main": {}}
-        self.results = {"main": {}}
-        self._info = {"descriptives": {}, 
-                      "guide_rna": {}}  # extra info to store by methods
         print(self.adata.obs, "\n\n") if assay else None
         print("\n\n", self.rna.obs)
         
         # Process Guide RNAs
-        self._info["guide_rna"]["keywords"] = kws_process_guide_rna
+        self.info["guide_rna"]["keywords"] = kws_process_guide_rna
         if kws_process_guide_rna is not None:
             print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
             tg_info, feats_n = cr.pp.filter_by_guide_counts(
                 self.rna, col_guide_rna, col_num_umis=col_num_umis,
                 key_control=key_control, **kws_process_guide_rna
-                )  # process (e.g., multi-probe names) & filter by sgRNA counts
+                )  # process (e.g., multi-probe names) & filter by # gRNA
             kws_process_guide_rna[
                 "feature_split"] = tg_info.feature_split.iloc[0]
-            self._info["guide_rna"]["keywords"] = kws_process_guide_rna
-            self._info["guide_rna"]["counts_unfiltered"] = feats_n
+            feature_split = kws_process_guide_rna["feature_split"]
+            self.info["guide_rna"]["keywords"] = kws_process_guide_rna
+            self.info["guide_rna"]["counts_unfiltered"] = feats_n
             for q in [col_guide_rna, 
                       col_num_umis]:  # replace w/ processed entries
                 tg_info.loc[:, q] = tg_info[q + "_filtered"]
             if remove_multi_transfected is True:
-                self._info["guide_rna"]["counts_single_multi"] = tg_info.copy()
+                self.info["guide_rna"]["counts_single_multi"] = tg_info.copy()
                 tg_info = tg_info.loc[tg_info[
                     f"{col_guide_rna}_list_filtered"].apply(
                         lambda x: np.nan if len(x) > 1 else x).dropna().index] 
-            self._info["guide_rna"]["counts"] = tg_info.copy()
-            self.rna.obs = self.rna.obs.join(tg_info, lsuffix="_original")
+            self.info["guide_rna"]["counts"] = tg_info.copy()
+            self.rna.obs = self.rna.obs.join(tg_info[
+                f"{col_guide_rna}_list_all"].apply(
+                    lambda x: feature_split.join(x) if isinstance(
+                        x, (np.ndarray, list, set, tuple)) else x).to_frame(
+                            col_guide_rna), lsuffix="_original"
+                        )  # processed full gRNA string without guide_split...
+            self.rna.obs = self.rna.obs.join(
+                tg_info[col_guide_rna].to_frame(col_condition), 
+                lsuffix="_original")  # condition column=filtered target genes
+            self.rna.obs = self.rna.obs.join(
+                tg_info[col_num_umis].to_frame(col_num_umis), 
+                lsuffix="_original")  # filtered UMI (summed across same gene)
             if remove_multi_transfected is True:
-                self.rna = self.rna[~self.rna.obs[col_guide_rna].isnull()]
-            self.rna.obs.loc[:,  col_condition] = self.rna.obs[
-                col_guide_rna]  # col_condition=processed col_guide_rna
-            self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                col_condition].copy()  # ...condition column=target genes
+                self.rna = self.rna[~self.rna.obs[col_condition].isnull()]
         if col_guide_rna in self.rna.obs:  # i.e., if CRISPR...
             if col_condition not in self.rna.obs:  # must create target col? 
                 self.rna.obs.loc[:, col_condition] = self.rna.obs[
@@ -343,53 +363,21 @@ class Crispr(object):
             if col_guide_rna is not None and col_guide_rna in self.rna.obs:
                 warnings.warn("`kws_process_guide_rna=None` "
                               "HIGHLY DISCOURAGED for CRISPR designs.")
-            
-        # Condition Column(s)
-        if col_condition not in self.rna.obs:  # col_condition needs creating? 
-                self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_perturbed
-                    ].copy()  # mulit-category condition=target genes
-            elif col_perturbed in self.rna.obs:
-                self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_perturbed
-                    ].copy()  # mulit-category condition same as binary
-            else:
-                raise ValueError("col_condition, col_target_genes, or "
-                                 "col_perturbed must be in `.obs`.")
-        if remove_multi_transfected is True:
-            # drop cells w/ multiple guides that survived filtering
-            self.rna = self.rna[~self.rna.obs[col_guide_rna].isnull()]
-            if col_condition not in self.rna
-        else:
+                if remove_multi_transfected is True:
+                    warnings.warn("`kws_process_guide_rna=None` "
+                                "so unable to drop multi-transfected cells.")
             
         # Binary Perturbation Column
         if (col_perturbed not in 
             self.rna.obs):  # if col_perturbed doesn't exist yet...
             self.rna.obs = self.rna.obs.join(
-                self.rna.obs[:, col_condition].apply(
+                self.rna.obs[col_condition].apply(
                     lambda x: x if pd.isnull(x) else key_control if (
                         x == key_control) else key_treatment
                     ).to_frame(col_perturbed), lsuffix="_original"
                 )  # create binary form of col_condition
-                    
-        # Perturbed vs. Untreated Column
-        if col_perturbed not in self.adata.obs:
-            print("\n\n<<<CREATING PERTURBED/CONTROL COLUMN>>>\n")
-            if assay:
-                self.adata[assay].obs.loc[
-                    :, col_perturbed] = self.adata[assay].obs[
-                        col_target_genes].apply(
-                            lambda x: key_control if pd.isnull(x) or (
-                                x == key_control) else key_treatment)
-            else:
-                self.adata.obs.loc[:, col_perturbed] = self.adata.obs[
-                    col_target_genes].apply(
-                        lambda x: key_control if pd.isnull(x) or (
-                            x == key_control) else key_treatment)
         
             # Store Columns & Keys within Columns as Dictionary Attributes
-            if col_target_genes is None:  # if unspecified...
-                col_target_genes = col_guide_rna  # ...= guide ID (maybe processed)
             self._columns = dict(col_gene_symbols=col_gene_symbols,
                                  col_condition=col_condition,
                                  col_target_genes=col_condition,
@@ -448,16 +436,41 @@ class Crispr(object):
         self.adata.obs = value
             
     @property
-    def obs_rna(self):
-        """Get `.obs` attribute of AnnData's gene expression modality."""
-        return self.adata[self._assay].obs if self._assay else self.adata.obs
+    def uns(self):
+        """Get `.uns` attribute of .adata's gene expression modality."""
+        return self.adata[self._assay].uns if self._assay else self.adata.uns
 
-    @obs_rna.setter
-    def obs_rna(self, value) -> None:
+    @uns.setter
+    def uns(self, value) -> None:
         if self._assay: 
-            self.adata[self._assay].obs = value
+            self.adata[self._assay].uns = value
         else:
-            self.adata.obs = value
+            self.adata.uns = value
+            
+    @property
+    def var(self):
+        """Get `.var` attribute of .adata's gene expression modality."""
+        return self.adata[self._assay].var if self._assay else self.adata.var
+
+    @var.setter
+    def var(self, value) -> None:
+        if self._assay: 
+            self.adata[self._assay].var = value
+        else:
+            self.adata.var = value
+            
+    @property
+    def obsm(self):
+        """Get `.obsm` attribute of .adata's gene expression modality."""
+        return self.adata[
+            self._assay].obsm if self._assay else self.adata.obsm
+
+    @obsm.setter
+    def obsm(self, value) -> None:
+        if self._assay: 
+            self.adata[self._assay].obsm = value
+        else:
+            self.adata.obsm = value
     
     def describe(self, group_by=None, plot=False):
         """Describe data."""
@@ -465,8 +478,8 @@ class Crispr(object):
         gbp = [self._columns["col_cell_type"]]
         if group_by:
             gbp += [group_by]
-        if "descriptives" not in self._info:
-            self._info["descriptives"] = {}
+        if "descriptives" not in self.info:
+            self.info["descriptives"] = {}
         print("\n\n\n", self.adata.obs.describe().round(2),
               "\n\n\n")
         print(f"\n\n{'=' * 80}\nDESCRIPTIVES\n{'=' * 80}\n\n")
@@ -475,22 +488,22 @@ class Crispr(object):
             print(self.adata.obs.groupby(g).describe().round(2), 
                   f"\n\n{'-' * 40}\n\n") 
         try:
-            if "guide_rna_counts" not in self._info["descriptives"]:
-                self._info["descriptives"][
+            if "guide_rna_counts" not in self.info["descriptives"]:
+                self.info["descriptives"][
                     "guide_rna_counts"] = self.count_gRNAs()
-            desc["n_grnas"] = self._info["descriptives"][
+            desc["n_grnas"] = self.info["descriptives"][
                 "guide_rna_counts"].groupby("gene").describe().rename(
                     {"mean": "mean sgRNA count/cell"})
             print(desc["n_grnas"])
             if plot is True:
-                n_grna = self._info["descriptives"][
+                n_grna = self.info["descriptives"][
                     "guide_rna_counts"].to_frame("sgRNA Count")
                 if group_by is not None:
                     n_grna = n_grna.join(self.adata.obs[
                         group_by].rename_axis("bc"))  # join group_by variable
                 figs["n_grna"] = sns.catplot(data=n_grna.reset_index(),
                     y="gene", x="sgRNA Count", kind="violin", hue=group_by,
-                    height=len(self._info["descriptives"][
+                    height=len(self.info["descriptives"][
                         "guide_rna_counts"].reset_index().gene.unique())
                     )  # violin plot of gNRA counts per cell
         except Exception as err:
@@ -512,7 +525,7 @@ class Crispr(object):
                         y="N", kind="bar", x=g, hue=g)  # bar plot of cell #s
         # except Exception as err:
         #     warnings.warn(f"{err}\n\n\nCould not describe cell counts.")
-        self._info["descriptives"].update(desc)
+        self.info["descriptives"].update(desc)
         return figs
     
     def get_guide_rna_counts(self, target_gene_idents=None, group_by=None,
@@ -534,7 +547,7 @@ class Crispr(object):
             kwargs.update({"share_x": True})
         # sufxs = ["all", "filtered"]
         # cols = [self._columns[x] for x in ["col_guide_rna", "col_num_umis"]] 
-        # grna = [self._info["guide_rna"]["counts_raw"][
+        # grna = [self.info["guide_rna"]["counts_raw"][
         #     [f"{i}_list_{x}" for i in cols]] for x in sufxs]
         # for g in grna:
         #     g.columns = cols
@@ -550,7 +563,7 @@ class Crispr(object):
         #         ["b", "Target"]).to_frame("N gRNAs").join(
         #             self.adata.obs[[col_cell_type]].rename_axis(
         #                 "b")).reset_index()
-        dff = self._info["guide_rna"]["counts_unfiltered"].reset_index(
+        dff = self.info["guide_rna"]["counts_unfiltered"].reset_index(
             "Gene").rename({"Gene": "Target"}, axis=1).join(
                 self.adata.obs[group_by])  # gRNA counts + cell types
         if target_gene_idents:
@@ -571,7 +584,7 @@ class Crispr(object):
                           kind="violin", **kwargs)
         fig.fig.suptitle("Guide RNA Counts by Cell Type")
         fig.fig.tight_layout()
-        return self._info["guide_rna"]["counts_unfiltered"], fig
+        return self.info["guide_rna"]["counts_unfiltered"], fig
     
     def preprocess(self, assay=None, assay_protein=None,
                    clustering=False, run_label="main", 
@@ -669,37 +682,39 @@ class Crispr(object):
         Args:
             adata (AnnData): Scanpy data object.
             col_split_by (str, optional): `adata.obs` column name of 
-                sample categories to calculate separately (e.g., replicates).
-                Defaults to None.
+                sample categories to calculate separately 
+                (e.g., replicates). Defaults to None.
             assay (str, optional): Assay slot of adata 
                 ('rna' for `adata['rna']`). If not provided, will use
-                self._assay. Typically, users should not specify this argument.
+                self._assay. Typically, users should not specify this 
+                argument.
             assay_protein (str, optional): Protein assay slot name 
-                (if available). If True, use `self._assay_protein`. If None,
-                don't run extra protein expression analyses, even if 
-                protein expression modality is available.
-            protein_of_interest (str, optional): If assay_protein is not None  
-                and plot is True, will allow creation of violin plot of 
-                protein expression (y) by 
+                (if available). If True, use `self._assay_protein`. If 
+                None, don't run extra protein expression analyses, even 
+                if protein expression modality is available.
+            protein_of_interest (str, optional): If assay_protein is not 
+                None and plot is True, will allow creation of violin 
+                plot of protein expression (y) by 
                 <target_gene_idents> perturbation category (x),
                 split/color-coded by Mixscape classification 
-                (`adata.obs['mixscape_class_global']`). Defaults to None.
-            target_gene_idents (list or bool, optional): List of names of 
-                genes whose perturbations will determine cell grouping 
-                for the above-described violin plot and/or
+                (`adata.obs['mixscape_class_global']`). 
+                Defaults to None.
+            target_gene_idents (list or bool, optional): List of names 
+                of genes whose perturbations will determine cell 
+                grouping for the above-described violin plot and/or
                 whose differential expression posterior probabilities 
                 will be plotted in a heatmap. Defaults to None.
                 True to plot all in `self.adata.uns["mixscape"]`.
-            min_de_genes (int, optional): Minimum number of genes a cell has
-                to express differentially to be labeled 'perturbed'. 
+            min_de_genes (int, optional): Minimum number of genes a cell 
+                must express differentially to be labeled 'perturbed'. 
                 For Mixscape and LDA (if applicable). Defaults to 5.
             pval_cutoff (float, optional): Threshold for significance 
                 to identify differentially-expressed genes. 
                 For Mixscape and LDA (if applicable). Defaults to 5e-2.
-            logfc_threshold (float, optional): Will only test genes whose 
-                average logfold change across the two cell groups is 
-                at least this number. For Mixscape and LDA (if applicable). 
-                Defaults to 0.25.
+            logfc_threshold (float, optional): Will only test genes  
+                whose average logfold change across the two cell groups  
+                is at least this number. For Mixscape and LDA 
+                (if applicable). Defaults to 0.25.
             n_comps_lda (int, optional): Number of principal components
                 for PCA. Defaults to None (LDA not performed).
             iter_num (float, optional): Iterations to run 
@@ -707,24 +722,27 @@ class Crispr(object):
             plot (bool, optional): Make plots? Defaults to True.
             **kwargs: Additional keyword arguments to be passed to 
                 the `crispr.ax.perform_mixscape()` function.
-                The arguments that are used vary by method, but for example,
-                    you can pass `key_<control, treatment>` and/or
-                    `col_<perturbation, cell_type, etc.>` 
-                    (e.g., `col_treatment`) to override those defined by 
+                The arguments that are used vary by method, but for ,
+                    example you can pass `key_<control, treatment>` 
+                    and/or
+                    `col_<perturbation, cell_type, etc.>` to override 
+                    those defined by 
                     `self._columns` and `self._keys`.
                     If not specified (which should usually be the case), 
-                    the corresponding `._key/column` attribute will be used.
-                    You can pass these extra arguments in rare case where you
-                    want to use different columns/keys within columns across 
+                    the corresponding `._key/column` attribute will be 
+                    used. You can pass these extra arguments in rare 
+                    case where you want to use different columns/keys 
+                    within columns across 
                     different methods or runs of a method. For instance,
                     for experimental conditions that have
                     multiple levels (e.g., control, drug A treatment, 
                     drug B treatment), allowing this argument 
                     (and `col_perturbed`, for instance, 
                     if self._columns["col_perturbed"] 
-                    is a binary treatment vs. drug column, and you want to use 
-                    the more specific column for Augur)
-                    to be specified allows for more flexibility in analysis.
+                    is a binary treatment vs. drug column, and you want 
+                    to use the more specific column for Augur)
+                    to be specified allows for more flexibility 
+                    in analysis.
             
         Returns:
             dict: A dictionary containing figures visualizing
@@ -733,16 +751,17 @@ class Crispr(object):
         Notes:
             - Classifications are stored in 
             `self.adata.obs['mixscape_class_global']`
-            (detectible perturbation (`self._keys["key_treatment"]`) vs. 
-            non-detectible perturbation (`self._keys["key_nonperturbed"]`) 
+            (detectible perturbation (`._keys["key_treatment"]`) vs. 
+            un-detectible perturbation (`._keys["key_nonperturbed"]`) 
             vs. control (`self._keys["key_control"]`)) and in
             `self.adata.obs['mixscape_class']` (like the previous, 
-                but specific to target genes, e.g., "STAT1 KO" vs. just "KO"). 
+                but specific to target genes, e.g., 
+                "STAT1 KO" vs. just "KO"). 
             - Posterial p-values are stored in 
                 `self.adata.obs['mixscape_class_p_<key_treatment>']`.
             - Other result output will be stored in `self.figures` and 
-                `self.results` under the `run_label` key under `mixscape`
-                (e.g., `self.figures["main"]["mixscape"]`).
+                `self.results` under the `run_label` key under 
+                `mixscape` (e.g., `self.figures["main"]["mixscape"]`).
             
         """
         if assay is None:
@@ -782,50 +801,55 @@ class Crispr(object):
                 Defaults to "random_forest_classifier".
             kws_augur_predict (dict): Additional keyword arguments to be 
                 passed to the `perform_augur()` function.
-            n_folds (int): The number of folds to be used for cross-validation.
-                Defaults to 3. Should be >= 3 as a matter of best practices.
+            n_folds (int): The number of folds to be used for 
+                cross-validation. Defaults to 3. 
+                Should be >= 3 as a matter of best practices.
             subsample_size (int, optional): Per Pertpy code: 
                 "number of cells to subsample randomly per type 
                 from each experimental condition." Defaults to 20.
             n_threads (bool): The number of threads to be used for 
                 parallel processing. If set to True, the available 
                 CPUs minus 1 will be used. Defaults to True.
-            select_variance_features (bool, optional): Use Augur to select 
-                genes (True), or Scanpy's  highly_variable_genes (False). 
-                Defaults to False.
+            select_variance_features (bool, optional): Use Augur 
+                to select genes (True), or Scanpy's  
+                highly_variable_genes (False). Defaults to False.
             seed (int): The random seed to be used for reproducibility. 
                 Defaults to 1618.
             plot (bool): Whether to plot the results. Defaults to True.
-            run_label (str): The label for the current run. Defaults to "main".
-            test (bool): Whether the function is being called as a test run. 
-                If True,self.adata will be copied so 
+            run_label (str): The label for the current run. 
+                Defaults to "main".
+            test (bool): Whether the function is being called as a 
+                test run. If True, self.adata will be copied so 
                 that no alterations are made inplace via Augur,
                 and results are not stored in object attributes.
                 Defaults to False.
             **kwargs: Additional keyword arguments to be passed to 
-                the `crispr.ax.perform_augur()` function.
-                The arguments that are used vary by method, but for example,
-                    you can pass `key_<control, treatment>` and/or
-                    `col_<perturbation, cell_type, etc.>` 
-                    (e.g., `col_treatment`) to override those defined by 
+                the `crispr.ax.perform_mixscape()` function.
+                The arguments that are used vary by method, but for ,
+                    example you can pass `key_<control, treatment>` 
+                    and/or
+                    `col_<perturbation, cell_type, etc.>` to override 
+                    those defined by 
                     `self._columns` and `self._keys`.
                     If not specified (which should usually be the case), 
-                    the corresponding `._key/column` attribute will be used.
-                    You can pass these extra arguments in rare case where you
-                    want to use different columns/keys within columns across 
+                    the corresponding `._key/column` attribute will be 
+                    used. You can pass these extra arguments in rare 
+                    case where you want to use different columns/keys 
+                    within columns across 
                     different methods or runs of a method. For instance,
                     for experimental conditions that have
                     multiple levels (e.g., control, drug A treatment, 
                     drug B treatment), allowing this argument 
                     (and `col_perturbed`, for instance, 
                     if self._columns["col_perturbed"] 
-                    is a binary treatment vs. drug column, and you want to use 
-                    the more specific column for Augur)
-                    to be specified allows for more flexibility in analysis.
+                    is a binary treatment vs. drug column, and you want 
+                    to use the more specific column for Augur)
+                    to be specified allows for more flexibility 
+                    in analysis.
 
         Returns:
-            tuple: A tuple containing the AnnData object, results, and figures 
-                generated by the Augur analysis.
+            tuple: A tuple containing the AnnData object, results, and 
+                figures generated by the Augur analysis.
         """
         # Column & Key Names + Other Arguments to Pass to Augur
         for x in [self._columns, self._keys]:
@@ -868,35 +892,40 @@ class Crispr(object):
             kws_plot (dict, optional): Additional keyword arguments 
                 for plotting. Defaults to None.
             highlight_real_range (bool, optional): Whether to highlight 
-                the real range by setting minimum and maximum color scaling
-                based on properties of the data. Defaults to False.
-            run_label (str, optional): The label for the current run. Affects
-                the key under which results and figures are stored in internal 
-                attributes. Defaults to "main".
+                the real range by setting minimum and maximum color 
+                scaling based on properties of the data. 
+                Defaults to False.
+            run_label (str, optional): The label for the current run. 
+                Affects the key under which results and figures are 
+                stored in internal attributes. Defaults to "main".
             plot (bool, optional): Whether to create plots. 
                 Defaults to True.
             **kwargs: Additional keyword arguments to be passed to 
-                the `crispr.ax.perform_augur()` function.
-                The arguments that are used vary by method, but for example,
-                    you can pass `key_<control, treatment>` and/or
-                    `col_<perturbation, cell_type, etc.>` 
-                    (e.g., `col_treatment`) to override those defined by 
+                the `crispr.ax.perform_mixscape()` function.
+                The arguments that are used vary by method, but for ,
+                    example you can pass `key_<control, treatment>` 
+                    and/or
+                    `col_<perturbation, cell_type, etc.>` to override 
+                    those defined by 
                     `self._columns` and `self._keys`.
                     If not specified (which should usually be the case), 
-                    the corresponding `._key/column` attribute will be used.
-                    You can pass these extra arguments in rare case where you
-                    want to use different columns/keys within columns across 
+                    the corresponding `._key/column` attribute will be 
+                    used. You can pass these extra arguments in rare 
+                    case where you want to use different columns/keys 
+                    within columns across 
                     different methods or runs of a method. For instance,
                     for experimental conditions that have
                     multiple levels (e.g., control, drug A treatment, 
                     drug B treatment), allowing this argument 
                     (and `col_perturbed`, for instance, 
                     if self._columns["col_perturbed"] 
-                    is a binary treatment vs. drug column, and you want to use 
-                    the more specific column for Augur)
-                    to be specified allows for more flexibility in analysis.
+                    is a binary treatment vs. drug column, and you want 
+                    to use the more specific column for Augur)
+                    to be specified allows for more flexibility 
+                    in analysis.
         Returns:
-            output: A tuple containing output from `cr.ax.compute_distance()`, 
+            output: A tuple containing output from 
+                `cr.ax.compute_distance()`, 
                 including distance matrices, figures, etc. 
                 See function documentation.
 
@@ -1117,7 +1146,8 @@ class Crispr(object):
                 
         # Gene Expression Dot Plot
         figs["gene_expression_dot"] = sc.pl.dotplot(
-            self.adata[assay] if assay else self.adata, genes, lab_cluster, show=False)
+            self.adata[assay] if assay else self.adata, genes, 
+            lab_cluster, show=False)
         if genes_highlight is not None:
             for x in figs["gene_expression_dot"][
                 "mainplot_ax"].get_xticklabels():
