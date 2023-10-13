@@ -187,10 +187,6 @@ def process_data(adata, assay=None, assay_protein=None,
             outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
     if col_gene_symbols == adata.var.index.names[0]:
         col_gene_symbols = None
-    cell_gene_count_range, cell_count_range = [x if x else None for x in [
-        cell_gene_count_range, cell_count_range]]
-    gene_cell_count_range, gene_count_range = [x if x else None for x in [
-        gene_cell_count_range, gene_count_range]]
     if col_cell_type is not None and col_cell_type in adata.obs:
         print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
         print(adata.obs[col_cell_type].value_counts())
@@ -384,21 +380,21 @@ def process_data(adata, assay=None, assay_protein=None,
 def calculate_qc_metrics(adata, assay=None):
     """Calculate & plot quality control metrics."""
     figs = {}
-    if patterns is None:
-        patterns = dict(zip(["mt", "ribo", "hb"], 
-                            [("MT-", "mt-"), ("RPS", "RPL"), ("^HB[^(P)]")]))
-    for k in patterns:
-        try:
-            adata.var[k] = adata.var_names.str.startswith(patterns[k])
-        except Exception as err:
-            warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign {k}: {err}")
+    patterns = dict(zip(["mt", "ribo", "hb"], 
+                        [("MT-", "mt-"), ("RPS", "RPL"), ("^HB[^(P)]")]))
+    if assay is None:
+        for k in patterns:
+            try:
+                adata.var[k] = adata.var_names.str.startswith(patterns[k])
+            except Exception as err:
+                warnings.warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     else:
-        try:
-            for k in patterns:
+        for k in patterns:
+            try:
                 adata[assay].var[k] = adata[assay].var_names.str.startswith(
                     patterns[k])
-        except TypeError as err_mt:
-            warnings.warn(f"\n\n{'=' * 80}\n\nCould not assign {k}: {err_mt}") 
+            except Exception as err:
+                warnings.warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     qc_vars = list(set(patterns.keys()).intersection((
         adata[assay] if assay else adata).var.keys()))  # available QC metrics 
     pct_counts_vars = dict(zip(qc_vars, [f"pct_counts_{k}" for k in qc_vars]))
@@ -426,7 +422,8 @@ def calculate_qc_metrics(adata, assay=None):
         except Exception as err:
             figs["qc_metrics_violin"] = err
             print(err)
-        for v in pct_counts_vars + ["n_genes_by_counts"]:
+        for v in [pct_counts_vars[k] for k in pct_counts_vars] + [
+            "n_genes_by_counts"]:
             try:
                 figs[f"qc_{v}_scatter"] = sc.pl.scatter(
                     adata[assay] if assay else adata, x="total_counts", y=v)
