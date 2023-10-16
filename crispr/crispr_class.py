@@ -327,18 +327,16 @@ class Crispr(object):
             # assume we need that column created through concatenation
             # when it's actually already in the dataset
         self.adata = cr.pp.create_object(
-            self._file_path, assay=None, col_gene_symbols=col_gene_symbols,
+            self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
             col_sample_id=col_sample_arg, 
             kws_process_guide_rna={
-                **kws_process_guide_rna,
                 "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis, 
                 "key_control": key_control, 
-                "col_guide_rna_new": col_condition,
-                "remove_multi_transfected": remove_multi_transfected}
+                "col_guide_rna_new": col_condition, 
+                "remove_multi_transfected": remove_multi_transfected, 
+                **kws_process_guide_rna}
             if kws_process_guide_rna else None)  # make AnnData
         self.rna.layers['counts'] = self.rna.X.copy()
-        if kws_process_guide_rna is not None:
-            self.rna.loc[:, col_condition] = self.rna.uns["guide_rna"]
         
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [
@@ -411,32 +409,32 @@ class Crispr(object):
         #                         "so unable to drop multi-transfected cells.")
 
         # Binary Perturbation Column
-        if (col_perturbed not in 
-            self.rna.obs):  # if col_perturbed doesn't exist yet...
-            self.rna.obs = self.rna.obs.join(
-                self.rna.obs[col_condition].apply(
-                    lambda x: x if pd.isnull(x) else key_control if (
-                        x == key_control) else key_treatment
-                    ).to_frame(col_perturbed), lsuffix="_original"
-                )  # create binary form of col_condition
+        # if (col_perturbed not in 
+        #     self.rna.obs):  # if col_perturbed doesn't exist yet...
+        #     self.rna.obs = self.rna.obs.join(
+        #         self.rna.obs[col_condition].apply(
+        #             lambda x: x if pd.isnull(x) else key_control if (
+        #                 x == key_control) else key_treatment
+        #             ).to_frame(col_perturbed), lsuffix="_original"
+        #         )  # create binary form of col_condition
         
-            # Store Columns & Keys within Columns as Dictionary Attributes
-            self._columns = dict(col_gene_symbols=col_gene_symbols,
-                                 col_condition=col_condition,
-                                 col_target_genes=col_condition,
-                                 col_perturbed=col_perturbed,
-                                 col_cell_type=col_cell_type, 
-                                 col_sample_id=col_sample_id, 
-                                 col_batch=col_batch,
-                                 col_guide_rna=col_guide_rna,
-                                 col_num_umis=col_num_umis)
-            self._keys = dict(key_control=key_control, 
-                              key_treatment=key_treatment,
-                              key_nonperturbed=key_nonperturbed)
-            for q in [self._columns, self._keys]:
-                print("\n\n")
-                cr.tl.print_pretty_dictionary(q)
-            print("\n\n", self.rna)
+        # Store Columns & Keys within Columns as Dictionary Attributes
+        self._columns = dict(col_gene_symbols=col_gene_symbols,
+                             col_condition=col_condition,
+                             col_target_genes=col_condition,
+                             col_perturbed=col_perturbed,
+                             col_cell_type=col_cell_type,
+                             col_sample_id=col_sample_id, 
+                             col_batch=col_batch,
+                             col_guide_rna=col_guide_rna,
+                             col_num_umis=col_num_umis)
+        self._keys = dict(key_control=key_control, 
+                          key_treatment=key_treatment, 
+                          key_nonperturbed=key_nonperturbed)
+        for q in [self._columns, self._keys]:
+            print("\n\n")
+            cr.tl.print_pretty_dictionary(q)
+        print("\n\n", self.rna)
         
             # Correct 10x CellRanger Guide Count Incorporation
             # raise NotImplementedError(

@@ -35,6 +35,21 @@ class GuideRNATests:
         as expected by Crispr class methods.
         Columns in 2nd element of output:\n{feats_n.columns}"""
         
+    # def test_name_processing(self):
+        # cgrna = pd.read_excel("data/process_guide_rna/multi.xlsx", 
+        #                       index_col=0)
+        # feature_split, guide_split = [str(cgrna.iloc[0][x]) for x in [
+        #     "feature_split", "guide_split"]]
+        # key_control_patterns = cgrna["key_control_patterns"].iloc[0]
+        # print(key_control_patterns)
+        # col_guide_rna = str(cgrna.iloc[0]["col_guide_rna"])
+        # col_guide_rna_series = cgrna["col_guide_rna"]
+        # targets, grnas = cr.pp.detect_guide_targets(col_guide_rna_series, 
+        #                         feature_split=feature_split,
+        #                         guide_split=guide_split,
+        #                         key_control_patterns=key_control_patterns,
+        #                         key_control="Control")
+                
         
 # class Preprocessing:
     
