@@ -68,7 +68,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
     elif isinstance(file, dict):  # metadata in protospacer files
-        print(f"\n<<< LOADING PROTOSPACER >>>")
+        print(f"\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, 
             col_barcode=col_barcode, **kwargs)
