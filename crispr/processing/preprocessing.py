@@ -44,58 +44,60 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     lists in the same order as the `file` dictionary.
     """
     if col_sample_id is not None:  # concatenate multiple datasets
+        print(f"\n<<< LOADING MULTIPLE FILEs {file} >>>")
         adatas = [None] * len(file)
         batch_categories = list(file.keys())  # keys = sample IDs
         file = [file[f] for f in file]  # turn to list 
         for f in range(len(file)):
-            print(f"\t*** Creating object {f + 1} of {len(file)}")
+            print(f"\n\n\t*** Creating object {f + 1} of {len(file)}")
             asy = assay if isinstance(
                 assay, str) or assay is None else assay[f]  # GEX/RNA assay 
             cgs = col_gene_symbols if isinstance(col_gene_symbols, str) or (
                 col_gene_symbols is None) else col_gene_symbols[f]  # symbols
             adatas[f] = cr.pp.create_object(
-                file[f], assay=asy, col_gene_symbols=cgs, 
-                kws_process_guide_rna=None, **kwargs)  # create AnnData object
+                file[f], assay=asy, col_gene_symbols=cgs, col_sample_id=None,
+                kws_process_guide_rna=kws_process_guide_rna, 
+                **kwargs)  # create AnnData object
+        print(f"\n<<< CONCATENATING FILES {file} >>>")
         adata = AnnData.concatenate(
             *adatas, join="inner", batch_key=col_sample_id, uns_merge="same", 
-            index_unique="-",  batch_categories=batch_categories,
+            index_unique="-", batch_categories=batch_categories,
             fill_value=None)  # concatenate adata objects
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
-        print(f"\n<<< LOADING FILE {file} with muon.read()>>>")
+        print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
-    elif isinstance(file, dict):
+    elif isinstance(file, dict):  # metadata in protospacer files
+        print(f"\n<<< LOADING PROTOSPACER >>>")
         adata = combine_matrix_protospacer(
-            **file, col_gene_symbols=col_gene_symbols, col_barcode=col_barcode,
-            **kwargs)  # when perturbation info not in mtx
-    elif not isinstance(file, (str, os.PathLike)):
-        print(f"\n<<< LOADING OBJECT>>>")
+            **file, col_gene_symbols=col_gene_symbols, 
+            col_barcode=col_barcode, **kwargs)
+    elif not isinstance(file, (str, os.PathLike)):  # AnnData object
+        print(f"\n<<< LOADING OBJECT >>>")
         adata = file.copy()
     elif os.path.isdir(file):  # if directory, assume 10x format
-        print(f"\n<<< LOADING 10X FILE {file}>>>")
-        adata = sc.read_10x_mtx(file, var_names=col_gene_symbols, cache=True,
-                                **kwargs)  # 10x matrix, barcodes, features
-    elif os.path.splitext(file)[1] == ".h5":
-        print(f"\n<<< LOADING 10X .h5 FILE {file}>>>")
+        print(f"\n<<< LOADING 10X FILE {file} >>>")
+        adata = sc.read_10x_mtx(
+            file, var_names=col_gene_symbols, cache=True, **kwargs)
+    elif os.path.splitext(file)[1] == ".h5":  # .h5 file
+        print(f"\n<<< LOADING 10X .h5 FILE {file} >>>")
         print(f"H5 File Format ({file})\n\n")
         explore_h5_file(file, "\n\n\n")
         adata = sc.read_10x_h5(file, **kwargs)
     else:
-        print(f"\n<<< LOADING FILE {file} with sc.read()>>>")
+        print(f"\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
     adata.var_names_make_unique()
     adata.obs_names_make_unique()
     if col_gene_symbols not in adata.var.columns:
         adata.var = adata.var.rename_axis(col_gene_symbols)
-    if kws_process_guide_rna is not None:  # guide RNA processing
+    if kws_process_guide_rna and col_sample_id is None:  # process guide RNA
         kpr = kws_process_guide_rna[f] if isinstance(
             kws_process_guide_rna, list) else kws_process_guide_rna
         if assay:
-            adatas[f][asy]  = cr.pp.process_guide_rna(
-                    adatas[f][asy].copy(), **kpr)  # process gRNA
+            adatas[assay], _  = cr.pp.process_guide_rna(adatas[assay], **kpr)
         else:
-            adatas[f]  = cr.pp.process_guide_rna(
-                adatas[f].copy(), **kpr)  # process gRNA
+            adata, _ = cr.pp.process_guide_rna(adata, **kpr)
     print("\n\n", adata)
     return adata
 
@@ -850,9 +852,11 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     if remove_multi_transfected is True:  # remove multi-transfected
         ann.uns["guide_rna"]["counts_single_multi"] = tg_info.copy()
         tg_info_all = tg_info.copy() if conserve_memory is False else None
-        tg_info = tg_info.loc[tg_info[
+        tg_info = tg_info.join(tg_info[
             f"{col_guide_rna}_list_filtered"].apply(
-                lambda x: np.nan if len(x) > 1 else x).dropna().index] 
+                lambda x: "multi" if len(x) > 1 else np.nan if pd.isnull(
+                    x) else "single").to_frame("multiple")
+            )  # multiple- or single-transfected
     ann.uns["guide_rna"]["counts"] = tg_info.copy()
     for x in [col_num_umis, col_guide_rna, col_guide_rna_new]:
         if f"{x}_original" in ann.obs:
@@ -867,9 +871,23 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
                 )  # processed full gRNA string without guide_split...
     ann.obs = ann.obs.join(tg_info[col_num_umis + "_filtered"].to_frame(
         col_num_umis), lsuffix="_original")  # filtered UMI (summed~gene)
-    ann.obs = ann.obs.join(tg_info[col_guide_rna].to_frame(
+    ann.obs = ann.obs.join(tg_info[col_guide_rna + "_filtered"].to_frame(
         col_guide_rna_new), lsuffix="_original")  # filtered gRNA summed~gene
     # ann.obs = anns[f].obs.join(
     #     tg_info[col_guide_rna].to_frame(col_condition), 
     #     lsuffix="_original")  # condition column=filtered target genes
-    return ann, tg_info, feats_n, tg_info_all
+    nobs = ann.n_obs
+    if remove_multi_transfected is True:
+        print(ann.obs)
+        print("\n\n\t*** Removing multiply-transfected cells...")
+        ann.obs = ann.obs.join(tg_info[["multiple"]], lsuffix="_original")
+        ann = ann[ann.obs.multiple != "multi"]
+        print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
+              f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%).")
+        print(ann.obs)
+    print(f"\n\n\t*** Removing filtered-out cells...")
+    ann = ann[~ann.obs[col_guide_rna_new].isnull()]
+    print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
+            f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%).")
+    print(ann.obs)
+    return ann, (tg_info, feats_n, tg_info_all)

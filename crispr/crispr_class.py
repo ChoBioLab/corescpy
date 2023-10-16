@@ -11,7 +11,7 @@ import os
 import warnings
 import matplotlib.pyplot as plt
 import seaborn as sns
-import re
+# import re
 import pertpy as pt
 import crispr as cr
 from crispr.defaults import (names_layers)
@@ -431,8 +431,8 @@ class Crispr(object):
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment, 
                           key_nonperturbed=key_nonperturbed)
+        print("\n\n")
         for q in [self._columns, self._keys]:
-            print("\n\n")
             cr.tl.print_pretty_dictionary(q)
         print("\n\n", self.rna)
         

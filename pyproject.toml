@@ -24,6 +24,7 @@ dependencies = [
     "muon",
     "pertpy",
     "celltypist",
+    "ete3",
     "rich",
     "requests",
     "ipywidgets",
