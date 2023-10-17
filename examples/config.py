@@ -12,15 +12,15 @@ DIR = os.path.join(DIR, "data")
 
 files_data = {
     "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH03"),
-    # "CRISPRi_scr_multi": {
-    #     "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
-    #     "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
-    #     "HH-Hu-CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4")
-    # },
     "CRISPRi_scr_multi": {
         "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
         "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
+        "HH-Hu-CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4")
     },
+    # "CRISPRi_scr_multi": {
+    #     "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
+    #     "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
+    # },
     "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS) 
     "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq
     "pool": f"{DIR}/norman_2019_raw.h5ad",
@@ -82,7 +82,7 @@ assays_data = {
 
 col_split_by_data = {
     "CRISPRi_scr": None,
-    "CRISPRi_scr_multi": None,
+    "CRISPRi_scr_multi": "orig.ident",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": None,
     "pool": np.nan,

@@ -337,7 +337,7 @@ class Crispr(object):
                 **kws_process_guide_rna}
             if kws_process_guide_rna else None)  # make AnnData
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-        self.rna.layers['counts'] = self.rna.X.copy()
+        self.rna.layers[self._layers["raw"]] = self.rna.X.copy()
         
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [

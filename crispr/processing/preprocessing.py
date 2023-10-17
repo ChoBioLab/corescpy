@@ -575,7 +575,7 @@ def remove_batch_effects(adata, col_cell_type="leiden",
     if plot is True:
         sc.pl.umap(adata, color=[col_batch, col_cell_type], 
                    wspace=.5, frameon=False)
-    pt.tl.SCGEN.setup_anndata(adata, batch_key=col_batch, 
+    pt.tl.SCGEN.setup_anndata(adata.copy(), batch_key=col_batch, 
                               labels_key=col_cell_type)
     model = pt.tl.SCGEN(adata)
     model.train(max_epochs=100, batch_size=32, 
