@@ -147,7 +147,6 @@ def perform_mixscape(adata, col_perturbed="perturbation",
         **kws_perturbation_signature
         )  # subtract GEX of perturbed cells from their unperturbed neighbors
     layer = "X_pert"
-    adata_pert.layers[layer] = adata_pert.layers[layer_perturbation]
     adata_pert.X = adata_pert.layers[layer]
     
     # Mixscape Classification & Perturbation Scoring
@@ -168,7 +167,7 @@ def perform_mixscape(adata, col_perturbed="perturbation",
             figs["mixscape_perturb_score"] = {}
             try:
                 fpp = cr.pl.plot_perturbation_scores_by_guide(
-                    adata_pert, guide_rna_column=col_guide_rna, 
+                    adata_pert, col_guide_rna=col_guide_rna, 
                     guide_split=guide_split)
                 figs["mixscape_targeting_efficacy"] = fpp
             except Exception as err:
@@ -204,15 +203,19 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                     key_control, "NP", key_treatment], rotation=45,
                 keys=f"mixscape_class_p_{key_treatment}".lower(),
                 groupby="mixscape_class_global")  # same, but global
-            tg_conds = [key_control] + functools.reduce(
-                lambda i, j: i + j, [[f"{g} NP", 
-                        f"{g} {key_treatment}"] 
-                for g in target_gene_idents])  # conditions: all genes
-            figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
-                adata=adata_pert,
-                keys=f"mixscape_class_p_{key_treatment}".lower(),
-                target_gene_idents=tg_conds, rotation=45,
-                groupby="mixscape_class")  # gene: perturbed, NP, control
+            try:
+                tg_conds = [key_control] + functools.reduce(
+                    lambda i, j: i + j, [[f"{g} NP", 
+                            f"{g} {key_treatment}"] 
+                    for g in target_gene_idents])  # conditions: all genes
+                figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
+                    adata=adata_pert,
+                    keys=f"mixscape_class_p_{key_treatment}".lower(),
+                    target_gene_idents=tg_conds, rotation=45,
+                    groupby="mixscape_class")  # gene: perturbed, NP, control
+            except Exception as err:
+                figs["mixscape_ppp_violin"]["all"] = err
+                print(err)
             
     # Perturbation-Specific Cell Clusters
     print("\n<<< RUNNING LINEAR DISCRIMINANT ANALYSIS (CLUSTERING) >>>") 
@@ -220,7 +223,7 @@ def perform_mixscape(adata, col_perturbed="perturbation",
         mix.lda(adata=adata_pert, 
                 # adata=adata_pert,
                 labels=col_target_genes, 
-                layer=layer_perturbation, control=key_control, 
+                layer=layer, control=key_control, 
                 min_de_genes=min_de_genes,
                 split_by=col_split_by, 
                 copy=False,
@@ -261,24 +264,8 @@ def perform_mixscape(adata, col_perturbed="perturbation",
     except Exception as error:
         warnings.warn(
             f"{error}\n\nCouldn't perform perturbation-specific clustering!")
-        
-    # Store Results
-    try:
-        if assay:
-            adata[assay].uns["mixscape"] = adata_pert.uns[
-                "mixscape"]  # `.uns` join
-        else:
-            adata.uns["mixscape"] = adata_pert.uns["mixscape"]  # `.uns` join
-    except Exception as err:
-        warnings.warn(f"\n{err}\n\nCould not update `adata.uns`. In figs.")
-        figs.update({"results_mixscape": adata_pert.uns["mixscape"]})
-    if assay:
-        adata[assay].obs = adata.obs.join(adata_pert.obs[
-            ["mixscape_class", "mixscape_class_global"]], lsuffix="_o")  # data
-    else:
-        adata.obs = adata.obs.join(adata_pert.obs[
-            ["mixscape_class", "mixscape_class_global"]], lsuffix="_o")  # data
-    return figs
+        figs["lda"] = error
+    return figs, adata_pert
 
 
 def perform_augur(adata, assay=None, layer_perturbation=None,

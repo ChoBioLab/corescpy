@@ -757,17 +757,21 @@ class Crispr(object):
             col_cell_type = self._columns["col_cell_type"]
         if "col_cell_type" in kwargs:
             _ = kwargs.pop("col_cell_type")
-        figs_mix = cr.ax.perform_mixscape(
+        figs_mix, adata_pert = cr.ax.perform_mixscape(
             self.adata.copy() if test is True else self.adata, 
             assay=assay, assay_protein=assay_protein,
             col_cell_type=col_cell_type,
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
             plot=plot, **kwargs)
+        # Store Results
         if test is False:
             if run_label not in self.figures:
                 self.figures[run_label] = {}
             self.figures[run_label].update({"mixscape": figs_mix})
+            self.results[run_label]["mixscape"] = adata_pert
+            for x in adata_pert.uns:
+                self.rna.uns[x] = adata_pert.uns[x]
         return figs_mix
     
     def run_augur(self, assay=None, classifier="random_forest_classifier", 
