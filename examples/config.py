@@ -36,7 +36,7 @@ files_data = {
 }
 
 col_cell_type_data = {
-    "CRISPRi_scr": "leiden",  # because unannotated
+    "CRISPRi_scr": "majority_voting",
     "CRISPRi_scr_multi": "majority_voting",
     "CRISPRi_wgs": "leiden",
     "CRISPRi_ess": "leiden",
@@ -220,7 +220,7 @@ col_sample_id_data = {
 
 col_batch_data = {
     "CRISPRi_scr": None,
-    "CRISPRi_scr_multi": None,
+    "CRISPRi_scr_multi": "orig.ident",
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "gemgroup",
     "pool": np.nan,

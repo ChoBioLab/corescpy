@@ -1,6 +1,4 @@
 import pertpy as pt
-import muon
-import mudata
 import arviz as az
 import scanpy as sc
 import functools
@@ -9,10 +7,10 @@ from seaborn import clustermap
 import warnings
 import decoupler
 from scipy.cluster.hierarchy import linkage, dendrogram
-import re
+import os
+import crispr as cr
 import pandas as pd
 import numpy as np
-import crispr as cr
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -317,6 +315,8 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
     Returns:
         tuple: Augur AnnData object, results from Augur predict, figures
     """
+    if n_threads is True:
+        n_threads = os.cpu_count() - 1 # use available CPUs - 1
     if select_variance_features == "both":  
         # both methods: select genes based on...
         # - original Augur (True)

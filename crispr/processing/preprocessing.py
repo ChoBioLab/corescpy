@@ -60,7 +60,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                 **kwargs)  # create AnnData object
         print(f"\n<<< CONCATENATING FILES {file} >>>")
         adata = AnnData.concatenate(
-            *adatas, join="inner", batch_key=col_sample_id, uns_merge="same", 
+            *adatas, join="outer", batch_key=col_sample_id, uns_merge="same", 
             index_unique="-", batch_categories=batch_categories,
             fill_value=None)  # concatenate adata objects
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
@@ -147,6 +147,7 @@ def process_data(adata, assay=None, assay_protein=None,
                  col_gene_symbols=None,
                  col_cell_type=None,
                  # remove_doublets=True,
+                 kws_batch_correction=None,
                  outlier_mads=None,
                  cell_filter_pmt=5,
                  cell_filter_ncounts=None, 
@@ -173,6 +174,21 @@ def process_data(adata, assay=None, assay_protein=None,
             index in `.var` containing gene symbols. Defaults to None.
         col_cell_type (str, optional): The name of the column 
             in `.obs` containing cell types. Defaults to None.
+        kws_batch_correction (dict, optional): Keywords to perform
+            batch correction and/or z-normalization. 
+            If not None, should contain 
+            the name of the column in `.obs` containing batch IDs 
+            (e.g., orig.ident) under the key "col_batch" (which should 
+            be None if z-normalization is just to be applied 
+            uniformly without respect to batch).
+            Should also contain either "harmony" or "z" under the key
+            "method" in order to use either Harmony or z-scoring 
+            (perturbed relative to control for each batch) to remove
+            batch effects. If the latter, also include the keys
+            "col_reference" and "key_reference" containing the 
+            column name where perturbed versus unperturbed labels are
+            stored and the label in that column that corresponds to
+            the control condition, respectively. Defaults to None.
         target_sum (float, optional): Total-count normalize to
             <target_sum> reads per cell, allowing between-cell 
             comparability of counts. If None, total count-normalization
@@ -255,14 +271,11 @@ def process_data(adata, assay=None, assay_protein=None,
                        min_genes=cell_filter_ngene[0])
     sc.pp.filter_genes(adata[assay] if assay else adata, 
                        min_cells=gene_filter_ncell[0])
-        
     
     # Highly-Expressed Genes
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
         adata[assay] if assay else adata, n_top=n_top,
         gene_symbols=col_gene_symbols)
-    if kws_scale is None:
-        kws_scale = {}
     
     # QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
@@ -310,6 +323,25 @@ def process_data(adata, assay=None, assay_protein=None,
             inplace=True)  # count-normalize (not in-place yet)
     else:
         print("\n<<< ***NOT*** TOTAL-COUNT-NORMALIZING >>>")
+    if kws_batch_correction:
+        bc_method = kws_batch_correction.pop("method")
+        print(f"\n<<< BATCH-CORRECTING VIA {bc_method} >>>")
+        if bc_method.lower() == "z":
+            if ("col_reference" not in kws_batch_correction) or (
+                "key_reference" not in kws_batch_correction):
+                raise ValueError(
+                    "'col_reference' and 'key_reference' must be in"
+                    "in kws_batch_correction if method = 'z'.")
+            if assay:
+                adata[assay] = cr.pp.z_normalize_by_reference(
+                    adata[assay], **kws_batch_correction)
+            else:
+                adata = cr.pp.z_normalize_by_reference(
+                    adata, **kws_batch_correction)
+        else:
+            raise NotImplementedError(
+                f"{bc_method} batch correction not implemented.")
+        
     if logarithmize is True:
         print("\n<<< LOG-NORMALIZING >>>")
         sc.pp.log1p(adata[assay] if assay else adata)
@@ -388,6 +420,43 @@ def process_data(adata, assay=None, assay_protein=None,
             
     print("\n\n")
     return adata, figs
+
+
+def z_normalize_by_reference(adata, col_reference, key_reference="Control", 
+                             col_batch=None, **kwargs):
+    """
+    Mean-center & standardize by 
+    reference condition, optionally within-batches.
+    """
+    if kwargs:
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
+    adata = adata.copy()
+    if col_batch is None:
+        col_batch, col_batch_origin = "batch", None
+        if "batch" == col_reference:
+            raise ValueError(
+                f"col_reference cannot be {col_batch} when col_batch=None.")
+        adata.obs.loc[:, col_batch] = "1"  # so can loop even if only 1 batch
+    else:
+        col_batch_origin = col_batch
+    batches_adata, batch_labs = [], adata.obs[col_batch].unique()
+    for s in batch_labs:  # loop over batches
+        batch_adata = adata[adata.obs[col_batch] == s].copy()
+        gex = batch_adata.X.A.copy()  #  sparse -> dense matrix for batch s
+        gex_ctrl = batch_adata[batch_adata.obs[
+            col_reference] == key_reference].X.A.copy()  # reference condition
+        musd_ctrl = np.nanmean(gex_ctrl, axis=0), np.nanstd(gex_ctrl, axis=0)
+        batch_adata.X = (batch_adata.X.A - musd_ctrl[0]) / musd_ctrl[1]  # z
+        batches_adata += [batch_adata]
+    if col_batch_origin is None:
+        adata = batches_adata[0]
+        adata.obs.drop(col_batch, axis=1, inplace=True)
+    else:
+        adata = AnnData.concatenate(
+            *batches_adata, join="outer", batch_key=col_batch, 
+            uns_merge="same", index_unique="-", 
+            batch_categories=batch_labs, fill_value=None)  # concatenate
+    return adata
 
 
 def perform_qc(adata):
@@ -548,39 +617,26 @@ def explore_h5_file(file):
                 print(f"  Dataset: {g}")
 
 
-def assign_guide_rna(adata, col_num_umis="num_umis", 
-                     assignment_threshold=5, method="max"):
-    """Assign guide RNAs to cells (based on pertpy tutorial notebook)."""
-    layer, out_layer = "guide_counts", "assigned_guides"
-    gdo = adata.copy()
-    gdo.obs = gdo.obs[[col_num_umis]].rename(
-        {col_num_umis: "nCount_RNA"}, axis=1)
-    gdo.layers[layer] = gdo.X.copy()
-    sc.pp.log1p(gdo)
-    pt.pl.guide.heatmap(gdo, key_to_save_order="plot_order")
-    g_a = pt.pp.GuideAssignment()
-    if method.lower() == "max":
-        g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
-                                layer=layer, output_layer=out_layer)
-    else:
-        g_a.assign_by_threshold(gdo, assignment_threshold=assignment_threshold, 
-                                layer=layer, output_layer=out_layer)
-    pt.pl.guide.heatmap(gdo, layer=out_layer, order_by="plot_order")
-    return gdo
-
-
 def remove_batch_effects(adata, col_cell_type="leiden", 
-                         col_batch="batch", plot=True):
+                         col_batch="orig.ident", plot=True, **kws_train):
     """Remove batch effects (IN PROGRESS)."""
+    if not kws_train:
+        kws_train = dict(max_epochs=100, batch_size=32, 
+                         early_stopping=True, early_stopping_patience=25)
+    train = adata.copy()
+    train.obs["cell_type"] = train.obs[col_cell_type].tolist()
+    train.obs["batch"] = train.obs[col_batch].tolist()
     if plot is True:
-        sc.pl.umap(adata, color=[col_batch, col_cell_type], 
+        sc.pl.umap(train, color=[col_batch, col_cell_type], 
                    wspace=.5, frameon=False)
-    pt.tl.SCGEN.setup_anndata(adata.copy(), batch_key=col_batch, 
-                              labels_key=col_cell_type)
-    model = pt.tl.SCGEN(adata)
-    model.train(max_epochs=100, batch_size=32, 
-                early_stopping=True, early_stopping_patience=25)
-    corrected_adata = model.batch_removal()
+    print(f"\n<<< PREPARING DATA >>>") 
+    pt.tl.SCGEN.setup_anndata(train, batch_key="batch", 
+                              labels_key="cell_type")  # prepare AnnData
+    model = pt.tl.SCGEN(train)
+    print(f"\n<<< TRAINING >>>") 
+    model.train(**kws_train)  # training
+    print(f"\n<<< CORRECTING FOR BATCH EFFECTS >>>") 
+    corrected_adata = model.batch_removal()  # batch correction
     if plot is True:
         sc.pp.neighbors(corrected_adata)
         sc.tl.umap(corrected_adata)
@@ -588,6 +644,21 @@ def remove_batch_effects(adata, col_cell_type="leiden",
                    wspace=0.4, frameon=False)
     return corrected_adata
 
+
+def remove_guide_counts_from_gex_matrix(adata, col_target_genes, 
+                                        key_ignore=None):
+    """Remove guide RNA counts from gene expression matrix."""
+    guides = list(adata.obs[col_target_genes].dropna())  # guide names
+    if key_ignore is not None:
+        guides = list(set(guides).difference(
+            [key_ignore] if isinstance(key_ignore, str) else key_ignore))
+    guides_in_varnames = list(set(adata.var_names).intersection(set(guides)))
+    if len(guides_in_varnames) > 0:
+        print(f"\n\t*** Removing {', '.join(guides)} guides "
+            "from gene expression matrix...")
+        adata._inplace_subset_var(list(set(adata.var_names).difference(
+            set(guides_in_varnames))))  # remove guide RNA counts
+    return adata
 
 def detect_guide_targets(col_guide_rna_series,
                          feature_split="|", guide_split="-",
@@ -644,6 +715,7 @@ def detect_guide_targets(col_guide_rna_series,
 
 def filter_by_guide_counts(adata, col_guide_rna, col_num_umis, 
                            max_percent_umis_control_drop=75,
+                           min_count_target_control_drop=100,
                            min_percent_umis=40,
                            feature_split="|", guide_split="-",
                            key_control_patterns=None,
@@ -652,54 +724,74 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     Process sgRNA names (e.g., multi-probe names).
 
     Args:
-        adata (AnnData): AnnData object (RNA assay, so if multi-modal, subset).
+        adata (AnnData): AnnData object (RNA assay, 
+            so if multi-modal, subset before passing to this argument).
         col_guide_rna (str): _description_
         col_num_umis (str): Column with the UMI counts.
-        max_percent_umis_control_drop (int, optional): If control UMI counts 
-            are less than or equal to this percentage of the total counts for 
-            that cell, and if a non-control sgRNA is also present and 
-            meets other filtering criteria, then consider that cell 
-            pseudo-single-transfected (non-control gene). Defaults to 75.
+        max_percent_umis_control_drop (int, optional): If control 
+            UMI counts are less than or equal to this percentage of the 
+            total counts for that cell, and if a non-control sgRNA is 
+            also present and meets other filtering criteria, then 
+            consider that cell pseudo-single-transfected 
+            (non-control gene). Set to 0 to ignore this filtering. 
+            Defaults to 75.
+        min_count_target_control_drop (int, optional): If UMI counts
+            across target (non-control) guides are above this number,
+            notwithstanding whether control guide percent exceeds
+            `max_percent_umis_control_drop`, drop control from that 
+            cell. For instance, if 100 and 
+            `max_percent_umis_control_drop=75`, even if a cell's 
+            UMIs are 75% control guides, if there are at least 100 
+            non-control guides, consider the cell only transfected for 
+            the non-control guides. Set to None to ignore this 
+            filtering criterion. Defaults to 100.
         min_percent_umis (int, optional): sgRNAs with counts below this 
-            percentage will be considered noise for that guide. Defaults to 40.
-        feature_split (str, optional): For designs with multiple guides,
-            the character that splits guide names in `col_guide_rna`. 
-            For instance, "|" for `STAT1-1|CNTRL-1|CDKN1A`. Defaults to "|".
+            percentage will be considered noise for that guide. 
+            Defaults to 40.
+        feature_split (str, optional): For designs with multiple 
+            guides, the character that splits guide names in 
+            `col_guide_rna`. For instance, "|" for 
+            `STAT1-1|CNTRL-1|CDKN1A`. Defaults to "|".
             If only single guides, set to None.
         guide_split (str, optional): The character that separates 
             guide (rather than gene target)-specific IDs within gene. 
             For instance, guides targeting STAT1 may include 
-            STAT1-1, STAT1-2, etc.; the argument would be "-" so the function  
-            can identify all of those as targeting STAT1. Defaults to "-".
+            STAT1-1, STAT1-2, etc.; the argument would be "-" 
+            so the function can identify all of those as 
+            targeting STAT1. Defaults to "-".
         key_control_patterns (list, optional): List (or single string) 
-            of patterns in guide RNA column entries that correspond to a 
-            control. For instance, if control entries in the original 
+            of patterns in guide RNA column entries that correspond to 
+            a control. For instance, if control entries in the original 
             `col_guide_rna` column include `NEGCNTRL` and
             `Control.D`, you should specify ['Control', 'CNTRL'] 
-            (assuming no non-control sgRNA names contain those patterns). 
-            If blank entries should be interpreted as control guides, 
-            then include np.nan/numpy.nan in this list.
+            (assuming no non-control sgRNA names contain 
+            those patterns). If blank entries should be interpreted as 
+            control guides, then include np.nan/numpy.nan in this list.
             Defaults to None -> [np.nan].
         key_control (str, optional): The name you want the control 
             entries to be categorized as under the new `col_guide_rna`. 
-            for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be replaced by 
-            "Control" if that's what you specify here. Defaults to "Control".
+            for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be 
+            replaced by "Control" if that's what you specify here. 
+            Defaults to "Control".
 
     Returns:
-        pandas.DataFrame: A dataframe (a) with sgRNA names replaced under 
-            their target gene categories (or control) and
+        pandas.DataFrame: A dataframe (a) with sgRNA names replaced 
+            under their target gene categories (or control) and
             (b) with `col_guide_rna` and `col_num_umis` column entries
-            (strings) grouped into lists (new columns with suffix "list_all"). 
+            (strings) grouped into lists 
+            (new columns with suffix "list_all"). 
             Note that the UMI counts are summed across sgRNAs 
-            targeting the same gene within a cell. Also versions of the columns
-            (and the corresponding string versions) filtered by the specified  
+            targeting the same gene within a cell. Also versions of the 
+            columns (and the corresponding string versions) 
+            filtered by the specified  
             criteria (with suffixes "_filtered" and "_list_filtered" 
             for list versions).
             
     Notes:
-        FUTURE DEVELOPERS: The Crispr class object initialization depends on
-        names of the columns created in this function. If they are changed
-        (which should be avoided), be sure to change throughout the package.
+        FUTURE DEVELOPERS: The Crispr class object initialization 
+        depends on names of the columns created in this function. 
+        If they are changed (which should be avoided), be sure to 
+        change throughout the package.
     """
     # Extract Guide RNA Information
     ann = adata.copy()
@@ -733,7 +825,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                 str(x)) if any((i in str(x) for i in bad_gene_symb)) else x)
     
     # Find Gene Targets & Counts of Guides
-    targets, grnas = detect_guide_targets(
+    targets, grnas = cr.pp.detect_guide_targets(
         guides, feature_split=feature_split, guide_split=guide_split,
         key_control_patterns=key_control_patterns, 
         key_control=key_control, **kwargs)  # target genes
@@ -772,12 +864,27 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
 
     # Filtering
-    feats_n = feats_n.join(
-    feats_n.p.groupby(["bc", "g"]).apply(
-        lambda x: "control" if (x.name[1] == key_control and 
-                                float(x) <= max_percent_umis_control_drop) 
-        else "low_umi" if float(x) < min_percent_umis
-        else np.nan).to_frame("umi_category"))  # filter
+    if min_count_target_control_drop is not None:
+        feats_n = feats_n.join(feats_n.apply(
+            lambda x: x.reset_index()["g"][x.reset_index()[
+                "g"] != "key_control"].n.sum(), axis=1).to_frame(
+                    "n_non_ctl"))  # UMI counts of non-control guides
+        feats_n = feats_n.join(
+            feats_n.groupby(["bc", "g"]).apply(
+                lambda x: "control" if (
+                    x.name[1] == key_control and 
+                    float(x["p"]) <= max_percent_umis_control_drop
+                    or float(x["n_non_ctl"]) >= min_count_target_control_drop)
+                else "low_umi" if float(x["p"]) <= min_percent_umis
+                else np.nan, axis=1).to_frame("umi_category"))  # filter
+    else:
+        feats_n = feats_n.join(
+            feats_n.p.groupby(["bc", "g"]).apply(
+                lambda x: "control" if (
+                    x.name[1] == key_control and 
+                    float(x) <= max_percent_umis_control_drop) 
+                else "low_umi" if float(x) < min_percent_umis
+                else np.nan).to_frame("umi_category"))  # filter
     filt = feats_n[~feats_n.umi_category.isnull()]
     filt = filt.n.to_frame("u").groupby("bc").apply(
         lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
@@ -834,12 +941,16 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
     ann = copy.deepcopy(adata)
     kws_pga = copy.deepcopy(kws_process_guide_rna)
+    
+    # Filter by Guide Counts
     tg_info, feats_n = cr.pp.filter_by_guide_counts(
         ann, col_guide_rna, col_num_umis=col_num_umis,
         key_control=key_control, **kws_pga
         )  # process (e.g., multi-probe names) & filter by # gRNA
     
     # Add Results to AnnData
+    if "feature_split" not in kws_pga:
+        kws_pga["feature_split"] = None
     ann.uns["guide_rna"] = {}
     ann.uns["guide_rna"]["keywords"] = kws_pga
     ann.uns["guide_rna"]["counts_unfiltered"] = feats_n
@@ -877,6 +988,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     #     tg_info[col_guide_rna].to_frame(col_condition), 
     #     lsuffix="_original")  # condition column=filtered target genes
     nobs = ann.n_obs
+    
+    # Remove Multiply-Transfected Cells (optionally)
     if remove_multi_transfected is True:
         print(ann.obs)
         print("\n\n\t*** Removing multiply-transfected cells...")
@@ -885,9 +998,21 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%).")
         print(ann.obs)
+        
+    # Remove Filtered-Out Cells
     print(f"\n\n\t*** Removing filtered-out cells...")
     ann = ann[~ann.obs[col_guide_rna_new].isnull()]
     print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
             f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%).")
+    
+    # Remove Guide RNA Counts from Gene Expression Matrix
+    key_ignore = [key_control]
+    if remove_multi_transfected is False:
+        key_ignore += list(pd.Series([
+            x if kws_pga["feature_split"] in x else np.nan 
+            for x in ann.obs[col_guide_rna].unique()]).dropna()
+                           )  # ignore multi-transfected during removal
+    ann = cr.pp.remove_guide_counts_from_gex_matrix(
+        ann, col_guide_rna, key_ignore=key_ignore)
     print(ann.obs)
     return ann, (tg_info, feats_n, tg_info_all)

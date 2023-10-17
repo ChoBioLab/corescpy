@@ -314,7 +314,7 @@ class Crispr(object):
         self.figures = {"main": {}}
         self.results = {"main": {}}
         self.info = {"descriptives": {}, 
-                      "guide_rna": {}}  # extra info to store by methods
+                     "guide_rna": {}}  # extra info to store by methods
         
         # Create Object & Store Raw Counts
         if isinstance(col_sample_id, (list, tuple)):  # multi-sample
@@ -337,7 +337,7 @@ class Crispr(object):
                 **kws_process_guide_rna}
             if kws_process_guide_rna else None)  # make AnnData
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-        self.rna.layers[self._layers["raw"]] = self.rna.X.copy()
+        self.rna.layers[self._layers["layer_original"]] = self.rna.X.copy()
         
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [
@@ -558,22 +558,44 @@ class Crispr(object):
         fig.fig.tight_layout()
         return self.info["guide_rna"]["counts_unfiltered"], fig
     
-    def preprocess(self, assay=None, assay_protein=None,
-                   clustering=False, run_label="main", 
+    def preprocess(self, assay=None, assay_protein=None, layer_in=None, 
+                   clustering=False, copy=False,
                    remove_doublets=True, **kwargs):
-        """Preprocess data."""
+        """
+        Preprocess (specified layer of) data 
+        (defaulting to originally-loaded layer).
+        
+        If "kws_batch_correction" included in keyword arguments,
+        perform batch correction via Harmony 
+        (`kws_batch_correction=dict(method="harmony")`) or by normalizing
+        gene expression relative to control condition 
+        (`kws_batch_correction=dict(method="z")`).
+        """
         if assay_protein is None:
             assay_protein = self._assay_protein
         if assay is None:
             assay = self._assay
-        self.adata, figs = cr.pp.process_data(
-            self.adata, assay=assay, assay_protein=assay_protein, 
+        if layer_in is None:
+            layer_in = self._layers["layer_original"]
+        kws = dict(assay=assay, assay_protein=assay_protein, 
             remove_doublets=remove_doublets, 
-            **self._columns, **self._layers,
-            **kwargs)  # preprocess
-        if run_label not in self.figures:
-            self.figures[run_label] = {}
-        self.figures[run_label]["preprocessing"] = figs
+            **self._columns, layer_original="before_preprocessing",
+            **kwargs)
+        if "kws_batch_correction" in kws and kws["kws_batch_correction"]:
+            if "col_reference" not in kws["kws_batch_correction"]:
+                kws["kws_batch_correction"].update(
+                    {"col_reference": self._columns["col_perturbed"]})
+            if "key_reference" not in kws["kws_batch_correction"]:
+                kws["kws_batch_correction"].update(
+                    {"key_reference": self._keys["key_control"]})
+            if "col_batch" not in kws["kws_batch_correction"]:
+                kws["kws_batch_correction"].update(
+                    {"col_batch": self._columns["col_batch"] if self._columns[
+                        "col_batch"] else self._columns["col_sample_id"]})
+        adata = self.adata.copy() if copy is True else self.adata
+        adata.X = adata.layers[layer_in]  # use specified layer
+        adata, figs = cr.pp.process_data(self.adata, **kws)  # preprocess
+        self.figures["preprocessing"] = figs
         if clustering not in [None, False]:
             if clustering is True:
                 clustering = {}
@@ -583,13 +605,13 @@ class Crispr(object):
             else:
                 raise TypeError(
                     "`clustering` must be dict (keyword arguments) or bool.")
-        return figs
+        return adata, figs
                 
     def cluster(self, assay=None, method_cluster="leiden", 
                 plot=True, colors=None, paga=False, 
                 kws_pca=None, kws_neighbors=None, 
                 kws_umap=None, kws_cluster=None, 
-                run_label="main", test=False, **kwargs):
+                copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
@@ -601,31 +623,27 @@ class Crispr(object):
                     if x:
                         colors += [x]  # add sample & batch UMAP
         figs_cl = cr.ax.cluster(
-            self.adata.copy() if test is True else self.adata, 
+            self.adata.copy() if copy is True else self.adata, 
             assay=assay, method_cluster=method_cluster,
             **self._columns, **self._keys,
             plot=plot, colors=colors, paga=paga, 
             kws_pca=kws_pca, kws_neighbors=kws_neighbors,
             kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
-        if test is False:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label].update({"clustering": figs_cl})
+        if copy is False:
+            self.figures.update({"clustering": figs_cl})
         return figs_cl
     
-    def annotate_clusters(self, model, **kwargs):
+    def annotate_clusters(self, model, copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
         preds, ct_dot = cr.ax.perform_celltypist(
-            self.adata[self._assay] if self._assay else self.adata,
-            model, majority_voting=True, **kwargs)  # annotate
+            self.rna.copy() if copy is True else self.rna, model, 
+            majority_voting=True, **kwargs)  # annotate
         self.results["celltypist"] = preds
-        self.adata.obs = self.adata.obs.join(preds.predicted_labels, 
+        if copy is False:
+            self.rna.obs = self.rna.obs.join(preds.predicted_labels,
                                              lsuffix="_last")
-        if self._assay:
-            self.adata[self._assay].obs = self.adata[self._assay].obs.join(
-                preds.predicted_labels)
-        sc.pl.umap(self.adata, color=[self._columns["col_cell_type"]] + list(
-            preds.predicted_labels.columns))  # UMAP
+            sc.pl.umap(self.rna, color=[self._columns["col_cell_type"]] + list(
+                preds.predicted_labels.columns))  # UMAP
         return preds, ct_dot
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
@@ -646,8 +664,7 @@ class Crispr(object):
                      col_cell_type=None,
                      target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
-                     run_label="main",
-                     test=False, plot=True, **kwargs):
+                     copy=False, plot=True, **kwargs):
         """
         Identify/classify and quantify perturbation of cells.
         
@@ -731,18 +748,17 @@ class Crispr(object):
         
         Notes:
             - Classifications are stored in 
-            `self.adata.obs['mixscape_class_global']`
+            `.adata.obs['mixscape_class_global']`
             (detectible perturbation (`._keys["key_treatment"]`) vs. 
             un-detectible perturbation (`._keys["key_nonperturbed"]`) 
-            vs. control (`self._keys["key_control"]`)) and in
-            `self.adata.obs['mixscape_class']` (like the previous, 
+            vs. control (`._keys["key_control"]`)) and in
+            `.adata.obs['mixscape_class']` (like the previous, 
                 but specific to target genes, e.g., 
                 "STAT1 KO" vs. just "KO"). 
             - Posterial p-values are stored in 
-                `self.adata.obs['mixscape_class_p_<key_treatment>']`.
-            - Other result output will be stored in `self.figures` and 
-                `self.results` under the `run_label` key under 
-                `mixscape` (e.g., `self.figures["main"]["mixscape"]`).
+                `.adata.obs['mixscape_class_p_<key_treatment>']`.
+            - Other result output will be stored in 
+                `.figures["mixscape"]` & `.results["mixscape"]`.
             
         """
         if assay is None:
@@ -758,18 +774,16 @@ class Crispr(object):
         if "col_cell_type" in kwargs:
             _ = kwargs.pop("col_cell_type")
         figs_mix, adata_pert = cr.ax.perform_mixscape(
-            self.adata.copy() if test is True else self.adata, 
+            self.adata.copy() if copy is True else self.adata, 
             assay=assay, assay_protein=assay_protein,
             col_cell_type=col_cell_type,
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
             plot=plot, **kwargs)
         # Store Results
-        if test is False:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label].update({"mixscape": figs_mix})
-            self.results[run_label]["mixscape"] = adata_pert
+        if copy is False:
+            self.figures.update({"mixscape": figs_mix})
+            self.results["mixscape"] = adata_pert
             for x in adata_pert.uns:
                 self.rna.uns[x] = adata_pert.uns[x]
         return figs_mix
@@ -778,7 +792,7 @@ class Crispr(object):
                   augur_mode="default", kws_augur_predict=None, n_folds=3,
                   subsample_size=20, n_threads=True, 
                   select_variance_features=False, seed=1618, 
-                  plot=True, run_label="main", test=False, **kwargs):        
+                  plot=True, copy=False, **kwargs):        
         """
         Runs the Augur perturbation scoring and prediction analysis.
 
@@ -806,10 +820,7 @@ class Crispr(object):
             seed (int): The random seed to be used for reproducibility. 
                 Defaults to 1618.
             plot (bool): Whether to plot the results. Defaults to True.
-            run_label (str): The label for the current run. 
-                Defaults to "main".
-            test (bool): Whether the function is being called as a 
-                test run. If True, self.adata will be copied so 
+            copy (bool): If True, self.adata will be copied so 
                 that no alterations are made inplace via Augur,
                 and results are not stored in object attributes.
                 Defaults to False.
@@ -846,31 +857,26 @@ class Crispr(object):
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
-        if n_threads is True:
-            n_threads = os.cpu_count() - 1 # use available CPUs - 1
         if assay is None:
             assay = self._assay
-        if kws_augur_predict is None:
-            kws_augur_predict = {}
         data, results, figs_aug = cr.ax.perform_augur(
-            self.adata, assay=assay, classifier=classifier,
+            self.adata.copy() if copy is True else self.adata, 
+            assay=assay, classifier=classifier,
             augur_mode=augur_mode, subsample_size=subsample_size,
             select_variance_features=select_variance_features, 
             n_folds=n_folds, kws_augur_predict=kws_augur_predict,
-            seed=seed, n_threads=n_threads, plot=plot, **kwargs)
-        if test is False:
-            if run_label not in self.results:
-                self.results[run_label] = {}
-            self.results[run_label].update(
-                {"Augur": {"results": results, "data": data}})
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label].update({"Augur": figs_aug})
+            seed=seed, n_threads=n_threads, plot=plot, **kwargs)  # Augur
+        if copy is False:  # store results
+            self.rna.uns["augurpy_results"] = data.uns["augurpy_results"]
+            self.rna.obs = self.rna.obs.join(data.obs["augur_score"], 
+                                             lsuffix="_previous")
+            self.results.update({"Augur": {"results": results}})
+            self.figures.update({"Augur": figs_aug})
         return data, results, figs_aug
     
     def compute_distance(self, distance_type="edistance", method="X_pca", 
                          kws_plot=None, highlight_real_range=False,
-                         run_label="main", plot=True, **kwargs):
+                         plot=True, **kwargs):
         """
         Compute and visualize distance metrics.
 
@@ -885,9 +891,6 @@ class Crispr(object):
                 the real range by setting minimum and maximum color 
                 scaling based on properties of the data. 
                 Defaults to False.
-            run_label (str, optional): The label for the current run. 
-                Affects the key under which results and figures are 
-                stored in internal attributes. Defaults to "main".
             plot (bool, optional): Whether to create plots. 
                 Defaults to True.
             **kwargs: Additional keyword arguments to be passed to 
@@ -929,21 +932,19 @@ class Crispr(object):
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
             plot=plot, **kwargs)
         if plot is True:
-            if run_label not in self.figures:
-                self.figures[run_label] = {}
-            self.figures[run_label]["distances"] = {}
-            self.figures[run_label]["distances"].update(
+            for x in [self.results, self.figures]:
+                if "distances" not in x:
+                    x["distances"] = {}
+            self.figures["distances"].update(
                 {f"{distance_type}_{method}": output[-1]})
-            if run_label not in self.results:
-                self.results[run_label] = {}
-            self.results[run_label]["distances"] = {}
-            self.results[run_label]["distances"].update(
-                {f"{distance_type}_{method}": output})
+            self.results["distances"].update(
+                {f"{distance_type}_{method}": [
+                    output[i] for i in range(len(output) - 1)]})
         return output
     
     def run_gsea(self, key_condition=None, 
                  filter_by_highly_variable=False, 
-                 run_label="main", **kwargs):
+                 **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         for x in [self._columns, self._keys]:
             for c in x:  # iterate column/key name attributes
@@ -952,33 +953,31 @@ class Crispr(object):
         output = cr.ax.perform_gsea(
             self.adata, filter_by_highly_variable=filter_by_highly_variable, 
             **kwargs)  # GSEA
-        if run_label not in self.results:
-            self.results[run_label] = {}
-        self.results[run_label]["gsea"] = output
+        self.results["gsea"] = output
         return output
           
     def run_composition_analysis(self, reference_cell_type, 
                                  assay=None, analysis_type="cell_level", 
                                  est_fdr=0.05, generate_sample_level=False,
-                                 plot=True, run_label="main", **kwargs):
+                                 plot=True, copy=False, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         for x in [self._columns, self._keys]:
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
         output = cr.ax.analyze_composition(
-            self.adata, reference_cell_type,
-            assay=assay if assay else self._assay, analysis_type=analysis_type,
+            self.rna.copy() if copy is True else self.rna,
+            reference_cell_type, assay=assay if assay else self._assay, 
+            analysis_type=analysis_type, 
             generate_sample_level=generate_sample_level, 
             est_fdr=est_fdr, plot=plot, **kwargs)
-        if run_label not in self.results:
-            self.results[run_label] = {}
-        self.results[run_label]["composition"] = output
+        if copy is False:
+            self.results["composition"] = output
         return output
     
     def run_dialogue(self, n_programs=3, col_cell_type=None,
                      cmap="coolwarm", vcenter=0, 
-                     run_label="main", **kws_plot):
+                     **kws_plot):
         """Analyze <`n_programs`> multicellular programs."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
@@ -995,8 +994,8 @@ class Crispr(object):
             pdata, color=mcp_cols + [
                 self._columns["col_perturbed"], col_cell_type],
             ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
-        self.results[run_label]["dialogue"] = pdata, mcps, ws, ct_subs
-        self.figures[run_label]["dialogue"] = fig
+        self.results["dialogue"] = pdata, mcps, ws, ct_subs
+        self.figures["dialogue"] = fig
         return fig
             
     def plot(self, genes=None, genes_highlight=None,
@@ -1006,8 +1005,7 @@ class Crispr(object):
              layers="all",
              marker_genes_dict=None,
              kws_gex=None, kws_clustering=None, 
-             kws_gex_violin=None, kws_gex_matrix=None, 
-             run_label="main", **kwargs):
+             kws_gex_violin=None, kws_gex_matrix=None, **kwargs):
         """Create a variety of plots."""
         # Setup  Arguments & Empty Output
         figs = {}
@@ -1038,10 +1036,7 @@ class Crispr(object):
         genes, names = list(pd.unique(genes)), list(pd.unique(names))
         if assay == "default":
             assay = self._assay
-        if assay:  # store available `.obs` columns
-            cols_obs = self.adata[assay].obs.columns
-        else:
-            cols_obs = self.adata.obs.columns
+        cols_obs = self.rna.obs.columns  # store available `.obs` columns
         if names_layers["scaled"] not in self.adata.layers:
             self.adata.layers[names_layers["scaled"]] = sc.pp.scale(
                 self.adata, copy=True).X  # scaling (Z-scores)
@@ -1054,9 +1049,9 @@ class Crispr(object):
             gene_symbols = self._columns["col_gene_symbols"]
             
         # Pre-Processing/QC
-        if "preprocessing" in self.figures[run_label]:
+        if "preprocessing" in self.figures:
             print("\n<<< PLOTTING PRE-PROCESSING >>>")
-            figs["preprocessing"] = self.figures[run_label]["preprocessing"]
+            figs["preprocessing"] = self.figures["preprocessing"]
             
         # Gene Expression Heatmap(s)
         if kws_gex is None:
@@ -1074,13 +1069,12 @@ class Crispr(object):
                 hm_title = f"Gene Expression ({i})"
             try:
                 # sc.pl.heatmap(
-                #     self.adata[assay] if assay else self.adata, names,
+                #     self.rna, names,
                 #     lab_cluster, layer=i,
                 #     ax=axes_gex[j], gene_symbols=gene_symbols, 
                 #     show=False)  # GEX heatmap
                 figs[lab] = sc.pl.heatmap(
-                    self.adata[assay] if assay else self.adata, names,
-                    lab_cluster, layer=i,
+                    self.rna, names, lab_cluster, layer=i,
                     gene_symbols=gene_symbols, show=False)  # GEX heatmap
                 # axes_gex[j].set_title("Raw" if i is None else i.capitalize())
                 figs[lab] = plt.gcf(), figs[lab]
@@ -1122,7 +1116,7 @@ class Crispr(object):
                     if not title:
                         title_gexv = f"{title_gexv} ({i})"
                 figs[lab] = sc.pl.stacked_violin(
-                    self.adata[assay] if assay else self.adata, 
+                    self.rna, 
                     marker_genes_dict if marker_genes_dict else genes,
                     layer=i, groupby=lab_cluster, return_fig=True, 
                     gene_symbols=gene_symbols, title=title_gexv, show=False,
@@ -1136,8 +1130,7 @@ class Crispr(object):
                 
         # Gene Expression Dot Plot
         figs["gene_expression_dot"] = sc.pl.dotplot(
-            self.adata[assay] if assay else self.adata, genes, 
-            lab_cluster, show=False)
+            self.rna, genes, lab_cluster, show=False)
         if genes_highlight is not None:
             for x in figs["gene_expression_dot"][
                 "mainplot_ax"].get_xticklabels():
@@ -1165,31 +1158,30 @@ class Crispr(object):
                 kws_gex_matrix.update({i[0]: i[1]})
         print("\n<<< PLOTTING GEX (Matrix) >>>")
         print(kws_gex_matrix)
-        try:
-            for i in [None] + list(self.adata.layers):
-                lab = f"gene_expression_matrix"
-                title_gexm = title if title else "Gene Expression"
-                if i:
-                    lab += "_" + str(i)
-                    if not title:
-                        title_gexm = f"{title_gexm} ({i})"
-                if i == names_layers["scaled"]:
-                    bar_title = "Expression (Mean Z-Score)"
-                else: 
-                    bar_title = "Expression"
+        for i in [None] + list(self.adata.layers):
+            lab = f"gene_expression_matrix"
+            title_gexm = title if title else "Gene Expression"
+            if i:
+                lab += "_" + str(i)
+                if not title:
+                    title_gexm = f"{title_gexm} ({i})"
+            bar_title = "Expression"
+            if i == names_layers["scaled"]:
+                bar_title += " (Mean Z-Score)"
+            try:
                 figs[lab] = sc.pl.matrixplot(
-                    self.adata[assay] if assay else self.adata, genes,
-                    layer=i, return_fig=True, groupby=lab_cluster_mat,
+                    self.rna, genes, layer=i, return_fig=True, 
+                    groupby=lab_cluster_mat,
                     title=title_gexm, gene_symbols=gene_symbols,
                     **{"colorbar_title": bar_title, **kws_gex_matrix
-                       },  # colorbar title overriden if already in kws_gex
+                    },  # colorbar title overriden if already in kws_gex
                     show=False)  # violin plot of GEX
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster_mat)
                 figs[lab].show()
-        except Exception as err:
-            warnings.warn(f"{err}\n\nCould not plot GEX matrix plot.")
-            figs["gene_expression_matrix"] = err
+            except Exception as err:
+                print(f"{err} in plotting GEX matrix for label {i}")
+                figs[lab] = err
         
         # UMAP
         title_umap = str(title if title else kws_clustering[
@@ -1202,13 +1194,11 @@ class Crispr(object):
             kws_clustering.update({"palette": COLOR_PALETTE})
         if "color_map" not in kws_clustering:
             kws_clustering.update({"color_map": COLOR_MAP})
-        if "X_umap" in self.adata.obsm or lab_cluster in (
-            self.adata[assay].obs if assay else self.adata.obs).columns:
+        if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
             print("\n<<< PLOTTING UMAP >>>")
             try:
                 figs["clustering"] = sc.pl.umap(
-                    self.adata[assay] if assay else self.adata, 
-                    color=lab_cluster, return_fig=True, 
+                    self.rna, color=lab_cluster, return_fig=True, 
                     title=title_umap,  **kws_clustering)  # UMAP ~ cell type
             except Exception as err:
                 warnings.warn(f"{err}\n\nCould not plot UMAP clusters.")
@@ -1217,8 +1207,7 @@ class Crispr(object):
                 print("\n<<< PLOTTING GEX ON UMAP >>>")
                 try:
                     figs["clustering_gene_expression"] = sc.pl.umap(
-                        self.adata[assay] if assay else self.adata, 
-                        title=names, return_fig=True, 
+                        self.rna, title=names, return_fig=True, 
                         gene_symbols=gene_symbols, color=names,
                         **kws_clustering)  # UMAP ~ GEX
                 except Exception as err:
@@ -1228,26 +1217,18 @@ class Crispr(object):
                 print(f"\n<<< PLOTTING {color} on UMAP >>>")
                 try:
                     figs[f"clustering_{color}"] = sc.pl.umap(
-                        self.adata[assay] if assay else self.adata, 
-                        title=title if title else None, return_fig=True, 
-                        color=color, frameon=False,
+                        self.rna, title=title if title else None, 
+                        return_fig=True, color=color, frameon=False,
                         **kws_clustering)  # UMAP ~ GEX
                 except Exception as err:
                     warnings.warn(f"{err}\n\nCould not plot UMAP ~ {color}.")
                     figs[f"clustering_{color}"] = err
-            if cell_types_circle and "X_umap" in (
-                self.adata[assay] if assay else self.adata
-                ).obsm:  # UMAP(s) with circled cell type(s)?
+            if cell_types_circle and "X_umap" in self.rna.obsm:
                 fump, axu = plt.subplots(figsize=(3, 3))
-                sc.pl.umap(self.adata[assay] if assay else self.adata, 
-                           color=[lab_cluster], ax=axu, show=False)  # UMAP
-                for h in cell_types_circle:
-                    if assay:
-                        location_cells = self.adata[assay][self.adata[
-                            assay].obs[lab_cluster] == h, :].obsm['X_umap']
-                    else:
-                        location_cells = self.adata[
-                            self.adata.obs[lab_cluster] == h, :].obsm['X_umap']
+                sc.pl.umap(self.rna, color=[lab_cluster], ax=axu, show=False)
+                for h in cell_types_circle:  # circle cell type
+                    location_cells = self.rna[
+                        self.rna.obs[lab_cluster] == h, :].obsm['X_umap']
                     coordinates = [location_cells[:, i].mean() for i in [0, 1]]
                     circle = plt.Circle(tuple(coordinates), 1.5, color="r", 
                                         clip_on=False, fill=False)  # circle
