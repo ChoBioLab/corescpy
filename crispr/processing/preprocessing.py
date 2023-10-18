@@ -45,7 +45,7 @@ def get_layer_dict():
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   col_barcode=None, col_sample_id=None, 
                   kws_process_guide_rna=None, 
-                  kws_concat=None, **kwargs):
+                  kws_concat=None, plot=True, **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s).
     
@@ -76,13 +76,13 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                 col_gene_symbols is None) else col_gene_symbols[f]  # symbols
             adatas[f] = cr.pp.create_object(
                 file[f], assay=asy, col_gene_symbols=cgs, col_sample_id=None,
-                kws_process_guide_rna=kpr, **kwargs)  # AnnData object
+                kws_process_guide_rna=kpr, plot=False, **kwargs)  # AnnData
         print(f"\n<<< CONCATENATING FILES {file} >>>")
         adata = AnnData.concatenate(
             *adatas, join="outer", batch_key=col_sample_id,
             batch_categories=batch_categories, **{
                 **dict(uns_merge="same", index_unique="-", fill_value=None), 
-                **kws_concat})  # concatenate adata objects
+                **kws_concat})  # concatenate AnnData objects
         kws_process_guide_rna = None  # don't perform again on concatenated
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
@@ -92,8 +92,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         print(f"\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, 
-            col_barcode=col_barcode, **kwargs)
-    elif not isinstance(file, (str, os.PathLike)):  # AnnData object
+            col_barcode=col_barcode, **kwargs)  # + metadata from protospacer
+    elif not isinstance(file, (str, os.PathLike)):  # if already AnnData
         print(f"\n<<< LOADING OBJECT >>>")
         adata = file.copy()
     elif os.path.isdir(file):  # if directory, assume 10x format
@@ -131,7 +131,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
     else:
         adata.layers[layers["counts"]] = adata.X.copy()
-    cr.pp.perform_qc(adata)  # calculate & plot QC
+    if plot is True:
+        cr.pp.perform_qc(adata, hue=col_sample_id)  # calculate & plot QC
     print("\n\n", adata)
     return adata
 
@@ -303,6 +304,7 @@ def process_data(adata,
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 4000
     if isinstance(normalization, str):  # if provided as string...
         normalization = dict(method=normalization)  # ...to method argument
+    sid = normalization["col_batch"] if "col_batch" in normalization else None
         
     # Set Up Layer & Variables
     if outlier_mads is not None:  # if filtering based on calculating outliers 
@@ -322,7 +324,8 @@ def process_data(adata,
     # Exploration & QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
     figs["qc_metrics"] = cr.pp.perform_qc(
-        ann, n_top=n_top, col_gene_symbols=col_gene_symbols)  # metrics, plots
+        ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
+        hue=sid)  # QC metric calculation & plottomg
     
     # Further Filtering
     print("\n<<< FURTHER CELL & GENE FILTERING >>>")
@@ -370,8 +373,11 @@ def process_data(adata,
     ann.X = ann.layers[layers[norm]].copy()  # norm -> .X
     ann.raw = ann.copy()
             
-    # Print Cell Count Information
+    # Final Data Examination
     cr.pp.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
+    figs["qc_metrics_post"] = cr.pp.perform_qc(
+        ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
+        hue=sid)  # QC metric calculation & plottomg
     return ann, figs
 
 
@@ -446,7 +452,7 @@ def z_normalize_by_reference(adata, col_reference, key_reference="Control",
     return adata
 
 
-def perform_qc(adata, n_top=20, col_gene_symbols=None):
+def perform_qc(adata, n_top=20, col_gene_symbols=None, hue=None):
     """Calculate & plot quality control metrics."""
     figs = {}
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
@@ -472,39 +478,43 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None):
     fff, axs = plt.subplots(rrs, ccs, figsize=(5 * rrs, 5 * ccs))  # subplots
     for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
         try:  # unravel axes to get coordinates, then scatterplot facet
-            sc.pl.scatter(adata, x="total_counts", y=v, ax=a, show=False)
+            sc.pl.scatter(adata, x="total_counts", y=v, 
+                          ax=a, color=hue, show=False)  # scatterplot
         except Exception as err:
             print(err)
     plt.show()
     figs[f"qc_{v}_scatter"] = fff
     try:
-        varm = pct_ns + ["n_genes_by_counts"]
+        varm = pct_ns if hue else pct_ns
+        varm += ["n_genes_by_counts"]
         figs["pairplot"] = seaborn.pairplot(
             adata.obs[varm].rename_axis("Metric", axis=1).rename({
                 "total_counts": "Total Counts", **patterns_names}, axis=1), 
-            diag_kind="kde", diag_kws=dict(fill=True, cut=0))
+            diag_kind="kde", diag_kws=dict(fill=True, cut=0))  # pairplot
     except Exception as err:
         figs["pairplot"] = err
         print(err)
     try:
+        vark = pct_ns + [hue] if hue is None else pct_ns
         figs["pct_counts_kde"] = seaborn.displot(
-            adata.obs[pct_ns].rename_axis("Metric", axis=1).rename(
+            adata.obs[vark].rename_axis("Metric", axis=1).rename(
                 patterns_names, axis=1).stack().to_frame("Percent Counts"), 
-            x="Percent Counts", col="Metric", kind="kde", cut=0, fill=True)
+            x="Percent Counts", col="Metric", 
+            kind="kde", hue=hue, cut=0, fill=True)  # KDE of pct_counts
     except Exception as err:
         figs["pct_counts_kde"] = err
         print(err)
     try:
         figs["metrics_violin"] = sc.pl.violin(
             adata, ["n_genes_by_counts", "total_counts"] + pct_ns,
-            jitter=0.4, multi_panel=True)
+            jitter=0.4, multi_panel=True)  # violin of counts, genes
     except Exception as err:
         figs["qc_metrics_violin"] = err
         print(err)
     try:
         figs["qc_log"] = seaborn.jointplot(
             data=adata.obs, x="log1p_total_counts", 
-            y="log1p_n_genes_by_counts", kind="hex")
+            y="log1p_n_genes_by_counts", kind="hex")  # jointplot
     except Exception as err:
         figs["qc_log"] = err
         print(err)
