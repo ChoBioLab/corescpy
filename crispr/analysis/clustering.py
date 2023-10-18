@@ -15,7 +15,7 @@ import pandas as pd
 import scanpy as sc
 
 
-def cluster(adata, assay=None, plot=True, colors=None,
+def cluster(adata, plot=True, colors=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden",
             kws_pca=None, kws_neighbors=None, 
@@ -42,63 +42,60 @@ def cluster(adata, assay=None, plot=True, colors=None,
     #     col_gene_symbols = kwargs.pop("col_gene_symbols")
     # else:
     #     col_gene_symbols = None
+    ann = adata.copy()
     if kwargs:
         print(f"Un-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
             kws_pca, kws_neighbors, kws_umap, kws_cluster]]
+    if "use_highly_variable" not in kws_pca:
+        kws_pca["use_highly_variable"] = True  # default = use highly variable
     print("\n\n<<< PERFORMING PCA >>>")
     if len(kws_pca) > 0:
         print("\n", kws_pca)
-    if "use_highly_variable" in kws_pca and "highly_variable" not in adata.var:
+    if "use_highly_variable" in kws_pca and "highly_variable" not in ann.var:
         warnings.warn("""use_highly_variable set to True, 
                       but 'highly_variable' not found in `adata.var`""")
         kws_pca["use_highly_variable"] = False
-    sc.pp.pca(adata[assay] if assay else adata, **kws_pca)
-    print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>")
-    if len(kws_neighbors) > 0:
-        print("\n", kws_neighbors)
-    sc.pp.neighbors(adata[assay] if assay else adata, 
-                    **kws_neighbors)
+    sc.pp.pca(ann, **kws_pca)  # dimensionality reduction (PCA)
+    print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n"
+          f"{kws_neighbors if kws_neighbors else ''}")
+    sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
     print(f"\n\n<<< EMBEDDING: UMAP >>>")
-    if len(kws_umap) > 0:
-        print("\n", kws_umap)
+    if kws_umap:
+        print("\nUMAP Keywords:\n", kws_umap)
     if paga is True:
-        sc.tl.paga(adata)
-        sc.pl.paga(adata, plot=False)  # plot=True for coarse-grained graph
-        sc.tl.umap(adata, init_pos='paga', **kws_umap)
+        sc.tl.paga(ann)
+        sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
+        sc.tl.umap(ann, init_pos="paga", **kws_umap)
     else:
-        sc.tl.umap(adata[assay] if assay else adata, **kws_umap)
+        sc.tl.umap(ann, **kws_umap)
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
     if str(method_cluster).lower() == "leiden":
-        sc.tl.leiden(adata[assay] if assay else adata, **kws_cluster)  # leiden
-    elif str(method_cluster).lower() == "leiden":  # louvain
-        sc.tl.louvain(adata[assay] if assay else adata, **kws_cluster)
+        sc.tl.leiden(ann, **kws_cluster)  # leiden clustering
+    elif str(method_cluster).lower() == "louvain":
+        sc.tl.louvain(ann, **kws_cluster)  # louvain clustering
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
     print(f"\n\n<<< CREATING UMAP PLOTS >>>")
     if plot is True:
-        try:
-            figs["pca_variance_ratio"] = sc.pl.pca_variance_ratio(
-                adata[assay] if assay else adata, 
-                log=True)  # scree-like plot for PCA components
+        try:  # scree-like plot for PCA components
+            figs["pca_var_ratio"] = sc.pl.pca_variance_ratio(ann, log=True)
         except Exception as err:
             warnings.warn(f"Failed to plot PCA variance ratio: {err}")
-        try:
+        try:  # plot UMAP by clusters
             figs["umap"] =  sc.pl.umap(
-                adata[assay] if assay else adata, color=method_cluster, 
-                legend_loc="on data", title="", frameon=False)  # UMAP plot
+                ann, color=method_cluster, legend_loc="on data", 
+                title="", frameon=False)  # UMAP plot
         except Exception as err:
             warnings.warn(f"Failed to plot UMAP: {err}")
         if colors is not None:  # plot UMAP + extra color coding subplots
             try:
-                figs["umap_extra"] = sc.pl.umap(
-                    adata[assay] if assay else adata, color=list(
-                        pd.unique([method_cluster] + list(colors))))
+                figs["umap_extra"] = sc.pl.umap(ann, color=list(pd.unique(
+                    [method_cluster] + list(colors))))  # UMAP extra panels
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
-        return figs
-    return figs
+    return ann, figs
 
 
 def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",

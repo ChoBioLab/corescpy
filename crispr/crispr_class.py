@@ -12,6 +12,7 @@ import warnings
 import matplotlib.pyplot as plt
 import seaborn as sns
 # import re
+import muon
 import pertpy as pt
 import crispr as cr
 from crispr.defaults import (names_layers)
@@ -101,9 +102,8 @@ class Crispr(object):
                 by desired `col_sample_id` values as well as signal
                 that this needs to happen by specifying col_sample_id
                 as a tuple, with the second element containing a
-                dictionary of keyword arguments to pass to the
-                concatenation preprocessing function (e.g., batch
-                effect removal).
+                dictionary of keyword arguments to pass to
+                `AnnData.concatenate()` or None (to use defaults).
             col_batch (_type_, optional):  Column in `.obs` with batch 
                 IDs. Defaults to None.
             col_condition (str, optional): Either the name of an 
@@ -305,8 +305,7 @@ class Crispr(object):
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
-        self._layers = {"layer_original": "original", 
-                        "layer_perturbation": "X_pert"}
+        self._layers = {**cr.pp.get_layer_dict()}
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
         
@@ -318,17 +317,17 @@ class Crispr(object):
         
         # Create Object & Store Raw Counts
         if isinstance(col_sample_id, (list, tuple)):  # multi-sample
-            kws_process_batches, col_sample_id = col_sample_id
+            col_sample_id, kws_concat = col_sample_id
             col_sample_arg = col_sample_id
         else:  # only 1 sample
-            kws_process_batches = None
+            kws_concat = None
             col_sample_arg = None  # even if col_sample_id is specified...
             # ...we don't want to pass to create_object because it will
             # assume we need that column created through concatenation
             # when it's actually already in the dataset
         self.adata = cr.pp.create_object(
             self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
-            col_sample_id=col_sample_arg, 
+            col_sample_id=col_sample_arg, kws_concat=kws_concat,
             kws_process_guide_rna={
                 "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis, 
                 "key_control": key_control, 
@@ -337,7 +336,6 @@ class Crispr(object):
                 **kws_process_guide_rna}
             if kws_process_guide_rna else None)  # make AnnData
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-        self.rna.layers[self._layers["layer_original"]] = self.rna.X.copy()
         
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [
@@ -388,27 +386,12 @@ class Crispr(object):
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
         print("\n\n", self.rna)
+        if "raw" not in dir(self.rna):
+            self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
         
-            # Correct 10x CellRanger Guide Count Incorporation
-            # raise NotImplementedError(
-            #     "Delete guides from var_names not yet implemented!")
-
-    # @property
-    # def adata(self):
-    #     """Specify file path to data."""
-    #     return self._adata
-
-    # @adata.setter
-    # def adata(self, value):
-    #     """Set file path and load object."""
-    #     self._file_path = value
-    #     if isinstance(value, str):
-    #         print("\n\n<<<CREATING OBJECT>>>")
-    #         self._adata = cr.pp.create_object(
-    #             value, assay=None, col_gene_symbols=self._columns[
-    #                 "col_gene_symbols"])
-    #     else:
-    #         self._adata = value
+        # Correct 10x CellRanger Guide Count Incorporation
+        # raise NotImplementedError(
+        #     "Delete guides from var_names not yet implemented!")
 
     @property
     def rna(self):
@@ -576,7 +559,7 @@ class Crispr(object):
         if assay is None:
             assay = self._assay
         if layer_in is None:
-            layer_in = self._layers["layer_original"]
+            layer_in = self._layers["counts"]  # raw counts if not specified
         kws = dict(assay=assay, assay_protein=assay_protein, 
             remove_doublets=remove_doublets, 
             **self._columns, layer_original="before_preprocessing",
@@ -592,9 +575,11 @@ class Crispr(object):
                 kws["kws_batch_correction"].update(
                     {"col_batch": self._columns["col_batch"] if self._columns[
                         "col_batch"] else self._columns["col_sample_id"]})
-        adata = self.adata.copy() if copy is True else self.adata
+        adata = self.adata[assay].copy() if assay else self.adata.copy()
         adata.X = adata.layers[layer_in]  # use specified layer
-        adata, figs = cr.pp.process_data(self.adata, **kws)  # preprocess
+        adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
+        if assay_protein is not None:  # if includes protein assay
+            adata_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
         self.figures["preprocessing"] = figs
         if clustering not in [None, False]:
             if clustering is True:
@@ -605,6 +590,10 @@ class Crispr(object):
             else:
                 raise TypeError(
                     "`clustering` must be dict (keyword arguments) or bool.")
+        if copy is False:
+            self.rna = adata
+            if assay_protein is not None:  # if includes protein assay
+                self.adata[assay_protein] = adata_p
         return adata, figs
                 
     def cluster(self, assay=None, method_cluster="leiden", 
@@ -622,8 +611,8 @@ class Crispr(object):
                           self._columns["col_batch"]]:
                     if x:
                         colors += [x]  # add sample & batch UMAP
-        figs_cl = cr.ax.cluster(
-            self.adata.copy() if copy is True else self.adata, 
+        adata, figs_cl = cr.ax.cluster(
+            self.rna.copy() if copy is True else self.rna, 
             assay=assay, method_cluster=method_cluster,
             **self._columns, **self._keys,
             plot=plot, colors=colors, paga=paga, 
@@ -631,6 +620,7 @@ class Crispr(object):
             kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
         if copy is False:
             self.figures.update({"clustering": figs_cl})
+            self.rna = adata
         return figs_cl
     
     def annotate_clusters(self, model, copy=False, **kwargs):
@@ -780,8 +770,7 @@ class Crispr(object):
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, 
             plot=plot, **kwargs)
-        # Store Results
-        if copy is False:
+        if copy is False:  # store results
             self.figures.update({"mixscape": figs_mix})
             self.results["mixscape"] = adata_pert
             for x in adata_pert.uns:

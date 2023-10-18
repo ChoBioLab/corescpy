@@ -113,7 +113,7 @@ Certain arguments used throughout the `crispr` package (including outside the `c
 
 <!-- break -->
 
-* `col_sample_id` **(str or tuple, optional)**: Column in `.obs` with sample IDs. Defaults to "standard_sample_id". If this column does not yet exist in your data and needs to be created by concatenating datasets, you must provide `file_path` as a dictionary keyed desired `col_sample_id` values as well as signal that this needs to happen by specifying col_sample_id as a tuple, with the second element containing a dictionary of keyword arguments to pass to the concatenation preprocessing function (e.g., batch effect removal).
+* `col_sample_id` **(str or tuple, optional)**: Column in `.obs` with sample IDs. Defaults to "standard_sample_id". If this column does not yet exist in your data and needs to be created by concatenating datasets, you must provide `file_path` as a dictionary keyed by desired `col_sample_id` values as well as signal that this needs to happen by specifying col_sample_id as a tuple, with the second element containing a dictionary of keyword arguments to pass to `AnnData.concatenate()` or None (to use defaults).
 
 * `col_batch` **(str, optional)**: Column in `.obs` with batch IDs. Defaults to None.
 

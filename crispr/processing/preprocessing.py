@@ -12,7 +12,7 @@ import re
 import scanpy as sc
 import pertpy as pt
 import muon
-import warnings
+from  warnings import warn
 # import scipy
 import seaborn
 import matplotlib.pyplot as plt
@@ -28,9 +28,24 @@ import numpy as np
 
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
+
+def get_layer_dict():
+    """Retrieve layer name conventions."""
+    lay =  {"preprocessing": "preprocessing", 
+            "perturbation": "X_pert",
+            "unnormalized": "unnormalized",
+            "norm_log1p": "norm_log1p",
+            "norm_z": "norm_z",
+            "unscaled": "unscaled", 
+            "unregressed": "unregressed",
+            "counts": "counts"}
+    return lay
+
+
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   col_barcode=None, col_sample_id=None, 
-                  kws_process_guide_rna=None, **kwargs):
+                  kws_process_guide_rna=None, 
+                  kws_concat=None, **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s).
     
@@ -43,6 +58,9 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     if they are common across samples; otherwise, specify them as 
     lists in the same order as the `file` dictionary.
     """
+    if kws_concat is None:
+        kws_concat = {}
+    layers = cr.pp.get_layer_dict()  # standard layer names
     if col_sample_id is not None:  # concatenate multiple datasets
         print(f"\n<<< LOADING MULTIPLE FILEs {file} >>>")
         adatas = [None] * len(file)
@@ -50,19 +68,22 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         file = [file[f] for f in file]  # turn to list 
         for f in range(len(file)):
             print(f"\n\n\t*** Creating object {f + 1} of {len(file)}")
+            kpr = kws_process_guide_rna[f] if isinstance(
+                kws_process_guide_rna, list) else kws_process_guide_rna
             asy = assay if isinstance(
                 assay, str) or assay is None else assay[f]  # GEX/RNA assay 
             cgs = col_gene_symbols if isinstance(col_gene_symbols, str) or (
                 col_gene_symbols is None) else col_gene_symbols[f]  # symbols
             adatas[f] = cr.pp.create_object(
                 file[f], assay=asy, col_gene_symbols=cgs, col_sample_id=None,
-                kws_process_guide_rna=kws_process_guide_rna, 
-                **kwargs)  # create AnnData object
+                kws_process_guide_rna=kpr, **kwargs)  # AnnData object
         print(f"\n<<< CONCATENATING FILES {file} >>>")
         adata = AnnData.concatenate(
-            *adatas, join="outer", batch_key=col_sample_id, uns_merge="same", 
-            index_unique="-", batch_categories=batch_categories,
-            fill_value=None)  # concatenate adata objects
+            *adatas, join="outer", batch_key=col_sample_id,
+            batch_categories=batch_categories, **{
+                **dict(uns_merge="same", index_unique="-", fill_value=None), 
+                **kws_concat})  # concatenate adata objects
+        kws_process_guide_rna = None  # don't perform again on concatenated
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
         print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
@@ -89,15 +110,28 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata = sc.read(file)
     adata.var_names_make_unique()
     adata.obs_names_make_unique()
+    cr.pp.print_counts(adata, title="Raw")
     if col_gene_symbols not in adata.var.columns:
-        adata.var = adata.var.rename_axis(col_gene_symbols)
-    if kws_process_guide_rna and col_sample_id is None:  # process guide RNA
-        kpr = kws_process_guide_rna[f] if isinstance(
-            kws_process_guide_rna, list) else kws_process_guide_rna
-        if assay:
-            adatas[assay]  = cr.pp.process_guide_rna(adatas[assay], **kpr)
+        if assay: 
+            adata[assay] = adata[assay].var.rename_axis(col_gene_symbols) 
         else:
-            adata = cr.pp.process_guide_rna(adata, **kpr)
+            adata.var = adata.var.rename_axis(col_gene_symbols)
+    if kws_process_guide_rna:  # process guide RNA
+        if assay:
+            adata[assay]  = cr.pp.process_guide_rna(
+                adata[assay], **kws_process_guide_rna)
+        else:
+            adata = cr.pp.process_guide_rna(adata, **kws_process_guide_rna)
+        cct = kws_process_guide_rna["col_cell_type"] if "col_cell_type" in (
+            kws_process_guide_rna) else None
+        cr.pp.print_counts(adata[assay] if assay else adata, 
+                           title="Post-Guide RNA Processing", group_by=cct)
+        # TODO: FIGURE
+    if assay: 
+        adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
+    else:
+        adata.layers[layers["counts"]] = adata.X.copy()
+    cr.pp.perform_qc(adata)  # calculate & plot QC
     print("\n\n", adata)
     return adata
 
@@ -140,21 +174,33 @@ def combine_matrix_protospacer(
         dff, col_barcode = dff.set_index(dff.columns[0]), dff.columns[0]
     adata.obs = adata.obs.join(dff.rename_axis(adata.obs.index.names[0]))
     return adata
-    
 
-def process_data(adata, assay=None, assay_protein=None,
-                 layer_original="original",
+        
+def print_counts(adata, group_by=None, title="Total", **kwargs):   
+    if kwargs:
+        pass
+    print(f"\n\n{'=' * 80}\nCell Counts: {title}\n{'=' * 80}\n")
+    if group_by is not None and group_by in adata.obs:
+        print(adata.n_obs)
+        for x in adata.layers:
+            print(f"{x}: {adata.layers[x].shape}")
+        if group_by is not None and group_by in adata.obs:
+            print(adata.obs[group_by].value_counts())
+        print("\n")
+    print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")
+    
+    
+def process_data(adata, 
                  col_gene_symbols=None,
                  col_cell_type=None,
                  # remove_doublets=True,
-                 kws_batch_correction=None,
                  outlier_mads=None,
                  cell_filter_pmt=5,
                  cell_filter_ncounts=None, 
                  cell_filter_ngene=None,
                  gene_filter_ncell=None,
                  target_sum=1e4,
-                 logarithmize=True,
+                 normalization="log",
                  kws_hvg=True,
                  scale=10, kws_scale=None,
                  regress_out=regress_out_vars, 
@@ -164,31 +210,25 @@ def process_data(adata, assay=None, assay_protein=None,
 
     Args:
         adata (AnnData or MuData): The input data object.
-        assay (str, optional): The name of the gene expression assay 
-            (for multi-modal data only). Defaults to None.
-        assay_protein (str, optional): The name of the protein assay. 
-            (for multi-modal data only). Defaults to None.
-        layer_original (str, optional): The name of the AnnData layer 
-            to store the original data. Defaults to "raw".
         col_gene_symbols (str, optional): The name of the column or 
             index in `.var` containing gene symbols. Defaults to None.
         col_cell_type (str, optional): The name of the column 
             in `.obs` containing cell types. Defaults to None.
-        kws_batch_correction (dict, optional): Keywords to perform
-            batch correction and/or z-normalization. 
-            If not None, should contain 
+        normalization (str or dict, optional): If "log,"
+            perform conventional normalization steps 
+            (log-transform the data after total-count normalization). 
+            If "z", perform z-normalization. If a dictionary,
+            include the method ("log" or "z") under the key "method,"
+            If not None and `method="z"`, should contain 
             the name of the column in `.obs` containing batch IDs 
             (e.g., orig.ident) under the key "col_batch" (which should 
             be None if z-normalization is just to be applied 
             uniformly without respect to batch).
-            Should also contain either "harmony" or "z" under the key
-            "method" in order to use either Harmony or z-scoring 
-            (perturbed relative to control for each batch) to remove
-            batch effects. If the latter, also include the keys
+            If `method="z"`, should contain keys for
             "col_reference" and "key_reference" containing the 
             column name where perturbed versus unperturbed labels are
             stored and the label in that column that corresponds to
-            the control condition, respectively. Defaults to None.
+            the control condition, respectively. Defaults to "log".
         target_sum (float, optional): Total-count normalize to
             <target_sum> reads per cell, allowing between-cell 
             comparability of counts. If None, total count-normalization
@@ -221,14 +261,12 @@ def process_data(adata, assay=None, assay_protein=None,
             If True, filtering criteria are derived from the data
                 (i.e., outlier calculation).
             Defaults to None (no filtering on this property performed).
-        logarithmize (bool, optional): Whether to log-transform 
-            the data after total-count normalization. Defaults to True.
         kws_hvg (dict or bool, optional): The keyword arguments for 
             detecting variable genes or True for default arguments. 
-            To calculate HVGs without filtering by them, include an 
-            extra argument in this dictionary: {"filter": False}.
-            That way, the highly_variable column is created and can
-            be used in clustering, but non-HVGs will be retained in 
+            To filter by HVGs, include an 
+            extra argument in this dictionary: {"filter": True}.
+            Otherwise, a highly_variable genes column is created and
+            can be used in clustering, but non-HVGs will be retained in
             the data for other uses. Defaults to True.
         scale (int or bool, optional): The scaling factor or True 
             for no clipping. Defaults to 10.
@@ -242,210 +280,139 @@ def process_data(adata, assay=None, assay_protein=None,
         adata (AnnData): The processed data object.
         figs (dict): A dictionary of generated figures.
     """
-    # Initial Information
-    print(adata)
+    # Setup Object
+    if kwargs:
+        print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
+    layers = cr.pp.get_layer_dict()  # layer names
+    ann = adata.copy()  # copy so passed AnnData object not altered inplace
+    ann.raw = ann.copy()  # original in `.raw`
+    ann.layers[layers["preprocessing"]] = ann.X.copy() # set original in layer
+    ann.obs["n_counts"] = ann.X.sum(1)
+    ann.obs["log_counts"] = np.log(ann.obs["n_counts"])
+    ann.obs["n_genes"] = (ann.X > 0).sum(1)
+    print(ann)
+    
+    # Initial Information/Arguments
+    if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
+        col_gene_symbols = None  # ...so functions will refer to index name
+    figs = {}
     if kws_scale is None:
         kws_scale = {}
-    if kws_hvg is True:
-        kws_hvg = {}
-    if kws_hvg is not None and kws_hvg is not False:
-        filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else True
-    else:
-        filter_hvgs = False
+    kws_scale, kws_hvg = [x if x else {} for x in [kws_scale, kws_hvg]]
+    filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
+    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 4000
+    if isinstance(normalization, str):  # if provided as string...
+        normalization = dict(method=normalization)  # ...to method argument
         
     # Set Up Layer & Variables
-    if assay:
-        adata[assay].layers[layer_original] = adata[assay].X
-    else:
-        adata.layers[layer_original] = adata.X
     if outlier_mads is not None:  # if filtering based on calculating outliers 
         if isinstance(outlier_mads, (int, float)):  # same MADs, all metrics
             qc_mets = ["log1p_total_counts", "log1p_n_genes_by_counts",
                        "pct_counts_in_top_20_genes"]
             outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
-    if col_gene_symbols == adata.var.index.names[0]:
-        col_gene_symbols = None
-    if col_cell_type is not None and col_cell_type in adata.obs:
-        print(f"\n\n{'=' * 80}\nCell Counts\n{'=' * 80}\n\n")
-        print(adata.obs[col_cell_type].value_counts())
-    figs = {}
-    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 20
-    if kwargs:
-        print(f"\nUn-used Keyword Arguments: {kwargs}")
-    print(col_gene_symbols, assay, n_top)
-    print((adata[assay] if assay else adata).var.describe())
+    cr.pp.print_counts(ann, title="Initial", group_by=col_cell_type)
+    print(col_gene_symbols, "\n\n", n_top, "\n\n", ann.var.describe(), "\n\n")
 
-    # Basic Filtering (DO FIRST)
+    # Basic Filtering (DO FIRST...ALL INPLACE)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
-    sc.pp.filter_cells(adata[assay] if assay else adata, 
-                       min_genes=cell_filter_ngene[0])
-    sc.pp.filter_genes(adata[assay] if assay else adata, 
-                       min_cells=gene_filter_ncell[0])
+    sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
+    sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
+    cr.pp.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
     
-    # Highly-Expressed Genes
-    figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
-        adata[assay] if assay else adata, n_top=n_top,
-        gene_symbols=col_gene_symbols)
-    
-    # QC Metrics
+    # Exploration & QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
-    figs["qc_metrics"] = perform_qc(
-        adata[assay] if assay else adata)  # calculate & plot QC
+    figs["qc_metrics"] = cr.pp.perform_qc(
+        ann, n_top=n_top, col_gene_symbols=col_gene_symbols)  # metrics, plots
     
-    # Filtering
-    filter_qc(adata[assay] if assay else adata, outlier_mads=outlier_mads, 
-              cell_filter_pmt=cell_filter_pmt,
-              cell_filter_ncounts=cell_filter_ncounts,
-              cell_filter_ngene=cell_filter_ngene, 
-              gene_filter_ncell=gene_filter_ncell)
+    # Further Filtering
+    print("\n<<< FURTHER CELL & GENE FILTERING >>>")
+    ann = cr.pp.filter_qc(ann, outlier_mads=outlier_mads,
+                          cell_filter_pmt=cell_filter_pmt,
+                          cell_filter_ncounts=cell_filter_ncounts,
+                          cell_filter_ngene=cell_filter_ngene, 
+                          gene_filter_ncell=gene_filter_ncell)
+    cr.pp.print_counts(ann, title="Post-Filter", group_by=col_cell_type)
     
     # Doublets
-    # doublets = detect_doublets(adata[assay] if assay else adata)
+    # doublets = detect_doublets(adata)
     # if remove_doublets is True:
     #     adata
     #     # TODO: doublets
     
-    # Plot Post-Filtering Metrics + Shifted Logarithm
-    # scales_counts = sc.pp.normalize_total(
-    #     adata[assay] if assay else adata, target_sum=target_sum, 
-    #     inplace=False)  # count-normalize (not in-place yet)
-    # if assay:
-    #     adata[assay].layers["log1p_norm"] = sc.pp.log1p(
-    #         scales_counts["X"], copy=True)  # set as layer
-    # else:
-    #     adata.layers["log1p_norm"] = sc.pp.log1p(
-    #         scales_counts["X"], copy=True)  # set as layer
-    # fff, axes = plt.subplots(1, 2, figsize=(10, 5))
-    # _ = seaborn.histplot((adata[assay] if assay else adata).obs[
-    #     "total_counts"], bins=100, kde=False, ax=axes[0])
-    # axes[0].set_title("Total Counts (Post-Filtering)")
-    # _ = seaborn.histplot(adata.layers["log1p_norm"].sum(1), bins=100, 
-    #                      kde=False, ax=axes[1])
-    # axes[1].set_title("Shifted Logarithm")
-    # plt.show()
-    # figs["normalization"] = fff
+    # Normalization
+    ann = cr.pp.normalize(ann, target_sum=target_sum, **normalization)
+        
+    # Gene Variability (Detection, Optional Filtering)
+    print("\n<<< DETECTING VARIABLE GENES >>>")
+    sc.pp.highly_variable_genes(ann, layer=layers["norm_log1p"], **kws_hvg)
+    if filter_hvgs is True:
+        print("\n<<< FILTERING BY HIGHLY VARIABLE GENES >>>")
+        ann = ann[:, ann.var.highly_variable]  # filter by HVGs
+        cr.pp.print_counts(ann, title="HVGs", group_by=col_cell_type)
     
-    # Normalize (Actually Modify Object Now)
-    if target_sum is not None:
-        print("\n<<< TOTAL-COUNT-NORMALIZING >>>")
-        sc.pp.normalize_total(
-            adata[assay] if assay else adata, target_sum=target_sum, 
-            inplace=True)  # count-normalize (not in-place yet)
-    else:
-        print("\n<<< ***NOT*** TOTAL-COUNT-NORMALIZING >>>")
-    z_norm = True  # change later if appropriate
-    if kws_batch_correction:
-        bc_method = kws_batch_correction.pop("method")
-        print(f"\n<<< BATCH-CORRECTING VIA {bc_method} >>>")
-        if bc_method.lower() == "z":
-            if ("col_reference" not in kws_batch_correction) or (
-                "key_reference" not in kws_batch_correction):
-                raise ValueError(
-                    "'col_reference' and 'key_reference' must be in"
-                    "in kws_batch_correction if method = 'z'.")
-            z_norm = True  # so won't re-filter by HVGs later
-            sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-                                        **kws_hvg)  # highly variable genes
-            if assay is None:
-                adata = adata[:, adata.var.highly_variable]
-            else:
-                adata[assay]= adata[:, adata[assay].var.highly_variable]
-            if assay:
-                adata[assay] = cr.pp.z_normalize_by_reference(
-                    adata[assay], **kws_batch_correction)
-            else:
-                adata = cr.pp.z_normalize_by_reference(
-                    adata, **kws_batch_correction)
-        else:
-            raise NotImplementedError(
-                f"{bc_method} batch correction not implemented.")
-        
-    if logarithmize is True:
-        print("\n<<< LOG-NORMALIZING >>>")
-        sc.pp.log1p(adata[assay] if assay else adata)
-    else:
-        print("\n<<< ***NOT*** LOG-NORMALIZING >>>")
-    if assay_protein is not None:  # if includes protein assay
-        muon.prot.pp.clr(adata[assay_protein])
-        
-    # Freeze Normalized, Filtered data
-    if assay:
-        adata[assay].raw = adata[assay].copy()
-    else:
-        adata.raw = adata.copy()
-        
-    # Filter by Gene Variability 
-    if kws_hvg is not None and kws_hvg is not False and z_norm is False:
-        print("\n<<< DETECTING VARIABLE GENES >>>")
-        sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
-                                    **kws_hvg)  # highly variable genes 
-        try:
-            if filter_hvgs is True:
-                if assay is None:
-                    adata = adata[:, adata.var.highly_variable
-                                  ]  # filter by HVGs
-                else:
-                    adata[assay]= adata[:, adata[
-                        assay].var.highly_variable]  # filter by HVGs
-        except (TypeError, IndexError) as err_h:
-                warnings.warn(f"""\n\n{'=' * 80}\n\n Could not subset 
-                              by highly variable genes: {err_h}""")
-    
-    # Regress Confounds
+    # Regress Out Confounds
     if regress_out: 
         print("\n<<< REGRESSING OUT CONFOUNDS >>>")
-        sc.pp.regress_out(adata[assay] if assay else adata, regress_out)
+        ann.layers[layers["unregressed"]] = ann.X.copy()
+        sc.pp.regress_out(ann, regress_out, copy=False)
+        warn("Confound regression doesn't yet properly use layers.")
     
-    # Scaling Genes
+    # Scale Gene Expression
     if scale is not None:
         print("\n<<< SCALING >>>")
-        if scale is True:  # if True, just scale to unit variance
-            sc.pp.scale(adata[assay] if assay else adata, 
-                        **kws_scale)  # scale
-        else:  # if scale provided as an integer...
-            sc.pp.scale(adata[assay] if assay else adata, max_value=scale,
-                        **kws_scale)  # ...also clip values > "scale" SDs
+        ann.layers[layers["unscaled"]] = ann.X.copy()
+        if scale is not True:  # if scale = int; also clip values/"scale" SDs
+            kws_scale.update(dict(max_value=scale))
+        sc.pp.scale(ann, copy=False, layer=layers["norm_log1p"], 
+                    **kws_scale)  # scale GEX INPLACE log1p layer
+    
+    # Store Final Object
+    ann.X = ann.layers[layers[norm]].copy()  # norm -> .X
+    ann.raw = ann.copy()
             
-    # Cell Counts (Post-Processing)
-    if col_cell_type is not None and col_cell_type in adata.obs:
-        print(f"\n\n{'=' * 80}\nCell Counts (Post-Processing)"
-              "\n{'=' * 80}\n\n")
-        print(adata.obs[col_cell_type].value_counts())
-        
-    # Gene Expression Heatmap
-    # if assay:
-    #     labels = adata[assay].var.reset_index()[col_gene_symbols]  # genes
-    #     if labels[0] != adata[assay].var.index.values[0]:
-    #         labels = dict(zip(list(adata[assay].var.index.values), list(
-    #             adata[assay].var.reset_index()[col_gene_symbols])))
-    # else:
-    #     labels = adata.var.reset_index()[col_gene_symbols]  # gene names
-    #     if labels[0] != adata.var.index.values[0]:
-    #         labels = dict(zip(list(adata.var.index.values), list(
-    #             adata.var.reset_index()[col_gene_symbols])))
-    # figs["gene_expression"] = sc.pl.heatmap(
-    #     adata[assay] if assay else adata, labels,
-    #     col_cell_type, show_gene_labels=True, dendrogram=True)
-    # if layer is not None:
-    #     labels = adata.var.reset_index()[col_gene_symbols]  # gene names 
-    #     figs[f"gene_expression_{layer}"] = sc.pl.heatmap(
-    #         adata[assay] if assay else adata, labels,
-    #         layer=layer, show_gene_labels=True, 
-    #         dendrogram=True)
-            
-    print("\n\n")
-    return adata, figs
+    # Print Cell Count Information
+    cr.pp.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
+    return ann, figs
+
+
+def normalize(adata, method="log", target_sum=1e4, kws_z=None):
+    """Create normalization in adata layers."""
+    layers = cr.pp.get_layer_dict()
+    adata.layers[layers["unnormalized"]] = adata.X.copy()
+    if target_sum is not None:  # total-count normalization INPLACE
+        print("\n<<< TOTAL-COUNT-NORMALIZING >>>")
+        adata.layers[layers["norm_total_counts"]] = sc.pp.normalize_total(
+            adata, target_sum=target_sum)  # total-count normalize
+    else:
+        print("\n<<< ***NOT*** TOTAL-COUNT-NORMALIZING >>>")
+    print(f"\n<<< LOG-NORMALIZING => layer {layers['norm_log1p']} >>>")
+    adata.layers[layers["norm_log1p"]] = sc.pp.log1p(
+        adata, copy=True)  # log-transformed for later use; NOT INPLACE
+    if kws_z:  # if want to perform z-normalization
+        if ~all((x in kws_z for x in ["col_reference", "key_reference"])):
+            raise ValueError(
+                "'col_reference' and 'key_reference' must be "
+                "in `normalization` argument if method = 'z'.")
+        adata.layers[layers["norm_z"]] = cr.pp.z_normalize_by_reference(
+            adata, **kws_z)  # z-normalize to controls
+    return adata
 
 
 def z_normalize_by_reference(adata, col_reference, key_reference="Control", 
-                             col_batch=None, **kwargs):
+                             col_batch=None, retain_zero_variance=True, 
+                             layer=None, **kwargs):
     """
     Mean-center & standardize by 
     reference condition, optionally within-batches.
+    
+    If `retain_zero_variance` is True, then genes with zero variance 
+    are retained.
     """
     if kwargs:
-        print(f"\nUn-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     adata = adata.copy()
+    if layer:
+        adata.X = adata.layer[layer].copy()
     if col_batch is None:
         col_batch, col_batch_origin = "batch", None
         if "batch" == col_reference:
@@ -457,16 +424,21 @@ def z_normalize_by_reference(adata, col_reference, key_reference="Control",
     batches_adata, batch_labs = [], adata.obs[col_batch].unique()
     for s in batch_labs:  # loop over batches
         batch_adata = adata[adata.obs[col_batch] == s].copy()
-        gex = batch_adata.X.A.copy()  #  sparse -> dense matrix for batch s
+        gex = batch_adata.X.copy()  #  gene expression matrix (full)
         gex_ctrl = batch_adata[batch_adata.obs[
             col_reference] == key_reference].X.A.copy()  # reference condition
-        musd_ctrl = np.nanmean(gex_ctrl, axis=0), np.nanstd(gex_ctrl, axis=0)
-        batch_adata.X = (batch_adata.X.A - musd_ctrl[0]) / musd_ctrl[1]  # z
-        batches_adata += [batch_adata]
-    if col_batch_origin is None:
+        gex, gex_ctrl = [q.A if "A" in dir(q) else q 
+                         for q in [gex, gex_ctrl]]  # sparse -> dense matrix
+        mus, sds = np.nanmean(gex_ctrl, axis=0), np.nanstd(
+            gex_ctrl, axis=0)  # means & SDs of reference condition genes
+        if retain_zero_variance is True:
+            sds[sds == 0] = 1   # retain zero-variance genes at unit variance
+        batch_adata.X = (gex - mus) / sds  # z-score gene expression
+        batches_adata += [batch_adata]  # concatenate batch adata
+    if col_batch_origin is None:  # in case just 1 batch (no concatenation)
         adata = batches_adata[0]
         adata.obs.drop(col_batch, axis=1, inplace=True)
-    else:
+    else:  # concatenate batches
         adata = AnnData.concatenate(
             *batches_adata, join="outer", batch_key=col_batch, 
             uns_merge="same", index_unique="-", 
@@ -474,24 +446,25 @@ def z_normalize_by_reference(adata, col_reference, key_reference="Control",
     return adata
 
 
-def perform_qc(adata):
+def perform_qc(adata, n_top=20, col_gene_symbols=None):
     """Calculate & plot quality control metrics."""
     figs = {}
+    figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
+        adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
     patterns = dict(zip(["mt", "ribo", "hb"], 
                         [("MT-", "mt-"), ("RPS", "RPL"), ("^HB[^(P)]")]))
-    patterns_names = dict(zip(patterns, ["Mitochondrial", "Ribosomal", 
-                                         "Hemoglobin"]))
+    patterns_names = dict(zip(patterns, [
+        "Mitochondrial", "Ribosomal", "Hemoglobin"]))
     p_names = [patterns_names[k] for k in patterns_names]
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...") 
     for k in patterns:
         try:
             adata.var[k] = adata.var_names.str.startswith(patterns[k])
         except Exception as err:
-            warnings.warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
+            warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     qc_vars = list(set(patterns.keys()).intersection(
         adata.var.keys()))  # available QC metrics 
     pct_ns = [f"pct_counts_{k}" for k in qc_vars]
-    # pct_counts_vars = dict(zip(qc_vars, pct_ns))
     print("\n\t*** Calculating & plotting QC metrics...\n\n") 
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
                                log1p=True, inplace=True)  # QC metrics
@@ -499,8 +472,6 @@ def perform_qc(adata):
     fff, axs = plt.subplots(rrs, ccs, figsize=(5 * rrs, 5 * ccs))  # subplots
     for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
         try:  # unravel axes to get coordinates, then scatterplot facet
-            # aaa = np.unravel_index(a.get_subplotspec().num1, (rrs, ccs))
-            # a_x = fff.add_subplot(a)
             sc.pl.scatter(adata, x="total_counts", y=v, ax=a, show=False)
         except Exception as err:
             print(err)
@@ -547,6 +518,7 @@ def filter_qc(adata, outlier_mads=None,
               cell_filter_ngene=None, 
               gene_filter_ncell=None):
     """Filter low-quality/outlier cells & genes."""
+    adata = adata.copy()
     if cell_filter_pmt is None:
         cell_filter_pmt = [0, 
                            100]  # so doesn't filter MT but calculates metrics
@@ -583,16 +555,12 @@ def filter_qc(adata, outlier_mads=None,
             print("\n\tNo minimum")
         if cell_filter_ngene[1] is not None:
             print(f"\tMaximum: {cell_filter_ngene[1]}")
-            sc.pp.filter_cells(adata, 
-                # min_genes=None, min_counts=None, max_counts=None,
-                max_genes=cell_filter_ngene[1])
+            sc.pp.filter_cells(adata, max_genes=cell_filter_ngene[1])
             print(f"\tNew Count: {adata.n_obs}")
         print("\n\t*** Filtering cells based on # of reads...")
         if cell_filter_ncounts[0] is not None:
             print(f"\n\tMinimum: {cell_filter_ncounts[0]}")
-            sc.pp.filter_cells(adata, 
-                # min_genes=None, max_genes=None, max_counts=None,
-                min_counts=cell_filter_ncounts[0])
+            sc.pp.filter_cells(adata, min_counts=cell_filter_ncounts[0])
             print(f"\tNew Count: {adata.n_obs}")
         else:
             print("\n\tNo minimum")
@@ -619,8 +587,8 @@ def filter_qc(adata, outlier_mads=None,
         else:
             print("\n\tNo maximum")
         print(f"\nPost-Filtering Cell Count: {adata.n_obs}")
-        return adata
-        
+    return adata
+
 
 def explore_h5_file(file):
     """Explore an H5 file's format (thanks to ChatGPT)."""
@@ -675,13 +643,14 @@ def remove_guide_counts_from_gex_matrix(adata, col_target_genes,
             set(guides_in_varnames))))  # remove guide RNA counts
     return adata
 
+
 def detect_guide_targets(col_guide_rna_series,
                          feature_split="|", guide_split="-",
                          key_control_patterns=None,
                          key_control="Control", **kwargs):
-    """Detect guide gene targets (see `filter_by_guide_counts` docstring)."""
+    """Detect guide gene targets (see `filter_by_guide_counts`)."""
     if kwargs:
-        print(f"\nUn-used Keyword Arguments: {kwargs}")
+        print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     if key_control_patterns is None:
         key_control_patterns = [
             key_control]  # if already converted, pattern=key itself
@@ -694,8 +663,7 @@ def detect_guide_targets(col_guide_rna_series,
         key_control_patterns = list(pd.Series(key_control_patterns).dropna())
     else:  # if NaNs mean unperturbed cells
         if any(pd.isnull(targets)):
-            warnings.warn(
-                f"Dropping rows with NaNs in `col_guide_rna`.")
+            warn(f"Dropping rows with NaNs in `col_guide_rna`.")
         targets = targets.dropna()
     if feature_split is not None or guide_split is not None:
         targets, nums = [targets.apply(
@@ -778,8 +746,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             percentage of the average UMI count will be considered 
             noise and dropped from the list of genes for which
             that cell is considered transfected. Defaults to 40.
-        min_pct_dominant (int, optional): sgRNAs with counts at or above 
-            this percentage of the cell total UMI count will be 
+        min_pct_dominant (int, optional): sgRNAs with counts at or 
+            above this percentage of the cell total UMI count will be 
             considered dominant, and all other guides will be dropped 
             from the list of genes for whichmthat cell is considered 
             transfected. Defaults to 80.
@@ -842,22 +810,20 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         split_char = [guide_split in g for g in ann.var_names]
         if any(split_char):
             grs = "==="
-            bad_gene_symb = np.array(ann.var_names)[np.where(split_char)[0]]
+            bad_symb = np.array(ann.var_names)[np.where(split_char)[0]]
             if grs in guide_split:
                 raise ValueError(f"{grs} is a reserved name and cannot be "
                                  "contained within `guide_split`.")
-            warnings.warn(f"`guide_split` ({guide_split}) found in at least "
-                          f"one gene name ({', '.join(bad_gene_symb)}). "
-                          f"Temporarily substituting {grs}. "
-                          "Will attempt to replace later, but keep in "
-                          "mind that there are big risks in having "
-                          "`guide_split` be a character that is allowed to "
-                          "be included in gene names.")
-            guides = guides.apply(lambda x: re.sub(bad_gene_symb[np.where(
-                [i in str(x) for i in bad_gene_symb])[0][0]], re.sub(
-                guide_split, grs, bad_gene_symb[np.where(
-                    [i in str(x) for i in bad_gene_symb])[0][0]]), 
-                str(x)) if any((i in str(x) for i in bad_gene_symb)) else x)
+            warn(f"`guide_split` ({guide_split}) found in at least "
+                 f"one gene name ({', '.join(bad_symb)}). Using {grs}. "
+                 "as temporary substitute. Will attempt to replace later, "
+                 "but note that there are risks in having a `guide_split` "
+                 "as a character also found in gene names.")
+            guides = guides.apply(lambda x: re.sub(bad_symb[np.where(
+                [i in str(x) for i in bad_symb])[0][0]], re.sub(
+                guide_split, grs, bad_symb[np.where(
+                    [i in str(x) for i in bad_symb])[0][0]]), 
+                str(x)) if any((i in str(x) for i in bad_symb)) else x)
     
     # Find Gene Targets & Counts of Guides
     targets, grnas = cr.pp.detect_guide_targets(
@@ -883,9 +849,9 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     tg_info = ann.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
     if tg_info[col_guide_rna].isnull().any() and (~any(
         [pd.isnull(x) for x in key_control_patterns])):
-        warnings.warn(f"NaNs present in {col_guide_rna} column. "
-                      f"Dropping {tg_info[col_guide_rna].isnull().sum()} "
-                      f"out of {tg_info.shape[0]} rows.")
+        warn(f"NaNs present in guide RNA column ({col_guide_rna}). "
+             f"Dropping {tg_info[col_guide_rna].isnull().sum()} "
+             f"out of {tg_info.shape[0]} rows.")
         tg_info = tg_info[~tg_info[col_guide_rna].isnull()]
 
     # Sum Up gRNA UMIs
@@ -975,27 +941,6 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     tg_info = tg_info.dropna().loc[ann.obs.index.intersection(
         tg_info.dropna().index)]  # re-order according to adata index
     
-    # # Determine Exclusion Criteria Met per gRNA
-    # tg_info = tg_info.join(feats_n.to_frame("u").groupby("bc").apply(
-    #     lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
-    #                          cols[1]: list(x.reset_index("g")["u"])})), 
-    #                        rsuffix="_unique", lsuffix="_all")
-    # ecol, grc, nuc = [f"{col_guide_rna}_exclusions", f"{col_guide_rna}_list_unique", 
-    #                   f"{col_num_umis}_percent"]  # column names
-    # tg_info.loc[:, ecol] = tg_info[grc].apply(lambda x: [""] * len(x))  # placehold
-    # tg_info.loc[:, ecol] = tg_info.apply(
-    #     lambda x: [x[ecol][i] + " " + "low_umis" if x[
-    #         nuc][i] < min_percent_umis else x[ecol][i] 
-    #                for i, q in enumerate(x[grc])], axis=1)  # low UMI count
-    # tg_info.loc[:, ecol] = tg_info.apply(
-    #     lambda x: [x[ecol][i] + " " + "tolerable_control_umis" if (
-    #         q == key_control and any(np.array(x[grc]) != key_control) and x[
-    #             nuc][i] <= max_percent_umis_control_drop) else x[ecol][i] 
-    #                for i, q in enumerate(x[grc])], axis=1
-    #     )  # control guides w/i tolerable % => drop control guide
-    # tg_info.loc[:, ecol] = tg_info[ecol].apply(lambda x: [
-    #     np.nan if i == "" else i for i in x])
-    
     # Re-Make String Versions of New Columns with List Entries
     for q in [col_guide_rna, col_num_umis]:  # string versions of list entries 
         tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply( 
@@ -1036,8 +981,7 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     try:
         tg_info = tg_info.loc[ann.obs.index]
     except Exception as err:
-        warnings.warn(f"{err}\n\nCouldn't re-order tg_info "
-                      "in process_guide_rna() to mirror adata index!")
+        warn(f"{err}\n\nCouldn't re-order tg_info to mirror adata index!")
     tg_info_all = None  # fill later if needed
     if remove_multi_transfected is True:  # remove multi-transfected
         tg_info_all = tg_info.copy() if conserve_memory is False else None
@@ -1049,7 +993,7 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
                         "multiple"))  # multiple- or single-transfected
     for x in [col_num_umis, col_guide_rna, col_guide_rna_new]:
         if f"{x}_original" in ann.obs:
-            warnings.warn(f"'{x}_original' already in adata. Dropping.")
+            warn(f"'{x}_original' already in adata. Dropping.")
             print(ann.obs[[f"{x}_original"]])
             ann.obs = ann.obs.drop(f"{x}_original", axis=1)
     ann.obs = ann.obs.join(tg_info[

@@ -206,7 +206,7 @@ col_num_umis_data = {
 
 col_sample_id_data = {
     "CRISPRi_scr": None,
-    "CRISPRi_scr_multi": (None, "orig.ident"),
+    "CRISPRi_scr_multi": ("orig.ident", None),
     "CRISPRi_wgs": np.nan,
     "CRISPRi_ess": "gemgroup",
     "pool": np.nan,
