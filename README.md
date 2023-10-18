@@ -95,7 +95,7 @@ Certain arguments used throughout the `crispr` package (including outside the `c
 * `file_path` **(str, AnnData, or dictionary)**: Path or object containing data. Used in initialization to create the initial `self.adata` attribute (an AnnData or MuData object). Either
     - a path to a 10x directory (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz),
     - a path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible), 
-    - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon), or
+    - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon, or by using `crispr.pp.create_object(file_path)`), or
     - a dictionary containing keyword arguments to pass to  `crispr.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); see function documentation), or
     - to concatenate multiple datasets, a dictionary (keyed by your desired subject/sample names to be used in `col_sample_id`) consisting of whatever objects you would pass to `create_object()`'s `file` argument for the individual objects. You must also specify `col_sample` (a tuple as described in the documentation below). The other arguments passed to the `crispr.pp.create_object()` function (e.g., `col_gene_symbols`) can be specified as normal if they are common across samples; otherwise, specify them as lists in the same order as the `file` dictionary. 
 

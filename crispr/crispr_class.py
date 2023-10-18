@@ -301,7 +301,7 @@ class Crispr(object):
                 be limited and/or problems occur if set to False and if 
                 multiply-transfected cells remain in data. 
         """
-        print("\n\n<<<INITIALIZING CRISPR CLASS OBJECT>>>\n")
+        print("\n\n<<<INITIALIZING CRISPR CLASS OBJECT >>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path

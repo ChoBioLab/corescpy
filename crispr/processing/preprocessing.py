@@ -95,9 +95,9 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         kpr = kws_process_guide_rna[f] if isinstance(
             kws_process_guide_rna, list) else kws_process_guide_rna
         if assay:
-            adatas[assay], _  = cr.pp.process_guide_rna(adatas[assay], **kpr)
+            adatas[assay]  = cr.pp.process_guide_rna(adatas[assay], **kpr)
         else:
-            adata, _ = cr.pp.process_guide_rna(adata, **kpr)
+            adata = cr.pp.process_guide_rna(adata, **kpr)
     print("\n\n", adata)
     return adata
 
@@ -244,6 +244,16 @@ def process_data(adata, assay=None, assay_protein=None,
     """
     # Initial Information
     print(adata)
+    if kws_scale is None:
+        kws_scale = {}
+    if kws_hvg is True:
+        kws_hvg = {}
+    if kws_hvg is not None and kws_hvg is not False:
+        filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else True
+    else:
+        filter_hvgs = False
+        
+    # Set Up Layer & Variables
     if assay:
         adata[assay].layers[layer_original] = adata[assay].X
     else:
@@ -323,6 +333,7 @@ def process_data(adata, assay=None, assay_protein=None,
             inplace=True)  # count-normalize (not in-place yet)
     else:
         print("\n<<< ***NOT*** TOTAL-COUNT-NORMALIZING >>>")
+    z_norm = True  # change later if appropriate
     if kws_batch_correction:
         bc_method = kws_batch_correction.pop("method")
         print(f"\n<<< BATCH-CORRECTING VIA {bc_method} >>>")
@@ -332,6 +343,13 @@ def process_data(adata, assay=None, assay_protein=None,
                 raise ValueError(
                     "'col_reference' and 'key_reference' must be in"
                     "in kws_batch_correction if method = 'z'.")
+            z_norm = True  # so won't re-filter by HVGs later
+            sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
+                                        **kws_hvg)  # highly variable genes
+            if assay is None:
+                adata = adata[:, adata.var.highly_variable]
+            else:
+                adata[assay]= adata[:, adata[assay].var.highly_variable]
             if assay:
                 adata[assay] = cr.pp.z_normalize_by_reference(
                     adata[assay], **kws_batch_correction)
@@ -357,11 +375,8 @@ def process_data(adata, assay=None, assay_protein=None,
         adata.raw = adata.copy()
         
     # Filter by Gene Variability 
-    if kws_hvg is not None:
+    if kws_hvg is not None and kws_hvg is not False and z_norm is False:
         print("\n<<< DETECTING VARIABLE GENES >>>")
-        if kws_hvg is True:
-            kws_hvg = {}
-        filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else True
         sc.pp.highly_variable_genes(adata[assay] if assay else adata, 
                                     **kws_hvg)  # highly variable genes 
         try:
@@ -714,9 +729,11 @@ def detect_guide_targets(col_guide_rna_series,
 
 
 def filter_by_guide_counts(adata, col_guide_rna, col_num_umis, 
-                           max_percent_umis_control_drop=75,
-                           min_count_target_control_drop=100,
-                           min_percent_umis=40,
+                           max_pct_control_drop=75,
+                           min_n_target_control_drop=100,
+                           min_pct_avg_n=40,
+                           min_pct_dominant=80,
+                           drop_multi_control=True,
                            feature_split="|", guide_split="-",
                            key_control_patterns=None,
                            key_control="Control", **kwargs):
@@ -728,14 +745,18 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             so if multi-modal, subset before passing to this argument).
         col_guide_rna (str): _description_
         col_num_umis (str): Column with the UMI counts.
-        max_percent_umis_control_drop (int, optional): If control 
+        max_pct_control_drop (int, optional): If control 
             UMI counts are less than or equal to this percentage of the 
             total counts for that cell, and if a non-control sgRNA is 
             also present and meets other filtering criteria, then 
             consider that cell pseudo-single-transfected 
-            (non-control gene). Set to 0 to ignore this filtering. 
-            Defaults to 75.
-        min_count_target_control_drop (int, optional): If UMI counts
+            (non-control gene). Note that controls in 
+            multiply-transfected cells will also be ultimately dropped
+            if `drop_multi_control` is True.
+            Dropping with this criterion means cells with only control
+            guides will be completely dropped if not meeting criteria.
+            Set to 0 to ignore this filtering. Defaults to 75.
+        min_n_target_control_drop (int, optional): If UMI counts
             across target (non-control) guides are above this number,
             notwithstanding whether control guide percent exceeds
             `max_percent_umis_control_drop`, drop control from that 
@@ -744,10 +765,24 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             UMIs are 75% control guides, if there are at least 100 
             non-control guides, consider the cell only transfected for 
             the non-control guides. Set to None to ignore this 
-            filtering criterion. Defaults to 100.
-        min_percent_umis (int, optional): sgRNAs with counts below this 
-            percentage will be considered noise for that guide. 
-            Defaults to 40.
+            filtering criterion. Note that controls in 
+            multiply-transfected cells will also be ultimately dropped
+            if `drop_multi_control` is True.
+            Dropping with this criterion means cells with only control
+            guides will be completely dropped if not meeting criteria.
+            Defaults to 100.
+        drop_multi_control (bool, optional): If True, drop control
+            guides from cells that, after all other filtering,
+            are multiply-transfected. Defaults to True.
+        min_pct_avg_n (int, optional): sgRNAs with counts below this 
+            percentage of the average UMI count will be considered 
+            noise and dropped from the list of genes for which
+            that cell is considered transfected. Defaults to 40.
+        min_pct_dominant (int, optional): sgRNAs with counts at or above 
+            this percentage of the cell total UMI count will be 
+            considered dominant, and all other guides will be dropped 
+            from the list of genes for whichmthat cell is considered 
+            transfected. Defaults to 80.
         feature_split (str, optional): For designs with multiple 
             guides, the character that splits guide names in 
             `col_guide_rna`. For instance, "|" for 
@@ -807,7 +842,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         split_char = [guide_split in g for g in ann.var_names]
         if any(split_char):
             grs = "==="
-            bad_gene_symb = np.array(adata.var_names)[np.where(split_char)[0]]
+            bad_gene_symb = np.array(ann.var_names)[np.where(split_char)[0]]
             if grs in guide_split:
                 raise ValueError(f"{grs} is a reserved name and cannot be "
                                  "contained within `guide_split`.")
@@ -862,30 +897,77 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     feats_n = feats_n.to_frame("n").join(feats_n.groupby(
         "bc").sum().to_frame("t"))  # sum w/i-cell # gRNAs w/ same target gene 
     feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
-
-    # Filtering
-    if min_count_target_control_drop is not None:
-        feats_n = feats_n.join(feats_n.apply(
-            lambda x: x.reset_index()["g"][x.reset_index()[
-                "g"] != "key_control"].n.sum(), axis=1).to_frame(
-                    "n_non_ctl"))  # UMI counts of non-control guides
-        feats_n = feats_n.join(
-            feats_n.groupby(["bc", "g"]).apply(
-                lambda x: "control" if (
-                    x.name[1] == key_control and 
-                    float(x["p"]) <= max_percent_umis_control_drop
-                    or float(x["n_non_ctl"]) >= min_count_target_control_drop)
-                else "low_umi" if float(x["p"]) <= min_percent_umis
-                else np.nan, axis=1).to_frame("umi_category"))  # filter
+    
+    # Other Variables
+    feats_n = feats_n.join(feats_n.reset_index("g").groupby("bc").apply(
+            lambda x: 0 if all(x["g"] == key_control) else x[
+                x["g"] != key_control]["n"].sum()
+            ).to_frame("n_non_ctrl"))  # overridden by dominant guide?
+    feats_n = feats_n.join(feats_n.groupby(["bc", "g"]).apply(
+        lambda x: "retain" if (x.name[1] != key_control) 
+        else ("low_control" if float(x["p"]) <= max_pct_control_drop 
+              else "high_noncontrol" if min_n_target_control_drop and float(
+                  x["n_non_ctrl"]) >= min_n_target_control_drop
+              else "retain")).to_frame("drop_control"))  # control drop labels
+    feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame(
+        "n_cell_avg"))  # average UMI count within-cell
+    feats_n = feats_n.reset_index("g")
+    feats_n = feats_n.assign(control=feats_n.g == key_control
+                             )  # control guide dummy-coded column
+    feats_n = feats_n.assign(target=feats_n.g != key_control).set_index(
+        "g", append=True)  # target guide dummy-coded column
+    if min_pct_dominant is not None:
+        feats_n = feats_n.assign(dominant=feats_n.p >= min_pct_dominant)
+        feats_n = feats_n.assign(
+            dominant=feats_n.dominant & feats_n.target
+            )  # only non-control guides considered dominant
     else:
-        feats_n = feats_n.join(
-            feats_n.p.groupby(["bc", "g"]).apply(
-                lambda x: "control" if (
-                    x.name[1] == key_control and 
-                    float(x) <= max_percent_umis_control_drop) 
-                else "low_umi" if float(x) < min_percent_umis
-                else np.nan).to_frame("umi_category"))  # filter
-    filt = feats_n[~feats_n.umi_category.isnull()]
+        feats_n = feats_n.assign(dominant=False)  # no filtering based on this
+    # CHECK: 
+    # feats_n[feats_n.p >= min_pct_dominant].dominant.all()
+    feats_n = feats_n.assign(
+        low_umi=feats_n.n < feats_n.n_cell_avg * min_pct_avg_n / 100 
+        if min_pct_avg_n is not None else False
+        )  # low % of mean UMI count (if filtering based on that)?
+    feats_n = feats_n.join(feats_n.dominant.groupby("bc").apply(
+            lambda x: pd.Series(
+                [True if (x.any()) and (i is False) else False for i in x], 
+                index=x.reset_index("bc", drop=True).index)
+            ).to_frame("drop_nondominant"))  # overridden by dominant guide?
+    # CHECK: 
+    # feats_n.loc[feats_n[(feats_n.p < min_pct_dominant) & (
+    #     feats_n.drop_nondominant)].reset_index().bc.unique()].groupby(
+    #         "bc").apply(lambda x: x.dominant.any()).all()
+    # feats_n[(feats_n.p >= 80)].drop_nondominant.sum() == 0
+    filt = feats_n.copy()  # start with full feats_n
+
+    # Filtering Phase I (If Dominant Guide, Drop Others; Drop Low Controls)
+    filt = filt[filt.drop_control.isin(["retain"])
+                ]  # low control or high non-control = not control-transfected 
+    filt = filt[~filt.drop_nondominant]  # drop if another guide dominates
+    
+    # Filtering Phase II (Filter Low Targeting Guides in Multiply-Transfected)
+    filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
+        lambda x: len(x[x != key_control].unique()) > 1).to_frame(
+            "multi_noncontrol"))  # multi-transfected with non-control guides?
+    filt = filt.assign(low_umi_multi=filt.low_umi & filt.multi_noncontrol)
+    filt = filt[~filt.low_umi_multi]  # drop low guides, multi-NC-transfected
+    
+    # Filtering Phase III (Remove Control from Multi-Transfected)
+    filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
+        lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
+            "transfection"))  # after filtering, single or multi-guide?
+    if drop_multi_control is True:  # drop control (multi-transfected cells)
+        filt = filt.assign(multi=filt.transfection == "multi")
+        filt = filt.assign(multi_control=filt.control & filt.multi)
+        filt = filt[~filt.multi_control]  # drop
+        filt = filt.drop(["multi", "multi_control"], axis=1)
+    filt = filt.drop("transfection", axis=1)
+    filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
+        lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
+            "transfection"))  # after filtering, single or multi-guide?
+    
+    # Join Counts/%s/Filtering Categories w/ AnnData-Indexed Guide Information
     filt = filt.n.to_frame("u").groupby("bc").apply(
         lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]), 
                             cols[1]: list(x.reset_index("g")["u"])}))
@@ -917,8 +999,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     # Re-Make String Versions of New Columns with List Entries
     for q in [col_guide_rna, col_num_umis]:  # string versions of list entries 
         tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply( 
-            lambda x: feature_split.join(str(i) for i in x)
-            )  # join names of processed/filtered gRNAs by `feature_split`
+            lambda x: x if not isinstance(x, list) else feature_split.join(
+                str(i) for i in x))  # join processed names by `feature_split`
         
     # DON'T CHANGE THESE!
     rnd = {"g": "Gene", "t": "Total Guides in Cell", 
@@ -951,9 +1033,6 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     # Add Results to AnnData
     if "feature_split" not in kws_pga:
         kws_pga["feature_split"] = None
-    ann.uns["guide_rna"] = {}
-    ann.uns["guide_rna"]["keywords"] = kws_pga
-    ann.uns["guide_rna"]["counts_unfiltered"] = feats_n
     try:
         tg_info = tg_info.loc[ann.obs.index]
     except Exception as err:
@@ -961,14 +1040,13 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
                       "in process_guide_rna() to mirror adata index!")
     tg_info_all = None  # fill later if needed
     if remove_multi_transfected is True:  # remove multi-transfected
-        ann.uns["guide_rna"]["counts_single_multi"] = tg_info.copy()
         tg_info_all = tg_info.copy() if conserve_memory is False else None
+        tg_info = tg_info.dropna(subset=[f"{col_guide_rna}_list_filtered"])
         tg_info = tg_info.join(tg_info[
             f"{col_guide_rna}_list_filtered"].apply(
-                lambda x: "multi" if len(x) > 1 else np.nan if pd.isnull(
-                    x) else "single").to_frame("multiple")
-            )  # multiple- or single-transfected
-    ann.uns["guide_rna"]["counts"] = tg_info.copy()
+                lambda x: np.nan if not isinstance(x, list) and pd.isnull(
+                    x) else "multi" if len(x) > 1 else "single").to_frame(
+                        "multiple"))  # multiple- or single-transfected
     for x in [col_num_umis, col_guide_rna, col_guide_rna_new]:
         if f"{x}_original" in ann.obs:
             warnings.warn(f"'{x}_original' already in adata. Dropping.")
@@ -1015,4 +1093,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     ann = cr.pp.remove_guide_counts_from_gex_matrix(
         ann, col_guide_rna, key_ignore=key_ignore)
     print(ann.obs)
-    return ann, (tg_info, feats_n, tg_info_all)
+    ann.uns["guide_rna_keywords"] = kws_pga
+    ann.uns["guide_rna_feats_n"] = feats_n
+    ann.uns["guide_rna_tg_info"] = tg_info
+    ann.uns["guide_rna_tg_info_all"] = tg_info_all
+    return ann
