@@ -1,4 +1,5 @@
 from .preprocessing import (create_object,
+                            create_object_multi,
                             get_layer_dict,
                             process_data,
                             integrate,

@@ -156,6 +156,47 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
     print("\n\n", adata)
     return adata
+
+
+def create_object_multi(file_path, kws_init=None, 
+                        kws_pp=None, kws_cluster=None, harmony=True):
+    """Create objects, then preprocess, cluster, & integrate them."""
+    # Arguments
+    ids = list(file_path.keys())
+    [kws_init, kws_pp, kws_cluster] = [dict(zip(ids, x)) if isinstance(
+        x, list) else dict(zip(ids, [x] * len(ids))) for x in [
+            kws_init, kws_pp, kws_cluster]]  # dictionaries for each
+
+    # Create AnnData Objects
+    selves = dict(zip(file_path, [
+        cr.Crispr(file_path[f], **kws_init[f]) for f in file_path])
+                  )  # create individual Crispr objects
+
+    # Preprocessing & Clustering
+    for x in selves:  # preprocess & cluster each object
+        if kws_pp is not None:
+            print(f"\n<<< PREPROCESSING {x} >>>")
+            selves[x].preprocess(**kws_pp[x])
+        if kws_cluster is not None:
+            print(f"\n<<< CLUSTERING {x} >>>")
+            selves[x].cluster()
+    print(f"\n<<< CONCATENATING OBJECTS: {', '.join(ids)} >>>")
+    col_id = selves[ids[0]]._columns["col_sample_id"]
+    if col_id is None:
+        col_id = "unique.idents"
+    adata = AnnData.concatenate(
+        *[selves[x].adata for x in selves], join="outer", batch_key=col_id,
+        batch_categories=ids, uns_merge="same", 
+        index_unique="-", fill_value=None)  # concatenate AnnData objects
+        
+    # Integrate
+    if harmony is True:
+        print(f"\n<<< INTEGRATING WITH HARMONY: {', '.join(ids)} >>>")
+        sc.tl.pca(adata)  # PCA
+        sc.external.pp.harmony_integrate(
+            adata, col_id, basis="X_pca", 
+            adjusted_basis="X_pca_harmony")  # integrate
+    return adata
     
     
 def process_data(adata, 
