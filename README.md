@@ -212,7 +212,7 @@ if self._assay is None:
 else:
     custom_function(self.adata[self._assay].obs)
 ```
-you may simply say `self.obs.rna`, knowing it will work whether or not multiple assays exist in the object's AnnData attribute.
+you may simply say `self.rna.obs`, knowing it will work whether or not multiple assays exist in the object's AnnData attribute.
 
 Finally, this approach saves memory: All these versions of the attribute are stored in a single place in memory so you can call the attributes in various ways without duplicating them and taking up more space.
 

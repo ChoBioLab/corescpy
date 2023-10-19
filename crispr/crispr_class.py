@@ -100,9 +100,9 @@ class Crispr(object):
                 needs to be created by concatenating datasets, 
                 you must provide `file_path` as a dictionary keyed
                 by desired `col_sample_id` values as well as signal
-                that this needs to happen by specifying col_sample_id
-                as a tuple, with the second element containing a
-                dictionary of keyword arguments to pass to
+                that concatenation needs to happen by specifying 
+                `col_sample_id` as a tuple, with the second element 
+                containing a dictionary of keyword arguments to pass to
                 `AnnData.concatenate()` or None (to use defaults).
             col_batch (_type_, optional):  Column in `.obs` with batch 
                 IDs. Defaults to None.
@@ -316,15 +316,17 @@ class Crispr(object):
                      "guide_rna": {}}  # extra info to store by methods
         
         # Create Object & Store Raw Counts
-        if isinstance(col_sample_id, (list, tuple)):  # multi-sample
+        if isinstance(col_sample_id, (list, tuple)):  # multi-dataset
             col_sample_id, kws_concat = col_sample_id
             col_sample_arg = col_sample_id
-        else:  # only 1 sample
+            self._integrated = False
+        else:  # only 1 dataset
             kws_concat = None
             col_sample_arg = None  # even if col_sample_id is specified...
             # ...we don't want to pass to create_object because it will
             # assume we need that column created through concatenation
             # when it's actually already in the dataset
+            self._integrated = True
         self.adata = cr.pp.create_object(
             self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
             col_sample_id=col_sample_arg, kws_concat=kws_concat,
@@ -541,41 +543,59 @@ class Crispr(object):
         fig.fig.tight_layout()
         return self.info["guide_rna"]["counts_unfiltered"], fig
     
-    def preprocess(self, assay=None, assay_protein=None, layer_in=None, 
-                   clustering=False, copy=False,
-                   remove_doublets=True, **kwargs):
+    def preprocess(self, assay_protein=None, layer_in=None, 
+                   clustering=False, copy=False, normalization="log",
+                   remove_doublets=True, by_batch=None, adata=None, 
+                   **kwargs):
         """
         Preprocess (specified layer of) data 
         (defaulting to originally-loaded layer).
-        
-        If "kws_batch_correction" included in keyword arguments,
-        perform batch correction via Harmony 
-        (`kws_batch_correction=dict(method="harmony")`) or by normalizing
-        gene expression relative to control condition 
-        (`kws_batch_correction=dict(method="z")`).
+        Defaults to preprocessing individual samples, then integrating
+        with Harmony, if originally provided as separate datasets.
         """
+        # By Batch/Sample
+        if by_batch is not False and self._integrated is False:
+            if not isinstance(
+                by_batch, str):  # if string not provided, find in ._columns
+                by_batch = self._columns["col_batch"] if (
+                    "col_batch" in self._columns) else self._columns[
+                        "col_sample_id"]  # batch ID column name
+            batch_keys = list(self.rna.obs[by_batch].unique())
+            adatas, figs = [None] * len(batch_keys), [None] * len(batch_keys)
+            if assay_protein is not None:  # if includes protein assay
+                raise NotImplementedError("Preprocessing by batch not yet " 
+                                          "supported for protein assays.")
+            for i, s in enumerate(batch_keys):
+                print(f"*** Preprocessing batch (by_batch) {s}...")
+                adatas[i], figs[i] = self.preprocess(
+                    adata=self.rna[self.rna.obs[by_batch] == s].copy(),
+                    assay_protein=assay_protein, 
+                    layer_in=layer_in, clustering=clustering, copy=copy, 
+                    normalization=normalization,
+                    remove_doublets=remove_doublets, by_batch=False, **kwargs)
+                adatas += [adata]
+            adata = cr.pp.integrate(adatas, **kwargs)
+            if copy is False:
+                self.rna = adata
+            return adata, figs
+        # Overall
+        adata = self.rna.copy()
         if assay_protein is None:
             assay_protein = self._assay_protein
-        if assay is None:
-            assay = self._assay
         if layer_in is None:
             layer_in = self._layers["counts"]  # raw counts if not specified
-        kws = dict(assay=assay, assay_protein=assay_protein, 
-            remove_doublets=remove_doublets, 
-            **self._columns, layer_original="before_preprocessing",
-            **kwargs)
-        if "kws_batch_correction" in kws and kws["kws_batch_correction"]:
-            if "col_reference" not in kws["kws_batch_correction"]:
-                kws["kws_batch_correction"].update(
-                    {"col_reference": self._columns["col_perturbed"]})
-            if "key_reference" not in kws["kws_batch_correction"]:
-                kws["kws_batch_correction"].update(
-                    {"key_reference": self._keys["key_control"]})
-            if "col_batch" not in kws["kws_batch_correction"]:
-                kws["kws_batch_correction"].update(
-                    {"col_batch": self._columns["col_batch"] if self._columns[
-                        "col_batch"] else self._columns["col_sample_id"]})
-        adata = self.adata[assay].copy() if assay else self.adata.copy()
+        kws = dict(assay_protein=assay_protein, 
+                   remove_doublets=remove_doublets, **self._columns, **kwargs)
+        if isinstance(normalization, str):
+            normalization = dict(method=normalization)
+        if normalization["method"].lower() == "z":
+            normalization_default = {
+                "col_reference": self._columns["col_perturbed"],
+                "key_reference": self._keys["key_control"], 
+                "col_batch": self._columns["col_batch"] if self._columns[
+                    "col_batch"] else self._columns["col_sample_id"]}
+            normalization = {**normalization_default, **normalization}
+        kws.update(dict(normalization=normalization))
         adata.X = adata.layers[layer_in]  # use specified layer
         adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
         if assay_protein is not None:  # if includes protein assay

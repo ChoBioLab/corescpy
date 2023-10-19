@@ -14,8 +14,8 @@ files_data = {
     "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH03"),
     "CRISPRi_scr_multi": {
         "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
-        "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
-        "HH-Hu-CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4")
+        "HH06": dict(directory=f"{DIR}/crispr-screening/HH06")
+        # "HH-Hu-CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4")
     },
     # "CRISPRi_scr_multi": {
     #     "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),

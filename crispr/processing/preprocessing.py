@@ -20,6 +20,7 @@ import collections
 import scipy.sparse as sp_sparse
 import h5py
 import copy
+import anndata
 from anndata import AnnData
 import crispr as cr
 import pandas as pd
@@ -34,12 +35,54 @@ def get_layer_dict():
     lay =  {"preprocessing": "preprocessing", 
             "perturbation": "X_pert",
             "unnormalized": "unnormalized",
+            "norm_total_counts": "norm_total_counts",
             "norm_log1p": "norm_log1p",
             "norm_z": "norm_z",
             "unscaled": "unscaled", 
             "unregressed": "unregressed",
             "counts": "counts"}
     return lay
+
+
+def integrate(file, assay=None, col_sample_id="unique.ident", 
+              col_gene_symbols=None, kws_concat=None, 
+              kws_process_guide_rna=None, harmony=True,
+              **kwargs):
+    """Integrate or simply concatenate (if harmony=False) batches of data."""
+    if kws_concat is None:
+        kws_concat = {}
+    adatas = [None] * len(file)
+    batch_categories = list(file.keys())  # keys = sample IDs
+    file = [file[f] for f in file]  # turn to list 
+    print(f"\n<<< INTEGRATING{['', ' (HARMONY)'][int(harmony)]} >>>")
+    for f in range(len(file)):
+        print(f"\n\n\t*** Creating object {f + 1} of {len(file)}")
+        kpr = kws_process_guide_rna[f] if isinstance(
+            kws_process_guide_rna, list) else kws_process_guide_rna
+        asy = assay if isinstance(
+            assay, str) or assay is None else assay[f]  # GEX/RNA assay 
+        cgs = col_gene_symbols if isinstance(col_gene_symbols, str) or (
+            col_gene_symbols is None) else col_gene_symbols[f]  # symbols
+        adatas[f] = cr.pp.create_object(
+            file[f], assay=asy, col_gene_symbols=cgs, col_sample_id=None,
+            kws_process_guide_rna=kpr, plot=False,
+            **kwargs)  # AnnData
+        print(f"\n<<< CONCATENATING FILES {file} >>>")
+    # adata = anndata.concat(
+    #     adatas, label=col_sample_id, keys=batch_categories, 
+    #     **{**dict(join="outer", uns_merge="unique", index_unique="-",
+    #                 fill_value=None), **kws_concat})  # concatenate batches
+    adata = AnnData.concatenate(
+        *adatas, join="outer", batch_key=col_sample_id,
+        batch_categories=batch_categories, **{
+            **dict(uns_merge="same", index_unique="-", fill_value=None), 
+            **kws_concat})  # concatenate AnnData objects
+    if harmony is True:
+        sc.tl.pca(adata)  # PCA
+        adata = sc.external.pp.harmony_integrate(
+            adata, col_sample_id, basis="X_pca", 
+            adjusted_basis="X_pca_harmony", **kwargs)  # harmony
+    return adata
 
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
@@ -58,31 +101,14 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     if they are common across samples; otherwise, specify them as 
     lists in the same order as the `file` dictionary.
     """
-    if kws_concat is None:
-        kws_concat = {}
     layers = cr.pp.get_layer_dict()  # standard layer names
     if col_sample_id is not None:  # concatenate multiple datasets
-        print(f"\n<<< LOADING MULTIPLE FILEs {file} >>>")
-        adatas = [None] * len(file)
-        batch_categories = list(file.keys())  # keys = sample IDs
-        file = [file[f] for f in file]  # turn to list 
-        for f in range(len(file)):
-            print(f"\n\n\t*** Creating object {f + 1} of {len(file)}")
-            kpr = kws_process_guide_rna[f] if isinstance(
-                kws_process_guide_rna, list) else kws_process_guide_rna
-            asy = assay if isinstance(
-                assay, str) or assay is None else assay[f]  # GEX/RNA assay 
-            cgs = col_gene_symbols if isinstance(col_gene_symbols, str) or (
-                col_gene_symbols is None) else col_gene_symbols[f]  # symbols
-            adatas[f] = cr.pp.create_object(
-                file[f], assay=asy, col_gene_symbols=cgs, col_sample_id=None,
-                kws_process_guide_rna=kpr, plot=False, **kwargs)  # AnnData
-        print(f"\n<<< CONCATENATING FILES {file} >>>")
-        adata = AnnData.concatenate(
-            *adatas, join="outer", batch_key=col_sample_id,
-            batch_categories=batch_categories, **{
-                **dict(uns_merge="same", index_unique="-", fill_value=None), 
-                **kws_concat})  # concatenate AnnData objects
+        adata = cr.pp.integrate(
+            file, assay=assay, col_sample_id=col_sample_id, 
+            kws_concat=kws_concat, col_gene_symbols=col_gene_symbols, 
+            kws_process_guide_rna=kws_process_guide_rna, 
+            harmony=False, **kwargs
+            )  # concatenate datasets
         kws_process_guide_rna = None  # don't perform again on concatenated
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
@@ -132,7 +158,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     else:
         adata.layers[layers["counts"]] = adata.X.copy()
     if plot is True:
-        cr.pp.perform_qc(adata, hue=col_sample_id)  # calculate & plot QC
+        cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
     print("\n\n", adata)
     return adata
 
@@ -181,12 +207,12 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
     if kwargs:
         pass
     print(f"\n\n{'=' * 80}\nCell Counts: {title}\n{'=' * 80}\n")
+    print(adata.n_obs)
     if group_by is not None and group_by in adata.obs:
-        print(adata.n_obs)
         for x in adata.layers:
             print(f"{x}: {adata.layers[x].shape}")
         if group_by is not None and group_by in adata.obs:
-            print(adata.obs[group_by].value_counts())
+            print(adata.obs[group_by].value_counts().round(2))
         print("\n")
     print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")
     
@@ -287,7 +313,7 @@ def process_data(adata,
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
     ann.raw = ann.copy()  # original in `.raw`
-    ann.layers[layers["preprocessing"]] = ann.X.copy() # set original in layer
+    # ann.layers[layers["preprocessing"]] = ann.X.copy() # set original in layer
     ann.obs["n_counts"] = ann.X.sum(1)
     ann.obs["log_counts"] = np.log(ann.obs["n_counts"])
     ann.obs["n_genes"] = (ann.X > 0).sum(1)
@@ -301,7 +327,7 @@ def process_data(adata,
         kws_scale = {}
     kws_scale, kws_hvg = [x if x else {} for x in [kws_scale, kws_hvg]]
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
-    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 4000
+    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 10
     if isinstance(normalization, str):  # if provided as string...
         normalization = dict(method=normalization)  # ...to method argument
     sid = normalization["col_batch"] if "col_batch" in normalization else None
@@ -314,18 +340,18 @@ def process_data(adata,
             outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
     cr.pp.print_counts(ann, title="Initial", group_by=col_cell_type)
     print(col_gene_symbols, "\n\n", n_top, "\n\n", ann.var.describe(), "\n\n")
-
-    # Basic Filtering (DO FIRST...ALL INPLACE)
-    print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
-    sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
-    sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
-    cr.pp.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
     
     # Exploration & QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
     figs["qc_metrics"] = cr.pp.perform_qc(
         ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
         hue=sid)  # QC metric calculation & plottomg
+
+    # Basic Filtering (DO FIRST...ALL INPLACE)
+    print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
+    sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
+    sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
+    cr.pp.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
     
     # Further Filtering
     print("\n<<< FURTHER CELL & GENE FILTERING >>>")
@@ -343,7 +369,8 @@ def process_data(adata,
     #     # TODO: doublets
     
     # Normalization
-    ann = cr.pp.normalize(ann, target_sum=target_sum, **normalization)
+    ann, norm = cr.pp.normalize(ann, target_sum=target_sum, **normalization)
+    ann.raw = ann.copy()  # before HVG, batch correction, etc.
         
     # Gene Variability (Detection, Optional Filtering)
     print("\n<<< DETECTING VARIABLE GENES >>>")
@@ -363,15 +390,14 @@ def process_data(adata,
     # Scale Gene Expression
     if scale is not None:
         print("\n<<< SCALING >>>")
-        ann.layers[layers["unscaled"]] = ann.X.copy()
+        # ann.layers[layers["unscaled"]] = ann.X.copy()
         if scale is not True:  # if scale = int; also clip values/"scale" SDs
             kws_scale.update(dict(max_value=scale))
         sc.pp.scale(ann, copy=False, layer=layers["norm_log1p"], 
                     **kws_scale)  # scale GEX INPLACE log1p layer
     
-    # Store Final Object
+    # Store Final Processed Layer
     ann.X = ann.layers[layers[norm]].copy()  # norm -> .X
-    ann.raw = ann.copy()
             
     # Final Data Examination
     cr.pp.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
@@ -381,30 +407,36 @@ def process_data(adata,
     return ann, figs
 
 
-def normalize(adata, method="log", target_sum=1e4, kws_z=None):
+def normalize(adata, method="log", target_sum=1e4, **kws_z):
     """Create normalization in adata layers."""
     layers = cr.pp.get_layer_dict()
-    adata.layers[layers["unnormalized"]] = adata.X.copy()
+    # adata.layers[layers["unnormalized"]] = adata.X.copy()
     if target_sum is not None:  # total-count normalization INPLACE
         print("\n<<< TOTAL-COUNT-NORMALIZING >>>")
-        adata.layers[layers["norm_total_counts"]] = sc.pp.normalize_total(
-            adata, target_sum=target_sum)  # total-count normalize
+        # adata.layers[layers["norm_total_counts"]] = sc.pp.normalize_total(
+        #     adata, target_sum=target_sum, copy=True)  # total-count norm
+        # adata.X = adata.layers[layers["norm_total_counts"]].copy()  # -> .X
+        sc.pp.normalize_total(adata, target_sum=target_sum, copy=False)
     else:
         print("\n<<< ***NOT*** TOTAL-COUNT-NORMALIZING >>>")
     print(f"\n<<< LOG-NORMALIZING => layer {layers['norm_log1p']} >>>")
     adata.layers[layers["norm_log1p"]] = sc.pp.log1p(
         adata, copy=True)  # log-transformed for later use; NOT INPLACE
     if kws_z:  # if want to perform z-normalization
-        if ~all((x in kws_z for x in ["col_reference", "key_reference"])):
+        norm = layers["norm_z"]
+        if any((x not in kws_z for x in ["col_reference", "key_reference"])):
             raise ValueError(
                 "'col_reference' and 'key_reference' must be "
                 "in `normalization` argument if method = 'z'.")
-        adata.layers[layers["norm_z"]] = cr.pp.z_normalize_by_reference(
+        adata.layers[norm] = cr.pp.z_normalize_by_reference(
             adata, **kws_z)  # z-normalize to controls
-    return adata
+    else:
+        norm = layers["norm_log1p"]
+    return adata, norm
 
 
-def z_normalize_by_reference(adata, col_reference, key_reference="Control", 
+def z_normalize_by_reference(adata, col_reference="Perturbation", 
+                             key_reference="Control", 
                              col_batch=None, retain_zero_variance=True, 
                              layer=None, **kwargs):
     """
@@ -420,16 +452,14 @@ def z_normalize_by_reference(adata, col_reference, key_reference="Control",
     if layer:
         adata.X = adata.layer[layer].copy()
     if col_batch is None:
-        col_batch, col_batch_origin = "batch", None
-        if "batch" == col_reference:
-            raise ValueError(
-                f"col_reference cannot be {col_batch} when col_batch=None.")
-        adata.obs.loc[:, col_batch] = "1"  # so can loop even if only 1 batch
-    else:
-        col_batch_origin = col_batch
-    batches_adata, batch_labs = [], adata.obs[col_batch].unique()
+        col_batch = "batch"
+        if col_batch not in adata.obs:
+            adata.obs.loc[:, col_batch] = "1"  # so can loop even if only 1
+    if col_batch == col_reference:
+        raise ValueError(f"`col_batch` cannot be same as `col_reference`.")
+    batches_adata, batch_labs = [], list(adata.obs[col_batch].unique())
     for s in batch_labs:  # loop over batches
-        batch_adata = adata[adata.obs[col_batch] == s].copy()
+        batch_adata = adata[adata.obs[col_batch] == s]
         gex = batch_adata.X.copy()  #  gene expression matrix (full)
         gex_ctrl = batch_adata[batch_adata.obs[
             col_reference] == key_reference].X.A.copy()  # reference condition
@@ -441,14 +471,18 @@ def z_normalize_by_reference(adata, col_reference, key_reference="Control",
             sds[sds == 0] = 1   # retain zero-variance genes at unit variance
         batch_adata.X = (gex - mus) / sds  # z-score gene expression
         batches_adata += [batch_adata]  # concatenate batch adata
-    if col_batch_origin is None:  # in case just 1 batch (no concatenation)
+    if len(batches_adata) == 1:  # in case just 1 batch (no concatenation)
         adata = batches_adata[0]
         adata.obs.drop(col_batch, axis=1, inplace=True)
     else:  # concatenate batches
+        # adata = anndata.concat(
+        #     batches_adata, join="outer", labbel=col_batch, 
+        #     uns_merge="same", index_unique=None, 
+        #     keys=batch_labs, fill_value=None)  # concatenate
         adata = AnnData.concatenate(
-            *batches_adata, join="outer", batch_key=col_batch, 
-            uns_merge="same", index_unique="-", 
-            batch_categories=batch_labs, fill_value=None)  # concatenate
+            *batches_adata, join="outer", batch_key=col_batch,
+            batch_categories=batch_labs, uns_merge="same", 
+            index_unique=None, fill_value=None)  # concatenate AnnData objects
     return adata
 
 
@@ -484,23 +518,23 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, hue=None):
             print(err)
     plt.show()
     figs[f"qc_{v}_scatter"] = fff
+    varx = list(pct_ns + [hue]) if hue else pct_ns
     try:
-        varm = pct_ns if hue else pct_ns
-        varm += ["n_genes_by_counts"]
+        varm = list(pct_ns + [hue]) if hue else pct_ns
+        varm = varx + ["n_genes_by_counts"]
         figs["pairplot"] = seaborn.pairplot(
             adata.obs[varm].rename_axis("Metric", axis=1).rename({
                 "total_counts": "Total Counts", **patterns_names}, axis=1), 
-            diag_kind="kde", diag_kws=dict(fill=True, cut=0))  # pairplot
+            diag_kind="kde", hue=hue, diag_kws=dict(fill=True, cut=0))  # pair
     except Exception as err:
         figs["pairplot"] = err
         print(err)
     try:
-        vark = pct_ns + [hue] if hue is None else pct_ns
         figs["pct_counts_kde"] = seaborn.displot(
-            adata.obs[vark].rename_axis("Metric", axis=1).rename(
-                patterns_names, axis=1).stack().to_frame("Percent Counts"), 
-            x="Percent Counts", col="Metric", 
-            kind="kde", hue=hue, cut=0, fill=True)  # KDE of pct_counts
+            adata.obs[pct_ns].rename_axis("Metric", axis=1).rename(
+                patterns_names, axis=1).stack().to_frame(
+                    "Percent Counts"), x="Percent Counts", col="Metric", 
+            kind="kde", cut=0, fill=True)  # KDE of pct_counts
     except Exception as err:
         figs["pct_counts_kde"] = err
         print(err)
