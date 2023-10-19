@@ -346,10 +346,8 @@ class Crispr(object):
             col_guide_rna, col_perturbed, col_condition])):
             if col_perturbed in self.rna.obs and (
                 col_condition in self.rna.obs):
-                raise ValueError("col_perturbed and col_condition cannot "
-                                 "both be in `.obs`. col_perturbed must be "
-                                 "created from col_condition.")
-            if col_perturbed in self.rna.obs:
+                pass
+            elif col_perturbed in self.rna.obs:
                 warnings.warn(f"col_perturbed {col_perturbed} already "
                               " in `.obs`. Assuming perturbation is binary "
                               "(i.e., only has two conditions, including "
@@ -1230,6 +1228,8 @@ class Crispr(object):
             kws_clustering.update({"palette": COLOR_PALETTE})
         if "color_map" not in kws_clustering:
             kws_clustering.update({"color_map": COLOR_MAP})
+        if "legend_loc" no in kws_clustering:
+            kws_clustering.update({"legend_loc": "on_data"})
         if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
             print("\n<<< PLOTTING UMAP >>>")
             try:
