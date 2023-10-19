@@ -27,6 +27,7 @@ dependencies = [
     "arviz",
     "celltypist",
     "ete3",
+    "collections",
     "scipy",
     "rich",
     "requests",
