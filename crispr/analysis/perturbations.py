@@ -17,7 +17,7 @@ COLOR_MAP = "coolwarm"
     
     
 def perform_mixscape(adata, col_perturbed="perturbation",
-                     layer_perturbation=None,
+                     layer=None,
                      key_control="NT",
                      key_treatment="perturbed",
                      assay=None,
@@ -128,8 +128,9 @@ def perform_mixscape(adata, col_perturbed="perturbation",
         
     # Perturbation Signature
     adata_pert = (adata[assay] if assay else adata).copy()
-    if layer_perturbation is not None:
-        adata_pert.X = adata_pert.layers[layer_perturbation]
+    if layer is not None:
+        adata_pert.X = adata_pert.layers[layer]
+    layer = "X_pert"  # new layer
     adata_pert.raw = None  
     # so scanpy.tl.rank_genes_groups doesn't use raw 
     # pertpy doesn't specify use_raw, so if raw available
@@ -144,7 +145,6 @@ def perform_mixscape(adata, col_perturbed="perturbation",
         adata_pert, col_perturbed, key_control, split_by=col_split_by, 
         **kws_perturbation_signature
         )  # subtract GEX of perturbed cells from their unperturbed neighbors
-    layer = "X_pert"
     adata_pert.X = adata_pert.layers[layer]
     
     # Mixscape Classification & Perturbation Scoring
@@ -266,7 +266,7 @@ def perform_mixscape(adata, col_perturbed="perturbation",
     return figs, adata_pert
 
 
-def perform_augur(adata, assay=None, layer_perturbation=None,
+def perform_augur(adata, assay=None, layer=None,
                   classifier="random_forest_classifier", 
                   augur_mode="default", 
                   subsample_size=20, n_folds=3,
@@ -326,7 +326,7 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         for i, x in enumerate([True, False]):  # iterate over methods
             data[i], results[i], figs[str(i)] = perform_augur(
                 adata.copy(), assay=assay, 
-                layer_perturbation=layer_perturbation,
+                layer=layer,
                 select_variance_features=x, classifier=classifier,
                 augur_mode=augur_mode, subsample_size=subsample_size,
                 n_threads=n_threads, n_folds=n_folds,
@@ -343,8 +343,8 @@ def perform_augur(adata, assay=None, layer_perturbation=None,
         if kws_augur_predict is None:
             kws_augur_predict = {}
         adata_pert = adata[assay].copy() if assay else adata.copy()
-        if layer_perturbation is not None:
-            adata_pert.X = adata_pert.layers[layer_perturbation]
+        if layer is not None:
+            adata_pert.X = adata_pert.layers[layer]
         
         # Unfortunately, Augur renames columns INPLACE
         # Prevent this from overwriting existing column names

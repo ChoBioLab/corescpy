@@ -15,7 +15,8 @@ import pandas as pd
 import scanpy as sc
 
 
-def cluster(adata, plot=True, colors=None,
+def cluster(adata, layer=None,
+            plot=True, colors=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden",
             kws_pca=None, kws_neighbors=None, 
@@ -43,6 +44,8 @@ def cluster(adata, plot=True, colors=None,
     # else:
     #     col_gene_symbols = None
     ann = adata.copy()
+    if layer:
+        ann.X = adata.layers[layer].copy()  # set layer
     if kwargs:
         print(f"Un-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
@@ -63,7 +66,7 @@ def cluster(adata, plot=True, colors=None,
     sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
     print(f"\n\n<<< EMBEDDING: UMAP >>>")
     if kws_umap:
-        print("\nUMAP Keywords:\n", kws_umap)
+        print("\nUMAP Keywords:\n\n", kws_umap)
     if paga is True:
         sc.tl.paga(ann)
         sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph

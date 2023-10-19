@@ -19,6 +19,7 @@ import copy
 from anndata import AnnData
 import crispr as cr
 import numpy as np
+import pandas as pd
 
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
@@ -29,9 +30,9 @@ def get_layer_dict():
             "perturbation": "X_pert",
             "unnormalized": "unnormalized",
             "norm_total_counts": "norm_total_counts",
-            "norm_log1p": "norm_log1p",
-            "norm_z": "norm_z",
+            "log1p": "log1p",
             "unscaled": "unscaled", 
+            "scaled": "scaled", 
             "unregressed": "unregressed",
             "counts": "counts"}
     return lay
@@ -167,9 +168,8 @@ def process_data(adata,
                  cell_filter_ngene=None,
                  gene_filter_ncell=None,
                  target_sum=1e4,
-                 normalization="log",
                  kws_hvg=True,
-                 scale=10, kws_scale=None,
+                 kws_scale=None,
                  regress_out=regress_out_vars, 
                  **kwargs):
     """
@@ -181,21 +181,6 @@ def process_data(adata,
             index in `.var` containing gene symbols. Defaults to None.
         col_cell_type (str, optional): The name of the column 
             in `.obs` containing cell types. Defaults to None.
-        normalization (str or dict, optional): If "log,"
-            perform conventional normalization steps 
-            (log-transform the data after total-count normalization). 
-            If "z", perform z-normalization. If a dictionary,
-            include the method ("log" or "z") under the key "method,"
-            If not None and `method="z"`, should contain 
-            the name of the column in `.obs` containing batch IDs 
-            (e.g., orig.ident) under the key "col_batch" (which should 
-            be None if z-normalization is just to be applied 
-            uniformly without respect to batch).
-            If `method="z"`, should contain keys for
-            "col_reference" and "key_reference" containing the 
-            column name where perturbed versus unperturbed labels are
-            stored and the label in that column that corresponds to
-            the control condition, respectively. Defaults to "log".
         target_sum (float, optional): Total-count normalize to
             <target_sum> reads per cell, allowing between-cell 
             comparability of counts. If None, total count-normalization
@@ -235,10 +220,21 @@ def process_data(adata,
             Otherwise, a highly_variable genes column is created and
             can be used in clustering, but non-HVGs will be retained in
             the data for other uses. Defaults to True.
-        scale (int or bool, optional): The scaling factor or True 
-            for no clipping. Defaults to 10.
-        kws_scale (dict, optional): The keyword arguments for 
-            scaling. Defaults to None.
+        kws_scale (int, bool, or dict, optional): Specify True to 
+            center on average gene expression and scale to unit 
+            variance, as an integer to additionally clip maximum 
+            standard deviation, or as a dictionary with keyword 
+            arguments in order to normalize with reference to some
+            category in a column in `.obs`.
+            If a dictionary, under the key "col_reference", specify the 
+            name of the columns containing reference vs. other, and
+            under the key "key_reference", the label of the reference 
+            category within that column.
+            Note that using a dictionary (z-scoring) will result in
+            the `.X` attribute being reset to the 
+            un-log-normalized data, then scaled and set to 
+            the scaled data. To avoid this behavior, pass "layer" in
+            the dictionary to specify a layer to set before scaling.
         regress_out (list or None, optional): The variables to 
             regress out. Defaults to regress_out_vars.
         **kwargs: Additional keyword arguments.
@@ -248,11 +244,10 @@ def process_data(adata,
         figs (dict): A dictionary of generated figures.
     """
     # Setup Object
-    if kwargs:
-        print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
-    # ann.layers[layers["preprocessing"]] = ann.X.copy() # set original in layer
+    ann.layers[layers["counts"]] = ann.X.copy()  # original counts in layer
+    # ann.layers[layers["preprocessing"]] = ann.X.copy() # set original layer
     ann.obs["n_counts"] = ann.X.sum(1)
     ann.obs["log_counts"] = np.log(ann.obs["n_counts"])
     ann.obs["n_genes"] = (ann.X > 0).sum(1)
@@ -265,9 +260,18 @@ def process_data(adata,
     kws_scale, kws_hvg = [x if x else {} for x in [kws_scale, kws_hvg]]
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 10
-    if isinstance(normalization, str):  # if provided as string...
-        normalization = dict(method=normalization)  # ...to method argument
-    sid = normalization["col_batch"] if "col_batch" in normalization else None
+    # if kws_scale:
+    #     sid = kws_scale["col_batch"] if "col_batch" in kws_scale else None
+    if "col_batch" in kwargs or "col_sample_id" in kwargs:
+        sids = []
+        for x in ["col_batch", "col_sample_id"]:
+            if x in kwargs and x not in sids and kwargs[x] is not None: 
+                sss = kwargs.pop("col_sample_id")
+                sids += [sss]
+        if len(sids) == 0:
+            sids = None
+    if kwargs:
+        print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
         
     # Set Up Layer & Variables
     if outlier_mads is not None:  # if filtering based on calculating outliers 
@@ -282,7 +286,7 @@ def process_data(adata,
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
     figs["qc_metrics"] = cr.pp.perform_qc(
         ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
-        hue=sid)  # QC metric calculation & plottomg
+        hue=sids)  # QC metric calculation & plottomg
 
     # Basic Filtering (DO FIRST...ALL INPLACE)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
@@ -306,7 +310,13 @@ def process_data(adata,
     #     # TODO: doublets
     
     # Normalization
-    ann = normalize(ann, target_sum=target_sum, **normalization)
+    print("\n<<< NORMALIZING CELL COUNTS >>>")
+    if target_sum is not None:  # total-count normalization INPLACE
+        print("\n\t*** Total-count normalizing...")
+        sc.pp.normalize_total(ann, target_sum=target_sum, copy=False)
+    print(f"\n\t*** Log-normalizing => `.X` & {layers['log1p']} layer...")
+    sc.pp.log1p(ann)  # log-transformed; INPLACE
+    ann.layers[layers["log1p"]] = ann.X.copy()  # also keep in layer
     ann.raw = ann.copy()  # before HVG, batch correction, etc.
         
     # Gene Variability (Detection, Optional Filtering)
@@ -324,51 +334,45 @@ def process_data(adata,
         sc.pp.regress_out(ann, regress_out, copy=False)
         warn("Confound regression doesn't yet properly use layers.")
     
-    # Scale Gene Expression
-    if scale is not None:
-        print("\n<<< SCALING >>>")
-        # ann.layers[layers["unscaled"]] = ann.X.copy()
-        if scale is not True:  # if scale = int; also clip values/"scale" SDs
-            kws_scale.update(dict(max_value=scale))
-        sc.pp.scale(ann, copy=False, **kws_scale)  # scale GEX INPLACE
+    # Gene Expression Normalization
+    if kws_scale is not None:
+        print("\n<<< NORMALIZING RAW GENE EXPRESSION >>>")
+        normalize_genes(ann, kws_reference=kws_scale if isinstance(
+            kws_scale, dict) else None)  # scale by overall or reference
+        print(f"\n\t*** Scaling => `.X` & {layers['scaled']} layer...")
+        ann.layers[layers["scaled"]] = ann.X.copy()  # also keep in layer
             
     # Final Data Examination
     cr.tl.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
     figs["qc_metrics_post"] = cr.pp.perform_qc(
         ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
-        hue=sid)  # QC metric calculation & plottomg
+        hue=sids)  # QC metric calculation & plottomg
     return ann, figs
 
 
-def normalize(adata, method="log", target_sum=1e4, **kws_z):
-    """Normalize AnnData."""
-    layers = cr.pp.get_layer_dict()  # layer names
-    # adata.layers[layers["unnormalized"]] = adata.X.copy()
-    if target_sum is not None:  # total-count normalization INPLACE
-        print("\n\t*** Total-count normalizing...")
-        sc.pp.normalize_total(adata, target_sum=target_sum, copy=False)
-    print(f"\n\t*** Log-normalizing => layer {layers['norm_log1p']}...")
-    met = layers["norm_log1p"]  # change later if other method option
-    if method.lower() == "z" or kws_z:  # if want to perform z-normalization
-        met = layers["norm_z"]
-        if any((x not in kws_z for x in ["col_reference", "key_reference"])):
+def normalize_genes(adata, max_value=None, kws_reference=None, **kwargs):
+    """Normalize gene expression relative to overall or reference."""
+    if kws_reference is not None:  # with reference to some control
+        print(f"\n\t*** Resetting to raw counts before scaling...")
+        if any((x not in kws_reference for x in [
+            "col_reference", "key_reference"])):
             raise ValueError(
                 "'col_reference' and 'key_reference' must be "
                 "in `normalization` argument if method = 'z'.")
-        print(f"\n\t*** Z-scoring relative to {kws_z['col_reference']}"
-              f" = {kws_z['key_reference']} => layer {met} =>`.X`")
-        adata = z_normalize_by_reference(adata, **kws_z)
-        adata.layers[layers["norm_log1p"]] = sc.pp.log1p(
-            adata, copy=True).X.copy()  # log for later use; NOT INPLACE
-    else:
-        sc.pp.log1p(adata)  # log-transformed; INPLACE
-        print(f"\n\t*** Setting `.X` as layer {met}...")
-    return adata
+        print("\n\t*** Z-scoring (relative to "
+              f"{kws_reference['key_reference']})")
+        adata = z_normalize_by_reference(adata, **kws_reference)
+    else:  # with reference to whole sample
+        print(f"\n\t*** Scaling gene expression...")
+        if max_value:
+            print(f"\n\t*** Clipping maximum GEX SD to {max_value}...")
+            kwargs.update({"max_value": max_value})
+        sc.pp.scale(adata, copy=False, **kwargs)  # center/standardize
 
 
 def z_normalize_by_reference(adata, col_reference="Perturbation", 
                              key_reference="Control", 
-                             col_batch=None, retain_zero_variance=True, 
+                             retain_zero_variance=True, 
                              layer=None, **kwargs):
     """
     Mean-center & standardize by reference condition (within-batch option).
@@ -376,40 +380,22 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     """
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
+    if layer is None:
+        layers = cr.pp.get_layer_dict()["counts"]  # raw counts layer
+    if layer is not None:
+        adata.X = adata.layers[layer].copy()  # reset to raw counts
     if layer:
-        adata.X = adata.layer[layer].copy()
-    if col_batch is None:
-        col_batch = "batch"
-        if col_batch not in adata.obs:
-            adata.obs.loc[:, col_batch] = "1"  # so can loop even if only 1
-    if col_batch == col_reference:
-        raise ValueError(f"`col_batch` cannot be same as `col_reference`.")
-    batches_adata, batch_labs = [], list(adata.obs[col_batch].unique())
-    for s in batch_labs:  # loop over batches
-        batch_adata = adata[adata.obs[col_batch] == s]
-        gex = batch_adata.X.copy()  #  gene expression matrix (full)
-        gex_ctrl = batch_adata[batch_adata.obs[
-            col_reference] == key_reference].X.A.copy()  # reference condition
-        gex, gex_ctrl = [q.A if "A" in dir(q) else q 
-                         for q in [gex, gex_ctrl]]  # sparse -> dense matrix
-        mus, sds = np.nanmean(gex_ctrl, axis=0), np.nanstd(
-            gex_ctrl, axis=0)  # means & SDs of reference condition genes
-        if retain_zero_variance is True:
-            sds[sds == 0] = 1   # retain zero-variance genes at unit variance
-        batch_adata.X = (gex - mus) / sds  # z-score gene expression
-        batches_adata += [batch_adata]  # concatenate batch adata
-    if len(batches_adata) == 1:  # in case just 1 batch (no concatenation)
-        adata = batches_adata[0]
-        adata.obs.drop(col_batch, axis=1, inplace=True)
-    else:  # concatenate batches
-        # adata = anndata.concat(
-        #     batches_adata, join="outer", labbel=col_batch, 
-        #     uns_merge="same", index_unique=None, 
-        #     keys=batch_labs, fill_value=None)  # concatenate
-        adata = AnnData.concatenate(
-            *batches_adata, join="outer", batch_key=col_batch,
-            batch_categories=batch_labs, uns_merge="same", 
-            index_unique=None, fill_value=None)  # concatenate AnnData objects
+        adata.X = adata.layers[layer].copy()
+    gex = adata.X.copy()  #  gene expression matrix (full)
+    gex_ctrl = adata[adata.obs[
+        col_reference] == key_reference].X.A.copy()  # reference condition
+    gex, gex_ctrl = [q.A if "A" in dir(q) else q 
+                        for q in [gex, gex_ctrl]]  # sparse -> dense matrix
+    mus, sds = np.nanmean(gex_ctrl, axis=0), np.nanstd(
+        gex_ctrl, axis=0)  # means & SDs of reference condition genes
+    if retain_zero_variance is True:
+        sds[sds == 0] = 1   # retain zero-variance genes at unit variance
+    adata.X = (gex - mus) / sds  # z-score gene expression
     return adata
 
 

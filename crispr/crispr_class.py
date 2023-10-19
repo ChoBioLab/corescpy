@@ -301,11 +301,12 @@ class Crispr(object):
                 be limited and/or problems occur if set to False and if 
                 multiply-transfected cells remain in data. 
         """
-        print("\n\n<<<INITIALIZING CRISPR CLASS OBJECT >>>\n")
+        print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
-        self._layers = {**cr.pp.get_layer_dict()}
+        self._layers = {**cr.pp.get_layer_dict(), 
+                        "layer_perturbation": "X_pert"}
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
         
@@ -313,7 +314,8 @@ class Crispr(object):
         self.figures = {"main": {}}
         self.results = {"main": {}}
         self.info = {"descriptives": {}, 
-                     "guide_rna": {}}  # extra info to store by methods
+                     "guide_rna": {},
+                     "methods": {}}  # extra info to store post-use of methods
         
         # Create Object & Store Raw Counts
         if isinstance(col_sample_id, (list, tuple)):  # multi-dataset
@@ -546,29 +548,37 @@ class Crispr(object):
         fig.fig.tight_layout()
         return self.info["guide_rna"]["counts_unfiltered"], fig
     
-    def preprocess(self, assay_protein=None, layer_in=None, 
-                   copy=False, normalization="log",  by_batch=None, **kwargs):
+    def preprocess(self, assay_protein=None, layer_in=None, copy=False, 
+                   kws_scale=True,  by_batch=None, **kwargs):
         """
         Preprocess (specified layer of) data 
         (defaulting to originally-loaded layer).
         Defaults to preprocessing individual samples, then integrating
         with Harmony, if originally provided as separate datasets.
+        
+        Include "True" or an integer under `kws_scale` to do normal
+        mean-centering and unit_variance standardization of 
+        gene expression (if integer, sets max_value), or either the 
+        letter "z" or a dictionary (of keyword arguments to 
+        override defaults) if you want to z-score gene expression with 
+        reference to the control condition.
         """
         if assay_protein is None:
             assay_protein = self._assay_protein
         if layer_in is None:
             layer_in = self._layers["counts"]  # raw counts if not specified
         kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
-        if isinstance(normalization, str):
-            normalization = dict(method=normalization)
-        if normalization["method"].lower() == "z":
-            normalization_default = {
+        if isinstance(kws_scale, str) and kws_scale.lower() == "z":
+            kws_scale = {}
+        if isinstance(kws_scale, dict):  # if z-scoring GEX ~ control
+            znorm_default = {
                 "col_reference": self._columns["col_perturbed"],
                 "key_reference": self._keys["key_control"], 
                 "col_batch": self._columns["col_batch"] if self._columns[
                     "col_batch"] else self._columns["col_sample_id"]}
-            normalization = {**normalization_default, **normalization}
-        kws.update(dict(normalization=normalization))
+            kws_scale = {**znorm_default, **kws_scale}  # add arguments
+        self.info["methods"]["scale"] = kws_scale
+        kws.update(dict(kws_scale=kws_scale))
         # By Batch/Sample
         if by_batch is not False and self._integrated is False:
             self.figures["preprocessing"] = {}
@@ -622,6 +632,9 @@ class Crispr(object):
                           self._columns["col_batch"]]:
                     if x:
                         colors += [x]  # add sample & batch UMAP
+        if "layer" not in kwargs:
+            kwargs.update({"layer": self._layers["log1p"]})
+        self.info["methods"]["clustering"] = method_cluster
         adata, figs_cl = cr.ax.cluster(
             self.rna.copy() if copy is True else self.rna, 
             assay=assay, method_cluster=method_cluster,
@@ -653,7 +666,7 @@ class Crispr(object):
         if assay is None:
             assay = self._assay
         if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
+            col_cell_type = self.info["methods"]["clustering"]
         marks, figs_m = cr.ax.find_markers(
             self.adata, assay=assay, method=method, n_genes=n_genes, 
             layer=layer, key_reference=key_reference, plot=plot,
@@ -662,7 +675,7 @@ class Crispr(object):
         return marks, figs_m
         
     def run_mixscape(self, assay=None, assay_protein=None,
-                     col_cell_type=None,
+                     layer="scaled", col_cell_type=None,
                      target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
                      copy=False, plot=True, **kwargs):
@@ -774,6 +787,12 @@ class Crispr(object):
             col_cell_type = self._columns["col_cell_type"]
         if "col_cell_type" in kwargs:
             _ = kwargs.pop("col_cell_type")
+        if layer is None or layer not in self.rna.layers:
+            if layer is not None and layer not in self.rna.layers:
+                raise ValueError(f"Layer {layer} not found in adata.layers")
+            layer = self._layers["scaled"] if (
+                self._layers["scaled"] in self.rna.layers) else self._layers[
+                    "log1p"]  # layer to set as .X before running
         figs_mix, adata_pert = cr.ax.perform_mixscape(
             self.adata.copy() if copy is True else self.adata, 
             assay=assay, assay_protein=assay_protein,
@@ -788,7 +807,8 @@ class Crispr(object):
                 self.rna.uns[x] = adata_pert.uns[x]
         return figs_mix
     
-    def run_augur(self, assay=None, classifier="random_forest_classifier", 
+    def run_augur(self, assay=None, layer=None,
+                  classifier="random_forest_classifier", 
                   augur_mode="default", kws_augur_predict=None, n_folds=3,
                   subsample_size=20, n_threads=True, 
                   select_variance_features=False, seed=1618, 
@@ -801,10 +821,10 @@ class Crispr(object):
                 (for multi-modal data objects). 
             augur_mode (str, optional): Augur or permute? 
                 Defaults to "default". (See pertpy documentation.)
-            classifier (str): The classifier to be used for the analysis. 
-                Defaults to "random_forest_classifier".
-            kws_augur_predict (dict): Additional keyword arguments to be 
-                passed to the `perform_augur()` function.
+            classifier (str): The classifier to be used for the 
+                analysis. Defaults to "random_forest_classifier".
+            kws_augur_predict (dict): Additional keyword arguments to 
+                be passed to the `perform_augur()` function.
             n_folds (int): The number of folds to be used for 
                 cross-validation. Defaults to 3. 
                 Should be >= 3 as a matter of best practices.
@@ -837,8 +857,8 @@ class Crispr(object):
                     used. You can pass these extra arguments in rare 
                     case where you want to use different columns/keys 
                     within columns across 
-                    different methods or runs of a method. For instance,
-                    for experimental conditions that have
+                    different methods or runs of a method. For
+                    instance, for experimental conditions that have
                     multiple levels (e.g., control, drug A treatment, 
                     drug B treatment), allowing this argument 
                     (and `col_perturbed`, for instance, 
@@ -859,10 +879,16 @@ class Crispr(object):
                     kwargs.update({c: x[c]})  # & use object attribute
         if assay is None:
             assay = self._assay
+        if layer is None or layer not in self.rna.layers:
+            if layer is not None and layer not in self.rna.layers:
+                raise ValueError(f"Layer {layer} not found in adata.layers")
+            layer = self._layers["scaled"] if (
+                self._layers["scaled"] in self.rna.layers) else self._layers[
+                    "log1p"]  # layer to set as .X before running
         data, results, figs_aug = cr.ax.perform_augur(
             self.adata.copy() if copy is True else self.adata, 
             assay=assay, classifier=classifier,
-            augur_mode=augur_mode, subsample_size=subsample_size,
+            layer=layer, augur_mode=augur_mode, subsample_size=subsample_size,
             select_variance_features=select_variance_features, 
             n_folds=n_folds, kws_augur_predict=kws_augur_predict,
             seed=seed, n_threads=n_threads, plot=plot, **kwargs)  # Augur
@@ -1026,6 +1052,9 @@ class Crispr(object):
             if genes == "all": 
                 genes = names.copy()
         else:
+            if isinstance(genes, (int, float)):
+                genes = list(pd.Series(self.rna.var_names).sample(
+                    genes))  # random subset of genes
             names = genes.copy()
         if genes_highlight and not isinstance(genes_highlight, list):
             genes_highlight = [genes_highlight] if isinstance(
@@ -1129,15 +1158,22 @@ class Crispr(object):
                 figs["gene_expression_violin"] = err
                 
         # Gene Expression Dot Plot
-        figs["gene_expression_dot"] = sc.pl.dotplot(
-            self.rna, genes, lab_cluster, show=False)
-        if genes_highlight is not None:
-            for x in figs["gene_expression_dot"][
-                "mainplot_ax"].get_xticklabels():
-                # x.set_style("italic")
-                if x.get_text() in genes_highlight:
-                    x.set_color('#A97F03')
-        
+        try:
+            figs["gene_expression_dot"] = sc.pl.dotplot(
+                self.rna, genes, lab_cluster, show=False, use_raw=False)
+            try:
+                if genes_highlight is not None:
+                    for x in figs["gene_expression_dot"][
+                        "mainplot_ax"].get_xticklabels():
+                        # x.set_style("italic")
+                        if x.get_text() in genes_highlight:
+                            x.set_color('#A97F03')
+            except Exception as error:
+                print(error, "Could not highlight gene name.")
+        except Exception as err:
+            warnings.warn(f"{err}\n\nCould not plot GEX violins.")
+            figs["gene_expression_dot"] = err
+    
         # Gene Expression Matrix Plots
         if kws_gex_matrix is None:
             kws_gex_matrix = {}
