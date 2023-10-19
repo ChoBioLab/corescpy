@@ -1,4 +1,5 @@
 import re
+import h5py
 import pandas as pd
 import numpy as  np
 
@@ -88,3 +89,27 @@ def print_pretty_dictionary(dct, show=True, numpy_alias="np"):
         print(text)
     else:
         return text
+
+
+def explore_h5_file(file):
+    """Explore an H5 file's format (thanks to ChatGPT)."""
+    with h5py.File(file, "r") as h5_file:
+        top_level_groups = list(h5_file.keys())
+        for group_name in top_level_groups:
+            print(f"Group: {group_name}")
+            for g in h5_file[group_name]:
+                print(f"  Dataset: {g}")
+
+        
+def print_counts(adata, group_by=None, title="Total", **kwargs):   
+    if kwargs:
+        pass
+    print(f"\n\n{'=' * 80}\nCell Counts: {title}\n{'=' * 80}\n")
+    print(adata.n_obs)
+    if group_by is not None and group_by in adata.obs:
+        for x in adata.layers:
+            print(f"{x}: {adata.layers[x].shape}")
+        if group_by is not None and group_by in adata.obs:
+            print(adata.obs[group_by].value_counts().round(2))
+        print("\n")
+    print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")

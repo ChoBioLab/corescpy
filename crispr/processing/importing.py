@@ -10,6 +10,10 @@ Preprocessing CRISPR experiment data.
 import os
 import re
 import warnings
+import h5py
+import scipy.sparse as sp_sparse
+import collections
+import scanpy as sc
 import pandas as pd
 import numpy as np
 
@@ -150,40 +154,80 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
             os.system(f"gunzip {new_path}")  # unzip if needed
 
 
-def get_matrix_from_h5(file, gex_genes_return=None):
-    """Get matrix from 10X h5 file (modified from 10x code)."""
-    FeatureBCMatrix = collections.namedtuple("FeatureBCMatrix", [
-        "feature_ids", "feature_names", "barcodes", "matrix"])
-    with h5py.File(file) as f:
-        if u"version" in f.attrs:
-            version = f.attrs["version"]
-            if version > 2:
-                print(f"Version = {version}")
-                raise ValueError(f"HDF5 format version version too new.")
-        else:
-            raise ValueError(f"HDF5 format version ({version}) too old.")
-        feature_ids = [x.decode("ascii", "ignore") 
-                       for x in f["matrix"]["features"]["id"]]
-        feature_names = [x.decode("ascii", "ignore") 
-                         for x in f["matrix"]["features"]["name"]]        
-        barcodes = list(f["matrix"]["barcodes"][:])
-        matrix = sp_sparse.csr_matrix((f["matrix"]["data"], 
-                                       f["matrix"]["indices"], 
-                                       f["matrix"]["indptr"]), 
-                                      shape=f["matrix"]["shape"])
-        fbm = FeatureBCMatrix(feature_ids, feature_names, barcodes, matrix)
-        if gex_genes_return is not None:
-            gex = {}
-            for g in gex_genes_return:
-                try:
-                    gene_index = fbm.feature_names.index(g)
-                except ValueError:
-                    raise Exception(f"{g} not found in list of gene names.")
-                gex.update({g: fbm.matrix[gene_index, :].toarray(
-                    ).squeeze()})  # gene expression
-        else:
-            gex = None
-        barcodes = [x.tostring().decode() for x in fbm.barcodes]
-        genes = pd.Series(fbm.feature_names).to_frame("gene").join(
-            pd.Series(fbm.feature_ids).to_frame("gene_ids"))
-    return fbm, gex, barcodes, genes
+# def get_matrix_from_h5(file, gex_genes_return=None):
+#     """Get matrix from 10X h5 file (modified from 10x code)."""
+#     FeatureBCMatrix = collections.namedtuple("FeatureBCMatrix", [
+#         "feature_ids", "feature_names", "barcodes", "matrix"])
+#     with h5py.File(file) as f:
+#         if u"version" in f.attrs:
+#             version = f.attrs["version"]
+#             if version > 2:
+#                 print(f"Version = {version}")
+#                 raise ValueError(f"HDF5 format version version too new.")
+#         else:
+#             raise ValueError(f"HDF5 format version ({version}) too old.")
+#         feature_ids = [x.decode("ascii", "ignore") 
+#                        for x in f["matrix"]["features"]["id"]]
+#         feature_names = [x.decode("ascii", "ignore") 
+#                          for x in f["matrix"]["features"]["name"]]        
+#         barcodes = list(f["matrix"]["barcodes"][:])
+#         matrix = sp_sparse.csr_matrix((f["matrix"]["data"], 
+#                                        f["matrix"]["indices"], 
+#                                        f["matrix"]["indptr"]), 
+#                                       shape=f["matrix"]["shape"])
+#         fbm = FeatureBCMatrix(feature_ids, feature_names, barcodes, matrix)
+#         if gex_genes_return is not None:
+#             gex = {}
+#             for g in gex_genes_return:
+#                 try:
+#                     gene_index = fbm.feature_names.index(g)
+#                 except ValueError:
+#                     raise Exception(f"{g} not found in list of gene names.")
+#                 gex.update({g: fbm.matrix[gene_index, :].toarray(
+#                     ).squeeze()})  # gene expression
+#         else:
+#             gex = None
+#         barcodes = [x.tostring().decode() for x in fbm.barcodes]
+#         genes = pd.Series(fbm.feature_names).to_frame("gene").join(
+#             pd.Series(fbm.feature_ids).to_frame("gene_ids"))
+#     return fbm, gex, barcodes, genes
+
+
+def combine_matrix_protospacer(
+    directory="", subdirectory_mtx="filtered_feature_bc_matrix", 
+    col_gene_symbols="gene_symbols", 
+    file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
+    col_barcode="cell_barcode", 
+    **kwargs):
+    """
+    Combine CellRanger directory-derived AnnData `.obs` & perturbation data.
+    
+    Example
+    -------
+    >>> data_dir = "/home/asline01/projects/crispr/examples/data"
+    >>> adata = combine_matrix_protospacer(
+    ... f"{data_dir}/crispr-screening/HH03", 
+    ... "filtered_feature_bc_matrix", col_gene_symbols="gene_symbols", 
+    ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
+    ... col_barcode="cell_barcode")
+    
+    Or using create_object(), with directory/file-related arguments in 
+    a dictionary passed to the "file" argument:
+    
+    >>> data_dir = "/home/asline01/projects/crispr/examples/data"
+    >>> adata = create_object(
+    ... dict(directory=f"{data_dir}/crispr-screening/HH03", 
+    ... subdirectory_mtx="filtered_feature_bc_matrix", 
+    ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv"),
+    ... col_barcode="cell_barcode", col_gene_symbols="gene_symbols")
+    
+    """
+    adata = sc.read_10x_mtx(
+        os.path.join(directory, subdirectory_mtx), 
+        var_names=col_gene_symbols, **kwargs)  # 10x matrix, barcodes, features
+    dff = pd.read_csv(os.path.join(directory, file_protospacer), 
+                      index_col=col_barcode)  # perturbation information
+    if col_barcode is None:
+        dff, col_barcode = dff.set_index(dff.columns[0]), dff.columns[0]
+    adata.obs = adata.obs.join(dff.rename_axis(adata.obs.index.names[0]))
+    return adata

@@ -372,15 +372,12 @@ class Crispr(object):
                 )  # create binary form of col_condition
         
         # Store Columns & Keys within Columns as Dictionary Attributes
-        self._columns = dict(col_gene_symbols=col_gene_symbols,
-                             col_condition=col_condition,
-                             col_target_genes=col_condition,
-                             col_perturbed=col_perturbed,
-                             col_cell_type=col_cell_type,
-                             col_sample_id=col_sample_id, 
-                             col_batch=col_batch,
-                             col_guide_rna=col_guide_rna,
-                             col_num_umis=col_num_umis)
+        self._columns = dict(
+            col_gene_symbols=col_gene_symbols, col_condition=col_condition,
+            col_target_genes=col_condition, col_perturbed=col_perturbed, 
+            col_cell_type=col_cell_type, col_sample_id=col_sample_id, 
+            col_batch=col_batch if col_batch else col_sample_arg,
+            col_guide_rna=col_guide_rna, col_num_umis=col_num_umis)
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment, 
                           key_nonperturbed=key_nonperturbed)
@@ -452,6 +449,12 @@ class Crispr(object):
             self.adata[self._assay].obsm = value
         else:
             self.adata.obsm = value
+            
+    def print(self):
+        print(self.rna.obs.head(), "\n\n")
+        print(self.adata, "\n\n")
+        for q in [self._columns, self._keys]:
+            cr.tl.print_pretty_dictionary(q)
     
     def describe(self, group_by=None, plot=False):
         """Describe data."""
@@ -520,7 +523,7 @@ class Crispr(object):
         if group_by:  # join group_by variables from adata
             cols += group_by
         cols = list(pd.unique(cols))
-        dff = self.info["guide_rna"]["counts_unfiltered"].reset_index(
+        dff = self.info["guide_rna_all"].reset_index(
             "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
             dff = dff[dff[self._columns["col_target_genes"]].isin(
@@ -544,48 +547,18 @@ class Crispr(object):
         return self.info["guide_rna"]["counts_unfiltered"], fig
     
     def preprocess(self, assay_protein=None, layer_in=None, 
-                   clustering=False, copy=False, normalization="log",
-                   remove_doublets=True, by_batch=None, adata=None, 
-                   **kwargs):
+                   copy=False, normalization="log",  by_batch=None, **kwargs):
         """
         Preprocess (specified layer of) data 
         (defaulting to originally-loaded layer).
         Defaults to preprocessing individual samples, then integrating
         with Harmony, if originally provided as separate datasets.
         """
-        # By Batch/Sample
-        if by_batch is not False and self._integrated is False:
-            if not isinstance(
-                by_batch, str):  # if string not provided, find in ._columns
-                by_batch = self._columns["col_batch"] if (
-                    "col_batch" in self._columns) else self._columns[
-                        "col_sample_id"]  # batch ID column name
-            batch_keys = list(self.rna.obs[by_batch].unique())
-            adatas, figs = [None] * len(batch_keys), [None] * len(batch_keys)
-            if assay_protein is not None:  # if includes protein assay
-                raise NotImplementedError("Preprocessing by batch not yet " 
-                                          "supported for protein assays.")
-            for i, s in enumerate(batch_keys):
-                print(f"*** Preprocessing batch (by_batch) {s}...")
-                adatas[i], figs[i] = self.preprocess(
-                    adata=self.rna[self.rna.obs[by_batch] == s].copy(),
-                    assay_protein=assay_protein, 
-                    layer_in=layer_in, clustering=clustering, copy=copy, 
-                    normalization=normalization,
-                    remove_doublets=remove_doublets, by_batch=False, **kwargs)
-                adatas += [adata]
-            adata = cr.pp.integrate(adatas, **kwargs)
-            if copy is False:
-                self.rna = adata
-            return adata, figs
-        # Overall
-        adata = self.rna.copy()
         if assay_protein is None:
             assay_protein = self._assay_protein
         if layer_in is None:
             layer_in = self._layers["counts"]  # raw counts if not specified
-        kws = dict(assay_protein=assay_protein, 
-                   remove_doublets=remove_doublets, **self._columns, **kwargs)
+        kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
         if isinstance(normalization, str):
             normalization = dict(method=normalization)
         if normalization["method"].lower() == "z":
@@ -596,24 +569,42 @@ class Crispr(object):
                     "col_batch"] else self._columns["col_sample_id"]}
             normalization = {**normalization_default, **normalization}
         kws.update(dict(normalization=normalization))
-        adata.X = adata.layers[layer_in]  # use specified layer
-        adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
-        if assay_protein is not None:  # if includes protein assay
-            adata_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
-        self.figures["preprocessing"] = figs
-        if clustering not in [None, False]:
-            if clustering is True:
-                clustering = {}
-            if isinstance(clustering, dict):
-                figs_cl = self.cluster(**clustering)  # clustering
-                figs = figs + [figs_cl]
-            else:
-                raise TypeError(
-                    "`clustering` must be dict (keyword arguments) or bool.")
-        if copy is False:
-            self.rna = adata
-            if assay_protein is not None:  # if includes protein assay
-                self.adata[assay_protein] = adata_p
+        # By Batch/Sample
+        if by_batch is not False and self._integrated is False:
+            self.figures["preprocessing"] = {}
+            if not isinstance(
+                by_batch, str):  # if string not provided, find in ._columns
+                by_batch = self._columns["col_batch"] if (
+                    "col_batch" in self._columns) else self._columns[
+                        "col_sample_id"]  # batch ID column name
+            batch_keys = list(self.rna.obs[by_batch].unique())
+            adatas, fff = [None] * len(batch_keys), [None] * len(batch_keys)
+            # if assay_protein is not None:  # if includes protein assay
+            #     raise warnings.warn("Preprocessing by batch not yet " 
+            #                         "supported for protein assays.")
+            for i, s in enumerate(batch_keys):
+                print(f"*** Preprocessing batch (by_batch) {s}...")
+                ann = self.rna[self.rna.obs[by_batch] == s].copy()
+                ann.X = ann.layers[layer_in]  # use specified layer
+                adatas[i], fff[i] = cr.pp.process_data(ann, **kws)
+                if copy is False:
+                    self.figures["preprocessing"][s] = fff[i]
+                adatas += [adata]
+            adata = cr.pp.integrate(adatas, **kwargs)
+            if copy is False:
+                self.rna = adata
+        # Whole Sample
+        else:
+            adata = self.rna.copy()
+            adata.X = adata.layers[layer_in]  # use specified layer
+            adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
+            # if assay_protein is not None:  # if includes protein assay
+            #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
+            self.figures["preprocessing"] = figs
+            if copy is False:
+                self.rna = adata
+                # if assay_protein is not None:  # if includes protein assay
+                #     self.adata[assay_protein] = ad_p
         return adata, figs
                 
     def cluster(self, assay=None, method_cluster="leiden", 
