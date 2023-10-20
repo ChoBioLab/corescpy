@@ -38,8 +38,7 @@ def get_layer_dict():
     return lay
 
 
-def create_object_multi(file_path, col_sample_id="orig.ident",
-                        kws_init=None, kws_pp=None, 
+def create_object_multi(file_path, kws_init=None, kws_pp=None, 
                         kws_cluster=None, kws_harmony=True):
     """Create objects, then preprocess, cluster, & integrate them."""
     # Arguments
@@ -75,7 +74,7 @@ def create_object_multi(file_path, col_sample_id="orig.ident",
         print(f"\n<<< INTEGRATING WITH HARMONY >>>")
         sc.tl.pca(adata)  # PCA
         adata = sc.external.pp.harmony_integrate(
-            adata, col_sample_id, basis="X_pca", 
+            adata, col_id, basis="X_pca", 
             adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
         adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
     return adata

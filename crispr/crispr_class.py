@@ -358,34 +358,34 @@ class Crispr(object):
             self.info["guide_rna"]["feature_split"] = None
         print(self.adata, "\n\n") if assay else None
         
-        # # Check Arguments & Data
-        # if any((x in self.rna.obs for x in [
-        #     col_guide_rna, col_perturbed, col_condition])):
-        #     if col_perturbed in self.rna.obs and (
-        #         col_condition in self.rna.obs):
-        #         pass
-        #     elif col_perturbed in self.rna.obs:
-        #         warnings.warn(f"col_perturbed {col_perturbed} already "
-        #                       " in `.obs`. Assuming perturbation is binary "
-        #                       "(i.e., only has two conditions, including "
-        #                       "control), so col_condition will be "
-        #                       "equivalent.")
-        #         self.rna.obs.loc[:, col_condition] = self.rna.obs[
-        #             col_perturbed]
-        # else:
-        #     raise ValueError("col_condition or "
-        #                      "col_guide_rna must be in `.obs`.")
-        # print(self.adata.obs, "\n\n") if assay else None
+        # Check Arguments & Data
+        if any((x in self.rna.obs for x in [
+            col_guide_rna, col_perturbed, col_condition])):
+            if col_perturbed in self.rna.obs and (
+                col_condition in self.rna.obs):
+                pass
+            elif col_perturbed in self.rna.obs:
+                warnings.warn(f"col_perturbed {col_perturbed} already "
+                              " in `.obs`. Assuming perturbation is binary "
+                              "(i.e., only has two conditions, including "
+                              "control), so col_condition will be "
+                              "equivalent.")
+                self.rna.obs.loc[:, col_condition] = self.rna.obs[
+                    col_perturbed]
+        else:
+            raise ValueError("col_condition or "
+                             "col_guide_rna must be in `.obs`.")
+        print(self.adata.obs, "\n\n") if assay else None
 
-        # # Binary Perturbation Column
-        # if (col_perturbed not in 
-        #     self.rna.obs):  # if col_perturbed doesn't exist yet...
-        #     self.rna.obs = self.rna.obs.join(
-        #         self.rna.obs[col_condition].apply(
-        #             lambda x: x if pd.isnull(x) else key_control if (
-        #                 x == key_control) else key_treatment
-        #             ).to_frame(col_perturbed), lsuffix="_original"
-        #         )  # create binary form of col_condition
+        # Binary Perturbation Column
+        if (col_perturbed not in 
+            self.rna.obs):  # if col_perturbed doesn't exist yet...
+            self.rna.obs = self.rna.obs.join(
+                self.rna.obs[col_condition].apply(
+                    lambda x: x if pd.isnull(x) else key_control if (
+                        x == key_control) else key_treatment
+                    ).to_frame(col_perturbed), lsuffix="_original"
+                )  # create binary form of col_condition
         
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
