@@ -12,7 +12,6 @@ import re
 import warnings
 import h5py
 import scipy.sparse as sp_sparse
-import collections
 import scanpy as sc
 import pandas as pd
 import numpy as np

@@ -38,14 +38,85 @@ def get_layer_dict():
     return lay
 
 
+def create_object_multi(file_path, col_sample_id="orig.ident",
+                        kws_init=None, kws_pp=None, 
+                        kws_cluster=None, kws_harmony=True):
+    """Create objects, then preprocess, cluster, & integrate them."""
+    # Arguments
+    ids = list(file_path.keys())
+    [kws_init, kws_pp, kws_cluster] = [dict(zip(ids, x)) if isinstance(
+        x, list) else dict(zip(ids, [x] * len(ids))) for x in [
+            kws_init, kws_pp, kws_cluster]]  # dictionaries for each
+
+    # Create AnnData Objects
+    selves = dict(zip(file_path, [
+        cr.Crispr(file_path[f], **kws_init[f]) for f in file_path])
+                  )  # create individual Crispr objects
+
+    # Preprocessing & Clustering
+    for x in selves:  # preprocess & cluster each object
+        if kws_pp is not None:
+            print(f"\n<<< PREPROCESSING {x} >>>")
+            selves[x].preprocess(**kws_pp[x])
+        if kws_cluster is not None:
+            print(f"\n<<< CLUSTERING {x} >>>")
+            selves[x].cluster()
+    print(f"\n<<< CONCATENATING OBJECTS: {', '.join(ids)} >>>")
+    col_id = selves[ids[0]]._columns["col_sample_id"]
+    if col_id is None:
+        col_id = "unique.idents"
+    adata = AnnData.concatenate(
+        *[selves[x].adata for x in selves], join="outer", batch_key=col_id,
+        batch_categories=ids, uns_merge="same", 
+        index_unique="-", fill_value=None)  # concatenate AnnData objects
+        
+    # Integrate
+    if kws_harmony is not None:
+        print(f"\n<<< INTEGRATING WITH HARMONY >>>")
+        sc.tl.pca(adata)  # PCA
+        adata = sc.external.pp.harmony_integrate(
+            adata, col_sample_id, basis="X_pca", 
+            adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
+        adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
+    return adata
+
+
 def integrate(file, assay=None, col_sample_id="unique.ident", 
               col_gene_symbols=None, kws_concat=None, 
-              kws_process_guide_rna=None, harmony=True,
+              kws_process_guide_rna=None, kws_harmony=None,
               **kwargs):
-    """Integrate or simply concatenate (if harmony=False) batches of data."""
+    """Concatenate and (optionally) integrate multiple datasets.
+
+    Args:
+        file (dict): A dictionary, keyed by sample/batch IDs,
+            with each entry containing the object to pass to the 
+            `create_object()` function 
+            (str, dict of keyword arguments, AnnData, etc.)
+        assay (str or list, optional): For multi-modal data, 
+            the name of the gene expression assay. String if the same
+            for all batches; otherwise, a list. Defaults to None.
+        col_sample_id (str, optional): Desired column name for the 
+            sample/batch IDs. Defaults to "unique.ident".
+        col_gene_symbols (str or list, optional): Name of column
+            containing the gene symbols. String if the same
+            for all batches; otherwise, a list. Defaults to None.
+        kws_concat (dict, optional): Dictionary of keyword arguments 
+            to pass to the AnnData concatenate function. 
+            Defaults to None.
+        kws_process_guide_rna (dict or list, optional): Keyword 
+            arguments to pass to the function processing the guide RNA. 
+            String if the same for all batches; otherwise, a list. 
+            Defaults to None.
+        kws_harmony (dict, optional): Dictionary of keyword arguments
+            to pass to `harmonypy.run_harmony()`. Defaults to None.
+
+    Returns:
+        AnnData: Concatenated/integrated object
+    """
     if kws_concat is None:
         kws_concat = {}
     adatas = [None] * len(file)
+    harmony = kws_harmony is not None
     batch_categories = list(file.keys())  # keys = sample IDs
     file = [file[f] for f in file]  # turn to list 
     print(f"\n<<< INTEGRATING{['', ' (HARMONY)'][int(harmony)]} >>>")
@@ -71,12 +142,14 @@ def integrate(file, assay=None, col_sample_id="unique.ident",
         batch_categories=batch_categories, **{
             **dict(uns_merge="same", index_unique="-", fill_value=None), 
             **kws_concat})  # concatenate AnnData objects
-    if harmony is True:
+    if kws_harmony is not None:
         print(f"\n<<< INTEGRATING WITH HARMONY >>>")
         sc.tl.pca(adata)  # PCA
         adata = sc.external.pp.harmony_integrate(
             adata, col_sample_id, basis="X_pca", 
-            adjusted_basis="X_pca_harmony", **kwargs)  # harmony
+            adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
+        adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
+    adata.varm["guide_rna"]["keywords"] = kws_process_guide_rna
     return adata
 
 
@@ -155,47 +228,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     if plot is True:
         cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
     print("\n\n", adata)
-    return adata
-
-
-def create_object_multi(file_path, kws_init=None, 
-                        kws_pp=None, kws_cluster=None, harmony=True):
-    """Create objects, then preprocess, cluster, & integrate them."""
-    # Arguments
-    ids = list(file_path.keys())
-    [kws_init, kws_pp, kws_cluster] = [dict(zip(ids, x)) if isinstance(
-        x, list) else dict(zip(ids, [x] * len(ids))) for x in [
-            kws_init, kws_pp, kws_cluster]]  # dictionaries for each
-
-    # Create AnnData Objects
-    selves = dict(zip(file_path, [
-        cr.Crispr(file_path[f], **kws_init[f]) for f in file_path])
-                  )  # create individual Crispr objects
-
-    # Preprocessing & Clustering
-    for x in selves:  # preprocess & cluster each object
-        if kws_pp is not None:
-            print(f"\n<<< PREPROCESSING {x} >>>")
-            selves[x].preprocess(**kws_pp[x])
-        if kws_cluster is not None:
-            print(f"\n<<< CLUSTERING {x} >>>")
-            selves[x].cluster()
-    print(f"\n<<< CONCATENATING OBJECTS: {', '.join(ids)} >>>")
-    col_id = selves[ids[0]]._columns["col_sample_id"]
-    if col_id is None:
-        col_id = "unique.idents"
-    adata = AnnData.concatenate(
-        *[selves[x].adata for x in selves], join="outer", batch_key=col_id,
-        batch_categories=ids, uns_merge="same", 
-        index_unique="-", fill_value=None)  # concatenate AnnData objects
-        
-    # Integrate
-    if harmony is True:
-        print(f"\n<<< INTEGRATING WITH HARMONY: {', '.join(ids)} >>>")
-        sc.tl.pca(adata)  # PCA
-        sc.external.pp.harmony_integrate(
-            adata, col_id, basis="X_pca", 
-            adjusted_basis="X_pca_harmony")  # integrate
     return adata
     
     
@@ -298,7 +330,8 @@ def process_data(adata,
     if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
         col_gene_symbols = None  # ...so functions will refer to index name
     figs = {}
-    kws_scale, kws_hvg = [x if x else {} for x in [kws_scale, kws_hvg]]
+    kws_scale, kws_hvg = [{} if x is True else x if x else {} 
+                          for x in [kws_scale, kws_hvg]]
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 10
     # if kws_scale:

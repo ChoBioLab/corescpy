@@ -16,25 +16,16 @@ COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
     
     
-def perform_mixscape(adata, col_perturbed="perturbation",
-                     layer=None,
-                     key_control="NT",
-                     key_treatment="perturbed",
-                     assay=None,
-                     col_guide_rna="guide_ID",
-                     col_split_by=None,
-                     col_target_genes="gene_target",
-                     iter_num=10,
-                     min_de_genes=5, pval_cutoff=5e-2, logfc_threshold=0.25,
-                     subsample_number=300,
-                     n_comps_lda=None, 
-                     plot=True, 
-                     assay_protein=None,
-                     protein_of_interest=None,
-                     guide_split="-",
-                     target_gene_idents=None, 
-                     kws_perturbation_signature=None,
-                     **kwargs):
+def perform_mixscape(
+    adata, assay=None, assay_protein=None, layer=None, 
+    protein_of_interest=None, col_perturbed="perturbation", 
+    key_control="NT", key_treatment="perturbed", key_nonperturbed="NP",
+    col_guide_rna="guide_ID", col_split_by=None, 
+    col_target_genes="gene_target", iter_num=10, min_de_genes=5, 
+    pval_cutoff=5e-2, logfc_threshold=0.25, subsample_number=300,
+    n_comps_lda=None, guide_split="-", feature_split=None, 
+    target_gene_idents=None, kws_perturbation_signature=None, 
+    plot=True, **kwargs):
     """
     Identify perturbed cells based on target genes 
     (`adata.obs['mixscape_class']`,
@@ -157,46 +148,44 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
     if target_gene_idents is True:  # to plot all target genes
-        target_gene_idents = list(adata_pert.uns["mixscape"].keys())  # targets
+        target_gene_idents = list(adata_pert.uns["mixscape"].keys())
     if plot is True:
         if target_gene_idents is not None:  # G/P EX
-            figs["mixscape_DEX_ordered_by_ppp_heat"] = {}
-            figs["mixscape_ppp_violin"] = {}
-            figs["mixscape_perturb_score"] = {}
+            figs["DEX_ordered_by_ppp_heat"] = {}
+            figs["ppp_violin"] = {}
+            figs["perturb_score"] = {}
             try:
                 fpp = cr.pl.plot_perturbation_scores_by_guide(
                     adata_pert, col_guide_rna=col_guide_rna, 
                     guide_split=guide_split)
-                figs["mixscape_targeting_efficacy"] = fpp
+                figs["targeting_efficacy"] = fpp
             except Exception as err:
                 figs["perturbation_clusters"] = err
-                warnings.warn(f"{err}\n\nCould not plot targeting efficiency!")
+                warnings.warn(f"{err}\n\nCouldn't plot targeting efficiency!")
             for g in target_gene_idents:  # iterate target genes of interest
                 if g not in list(adata_pert.obs["mixscape_class"]):
                     print(f"\n\nTarget gene {g} not in mixscape_class!")
                     continue  # skip to next target gene if missing
-                figs["mixscape_perturb_score"][g] = pt.pl.ms.perturbscore(
-                    adata=adata_pert, labels=col_target_genes, 
-                    target_gene=g, color="red")
                 try:
-                    figs["mixscape_DEX_ordered_by_ppp_heat"][
+                    figs["DEX_ordered_by_ppp_heat"][
                         g] = pt.pl.ms.heatmap(
                             adata=adata_pert, 
                             subsample_number=subsample_number,
                             labels=col_target_genes, target_gene=g, 
                             layer=layer, control=key_control
-                            )  # differential expression heatmap ordered by PPs
+                            )  # differential expression heatmap, sort by PPs
                 except Exception as err:
-                    figs["mixscape_DEX_ordered_by_ppp_heat"][g] = err
+                    figs["DEX_ordered_by_ppp_heat"][g] = err
                     warnings.warn(f"{err}\n\nCould not plot DEX heatmap!")
                 tg_conds = [
                     key_control, f"{g} NP", 
                     f"{g} {key_treatment}"]  # conditions: gene g
-                figs["mixscape_ppp_violin"][g] = pt.pl.ms.violin(
-                    adata=adata_pert, target_gene_idents=tg_conds, rotation=45,
-                    keys=f"mixscape_class_p_{key_treatment}".lower(),
-                    groupby="mixscape_class")  # gene: perturbed, NP, control
-            figs["mixscape_ppp_violin"][f"global"] = pt.pl.ms.violin(
+                figs["ppp_violin"][g] = pt.pl.ms.violin(
+                    adata=adata_pert, target_gene_idents=tg_conds, 
+                    rotation=45, groupby="mixscape_class",
+                    keys=f"mixscape_class_p_{key_treatment}".lower()
+                    )  # gene: perturbed, NP, control
+            figs["ppp_violin"][f"global"] = pt.pl.ms.violin(
                 adata=adata_pert, target_gene_idents=[
                     key_control, "NP", key_treatment], rotation=45,
                 keys=f"mixscape_class_p_{key_treatment}".lower(),
@@ -206,13 +195,13 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                     lambda i, j: i + j, [[f"{g} NP", 
                             f"{g} {key_treatment}"] 
                     for g in target_gene_idents])  # conditions: all genes
-                figs["mixscape_ppp_violin"]["all"] = pt.pl.ms.violin(
+                figs["ppp_violin"]["all"] = pt.pl.ms.violin(
                     adata=adata_pert,
                     keys=f"mixscape_class_p_{key_treatment}".lower(),
                     target_gene_idents=tg_conds, rotation=45,
                     groupby="mixscape_class")  # gene: perturbed, NP, control
             except Exception as err:
-                figs["mixscape_ppp_violin"]["all"] = err
+                figs["ppp_violin"]["all"] = err
                 print(err)
             
     # Perturbation-Specific Cell Clusters
@@ -236,15 +225,15 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                     control=key_control)  # cluster perturbation
             except Exception as err:
                 figs["perturbation_clusters"] = err
-                warnings.warn(f"{err}\n\nCouldn't plot perturbation clusters!")
+                warnings.warn(f"{err}\n\nPerturbation response plot failed!")
             if n_comps_lda is not None:  # LDA clusters
                 try:
                     figs["cluster_perturbation_response"] = pt.pl.ms.lda(
-                        adata_pert, control=key_control)  # perturbation response
+                        adata_pert, control=key_control)  # perturbed response
                 except Exception as err:
                     figs["perturbation_clusters"] = err
                     warnings.warn(
-                        f"{err}\n\nCould not plot cluster perturbation response!")
+                        f"{err}\nCluster perturbation response plot failed!")
                 try:
                     if assay_protein is not None and (
                         target_gene_idents is not None):
@@ -252,17 +241,36 @@ def perform_mixscape(adata, col_perturbed="perturbation",
                             adata=adata_pert,
                             # adata=adata_pert, 
                             target_gene_idents=target_gene_idents,
-                            keys=protein_of_interest, groupby=col_target_genes,
+                            keys=protein_of_interest, 
+                            groupby=col_target_genes, 
                             hue="mixscape_class_global")
-                        figs[f"mixscape_protein_{protein_of_interest}"] = f_pr 
+                        figs[f"protein_{protein_of_interest}"] = f_pr 
                 except Exception as err:
-                    figs[f"mixscape_protein_{protein_of_interest}"] = err
+                    figs[f"protein_{protein_of_interest}"] = err
                     warnings.warn(
                         f"{err}\n\nCould not plot protein expression!")
     except Exception as error:
         warnings.warn(
             f"{error}\n\nCouldn't perform perturbation-specific clustering!")
         figs["lda"] = error
+        
+    # Perturbation Score Plotting
+    if plot is True and target_gene_idents is not None:  # G/P EX
+        figs["perturb_score"] = {}
+        for g in target_gene_idents:  # iterate target genes of interest
+            if g not in list(adata_pert.obs["mixscape_class"]):
+                print(f"\n\nTarget gene {g} not in mixscape_class!")
+                continue  # skip to next target gene if missing
+            figs["perturb_score"][g] = pt.pl.ms.perturbscore(
+                adata=adata_pert, labels=col_target_genes, 
+                target_gene=g, color="red")
+        figs["targeting_efficiency"] = cr.pl.plot_targeting_efficiency(
+            adata_pert, col_guide_rna=col_guide_rna, key_control=key_control, 
+            key_treatment=key_treatment, key_nonperturbed=key_nonperturbed, 
+            guide_split=guide_split, feature_split="|",
+            mixscape_class_global="mixscape_class_global")
+    else:
+        figs["mixscape_perturb_score"] = None
     return figs, adata_pert
 
 
@@ -281,11 +289,13 @@ def perform_augur(adata, assay=None, layer=None,
 
     Args:
         adata (AnnData): Scanpy object.
-        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+        assay (str, optional): Assay slot of adata 
+            ('rna' for `adata['rna']`).n
             Defaults to None (works if only one assay).
         classifier (str, optional): Classifier. 
             Defaults to "random_forest_classifier".
-        augur_mode (str, optional): Augur or permute? Defaults to "default".
+        augur_mode (str, optional): Augur or permute? 
+            Defaults to "default".
         subsample_size (int, optional): Per Pertpy code: 
             "number of cells to subsample randomly per type 
             from each experimental condition."
@@ -297,23 +307,24 @@ def perform_augur(adata, assay=None, layer=None,
             Defaults to False.
         col_cell_type (str, optional): Column name for cell type. 
             Defaults to "cell_type_col".
-        col_perturbed (str, optional): Experimental condition column name. 
-            Defaults to None.
+        col_perturbed (str, optional): Experimental condition column 
+            name. Defaults to None.
         key_control (str, optional): Control category key
             (`adata.obs[col_perturbed]` entries).Defaults to "NT".
-        key_treatment (str, optional): Name of value within col_perturbed. 
-            Defaults to None.
+        key_treatment (str, optional): Name of value within 
+            col_perturbed. Defaults to None.
         seed (int, optional): Random state (for reproducibility). 
             Defaults to 1618.
         plot (bool, optional): Plots? Defaults to True.
         kws_augur_predict (dict, optional): Optional additional keyword 
             arguments to pass to Augur predict.
-        kwargs (keyword arguments, optional): Additional keyword arguments.
-            Use key "kws_umap" and "kws_neighbors" to pass arguments 
-            to the relevant
+        kwargs (keyword arguments, optional): Additional keyword 
+            arguments. Use key "kws_umap" and "kws_neighbors" to pass 
+            arguments to the relevant functions.
 
     Returns:
-        tuple: Augur AnnData object, results from Augur predict, figures
+        tuple: Augur AnnData object, results from 
+            Augur predict, figures
     """
     if n_threads is True:
         n_threads = os.cpu_count() - 1 # use available CPUs - 1
@@ -412,28 +423,27 @@ def perform_augur(adata, assay=None, layer=None,
     return data, results, figs
 
 
-def perform_differential_prioritization(adata, col_perturbed="perturbation", 
-                                        key_treatment_list="NT",
-                                        label_col="label",
-                                        assay=None,
-                                        n_permutations=1000,
-                                        n_subsamples=50,
-                                        col_cell_type="cell_type",
-                                        classifier="random_forest_classifier", 
-                                        plot=True, kws_augur_predict=None, 
-                                        **kwargs):
+def perform_differential_prioritization(
+    adata, col_perturbed="perturbation", key_treatment_list="NT",
+    label_col="label", assay=None, n_permutations=1000, 
+    n_subsamples=50, col_cell_type="cell_type",
+    classifier="random_forest_classifier", 
+    plot=True, kws_augur_predict=None, **kwargs):
     """
     Determine differential prioritization based on which cell types 
-    were most accurately (AUC) classified as (not) perturbed in different
-    runs of Augur (different values of col_perturbed).
+    were most accurately (AUC) classified as (not) perturbed in 
+    different runs of Augur (different values of `col_perturbed`).
 
     Args:
         adata (AnnData): Scanpy object.
-        col_perturbed (str): Column used to indicate experimental condition.
+        col_perturbed (str): Column used to indicate experimental 
+            condition.
         key_treatment_list (list): List of two conditions 
             (values in col_perturbed).
-        label_col (str, optional): _description_. Defaults to "label_col".
-        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+        label_col (str, optional): _description_. 
+            Defaults to "label_col".
+        assay (str, optional): Assay slot of 
+            adata ('rna' for `adata['rna']`).n
             Defaults to None (works if only one assay).
         n_permutations (int, optional): According to Pertpy: 
             'the total number of mean augur scores to calculate 
@@ -445,7 +455,8 @@ def perform_differential_prioritization(adata, col_perturbed="perturbation",
             Defaults to 50.
         col_cell_type (str, optional): Column name for cell type. 
             Defaults to "cell_type_col".
-        assay (str, optional): Assay slot of adata ('rna' for `adata['rna']`).n
+        assay (str, optional): Assay slot of adata 
+            ('rna' for `adata['rna']`).n
             Defaults to None (works if only one assay).
         classifier (str, optional): Classifier. 
             Defaults to "random_forest_classifier".
@@ -495,16 +506,11 @@ def perform_differential_prioritization(adata, col_perturbed="perturbation",
     return pvals, figs
 
 
-def analyze_composition(adata, reference_cell_type,
-                        assay=None, 
-                        analysis_type="cell_level",
-                        generate_sample_level=True, 
-                        col_cell_type="cell_type",
-                        sample_identifier="batch",
-                        col_perturbed="condition",
-                        est_fdr=0.05,
-                        plot=True,
-                        out_file=None, **kwargs):
+def analyze_composition(
+    adata, reference_cell_type, assay=None, analysis_type="cell_level",
+    generate_sample_level=True, col_cell_type="cell_type",
+    sample_identifier="batch", col_perturbed="condition",
+    est_fdr=0.05, plot=True, out_file=None, **kwargs):
     """Perform SCCoda compositional analysis."""
     figs, results = {}, {}
     if kwargs:
@@ -581,15 +587,17 @@ def analyze_composition(adata, reference_cell_type,
 def compute_distance(adata, col_target_genes="target_genes", 
                      col_cell_type="leiden",
                      distance_type="edistance", method="X_pca",
-                     kws_plot=None, highlight_real_range=False, plot=True,
-                     **kwargs):
-    """Compute distance and hierarchies and (optionally) make heatmaps."""
+                     kws_plot=None, highlight_real_range=False, 
+                     plot=True, **kwargs):
+    """Compute distance & hierarchies; (optionally) make heatmaps."""
     figs = {}
     distance = {}
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_plot is None:
         kws_plot = dict(robust=True, figsize=(10, 10))
+    if kwargs:
+        print(f"\nUn-used Keyword Arguments: {kwargs}")
         
     # Distance Metrics
     distance = pt.tl.Distance(distance_type, method)
@@ -600,8 +608,8 @@ def compute_distance(adata, col_target_genes="target_genes",
             if "vmin" in kws_plot:
                 warnings.warn(
                     f"""
-                    vmin already set in kwargs plot: {kws_plot['vmin']}
-                    Setting to {vmin} because highlight_real_range is True.""")
+                    vmin already set in kwargs plot: {kws_plot['vmin']}\n
+                    Setting to {vmin} as highlight_real_range is True.""")
             kws_plot.update(dict(vmin=vmin))
         if "figsize" not in kws_plot:
             kws_plot["figsize"] = (20, 20)
@@ -627,7 +635,10 @@ def compute_distance(adata, col_target_genes="target_genes",
 
 def perform_gsea(adata, key_condition="Perturbed", 
                  filter_by_highly_variable=False, **kwargs):
-    """Perform a gene set enrichment analysis (adapted from SC Best Practices)."""
+    """
+    Perform gene set enrichment analysis 
+    (adapted from SC Best Practices).
+    """
     
     # Extract DEGs
     if filter_by_highly_variable is True:

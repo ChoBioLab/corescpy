@@ -51,18 +51,19 @@ def cluster(adata, layer=None,
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
             kws_pca, kws_neighbors, kws_umap, kws_cluster]]
-    if "use_highly_variable" not in kws_pca:
-        kws_pca["use_highly_variable"] = True  # default = use highly variable
-    print("\n\n<<< PERFORMING PCA >>>")
-    if len(kws_pca) > 0:
-        print("\n", kws_pca)
-    if "use_highly_variable" in kws_pca and "highly_variable" not in ann.var:
-        warnings.warn("""use_highly_variable set to True, 
-                      but 'highly_variable' not found in `adata.var`""")
-        kws_pca["use_highly_variable"] = False
-    sc.pp.pca(ann, **kws_pca)  # dimensionality reduction (PCA)
-    print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n"
-          f"{kws_neighbors if kws_neighbors else ''}")
+    if kws_pca is not False:  # unless indicated not to run PCA
+        if "use_highly_variable" not in kws_pca:  # default = use HVGs
+            kws_pca["use_highly_variable"] = True
+        print("\n\n<<< PERFORMING PCA >>>")
+        if len(kws_pca) > 0:
+            print("\n", kws_pca)
+        if "use_highly_variable" in kws_pca and "highly_variable" not in ann.var:
+            warnings.warn("""use_highly_variable set to True, 
+                        but 'highly_variable' not found in `adata.var`""")
+            kws_pca["use_highly_variable"] = False
+        sc.pp.pca(ann, **kws_pca)  # dimensionality reduction (PCA)
+        print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n"
+            f"{kws_neighbors if kws_neighbors else ''}")
     sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
     print(f"\n\n<<< EMBEDDING: UMAP >>>")
     if kws_umap:

@@ -340,36 +340,52 @@ class Crispr(object):
                 **kws_process_guide_rna}
             if kws_process_guide_rna else None)  # make AnnData
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-        
-        # Check Arguments & Data
-        if any((x in self.rna.obs for x in [
-            col_guide_rna, col_perturbed, col_condition])):
-            if col_perturbed in self.rna.obs and (
-                col_condition in self.rna.obs):
-                pass
-            elif col_perturbed in self.rna.obs:
-                warnings.warn(f"col_perturbed {col_perturbed} already "
-                              " in `.obs`. Assuming perturbation is binary "
-                              "(i.e., only has two conditions, including "
-                              "control), so col_condition will be "
-                              "equivalent.")
-                self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_perturbed]
+        if kws_process_guide_rna and "guide_split" in kws_process_guide_rna:
+            self.info["guide_rna"]["guide_split"] = kws_process_guide_rna[
+                "guide_split"]
+        elif "guide_split" in self.rna.obs:
+            self.info["guide_rna"]["guide_split"] = str(
+                self.rna.obs["guide_split"].iloc[0])
         else:
-            raise ValueError("col_condition or "
-                             "col_guide_rna must be in `.obs`.")
-        print(self.adata.obs, "\n\n") if assay else None
-        print("\n\n", self.rna.obs)
+            self.info["guide_rna"]["guide_split"] = None
+        if kws_process_guide_rna and "feature_split" in kws_process_guide_rna:
+            self.info["guide_rna"]["feature_split"] = kws_process_guide_rna[
+                "feature_split"]
+        elif "feature_split" in self.rna.obs:
+            self.info["guide_rna"]["feature_split"] = str(
+                self.rna.obs["feature_split"].iloc[0])
+        else:
+            self.info["guide_rna"]["feature_split"] = None
+        print(self.adata, "\n\n") if assay else None
+        
+        # # Check Arguments & Data
+        # if any((x in self.rna.obs for x in [
+        #     col_guide_rna, col_perturbed, col_condition])):
+        #     if col_perturbed in self.rna.obs and (
+        #         col_condition in self.rna.obs):
+        #         pass
+        #     elif col_perturbed in self.rna.obs:
+        #         warnings.warn(f"col_perturbed {col_perturbed} already "
+        #                       " in `.obs`. Assuming perturbation is binary "
+        #                       "(i.e., only has two conditions, including "
+        #                       "control), so col_condition will be "
+        #                       "equivalent.")
+        #         self.rna.obs.loc[:, col_condition] = self.rna.obs[
+        #             col_perturbed]
+        # else:
+        #     raise ValueError("col_condition or "
+        #                      "col_guide_rna must be in `.obs`.")
+        # print(self.adata.obs, "\n\n") if assay else None
 
-        # Binary Perturbation Column
-        if (col_perturbed not in 
-            self.rna.obs):  # if col_perturbed doesn't exist yet...
-            self.rna.obs = self.rna.obs.join(
-                self.rna.obs[col_condition].apply(
-                    lambda x: x if pd.isnull(x) else key_control if (
-                        x == key_control) else key_treatment
-                    ).to_frame(col_perturbed), lsuffix="_original"
-                )  # create binary form of col_condition
+        # # Binary Perturbation Column
+        # if (col_perturbed not in 
+        #     self.rna.obs):  # if col_perturbed doesn't exist yet...
+        #     self.rna.obs = self.rna.obs.join(
+        #         self.rna.obs[col_condition].apply(
+        #             lambda x: x if pd.isnull(x) else key_control if (
+        #                 x == key_control) else key_treatment
+        #             ).to_frame(col_perturbed), lsuffix="_original"
+        #         )  # create binary form of col_condition
         
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
@@ -377,7 +393,8 @@ class Crispr(object):
             col_target_genes=col_condition, col_perturbed=col_perturbed, 
             col_cell_type=col_cell_type, col_sample_id=col_sample_id, 
             col_batch=col_batch if col_batch else col_sample_arg,
-            col_guide_rna=col_guide_rna, col_num_umis=col_num_umis)
+            col_guide_rna=col_guide_rna, col_num_umis=col_num_umis,
+            col_guide_split="guide_split")
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment, 
                           key_nonperturbed=key_nonperturbed)
@@ -796,14 +813,16 @@ class Crispr(object):
             assay=assay, assay_protein=assay_protein,
             col_cell_type=col_cell_type,
             target_gene_idents=target_gene_idents,
-            min_de_genes=min_de_genes, col_split_by=col_split_by, 
-            plot=plot, **kwargs)
+            min_de_genes=min_de_genes, col_split_by=col_split_by, plot=plot, 
+            guide_split=self.info["guide_rna"]["guide_split"], 
+            feature_split=self.info["guide_rna"]["feature_split"], 
+            **kwargs)
         if copy is False:  # store results
             self.figures.update({"mixscape": figs_mix})
-            self.results["mixscape"] = adata_pert
-            for x in adata_pert.uns:
-                self.rna.uns[x] = adata_pert.uns[x]
-        return figs_mix
+            self.rna = adata_pert
+            return figs_mix
+        else:
+            return adata_pert, figs_mix
     
     def run_augur(self, assay=None, layer=None,
                   classifier="random_forest_classifier", 
@@ -1028,6 +1047,7 @@ class Crispr(object):
              title=None,  # NOTE: will apply to multiple plots
              layers="all",
              marker_genes_dict=None,
+             kws_qc=True,
              kws_gex=None, kws_clustering=None, 
              kws_gex_violin=None, kws_gex_matrix=None, **kwargs):
         """Create a variety of plots."""
@@ -1079,6 +1099,10 @@ class Crispr(object):
         if "preprocessing" in self.figures:
             print("\n<<< PLOTTING PRE-PROCESSING >>>")
             figs["preprocessing"] = self.figures["preprocessing"]
+        if kws_qc:
+            if kws_qc is True:
+                kws_qc = {"hue": [self._columns["col_sample_id"]]}
+            cr.pp.perform_qc(self.adata.copy(), **kws_qc)  # plot QC
             
         # Gene Expression Heatmap(s)
         if kws_gex is None:
@@ -1228,7 +1252,7 @@ class Crispr(object):
             kws_clustering.update({"palette": COLOR_PALETTE})
         if "color_map" not in kws_clustering:
             kws_clustering.update({"color_map": COLOR_MAP})
-        if "legend_loc" no in kws_clustering:
+        if "legend_loc" not in kws_clustering:
             kws_clustering.update({"legend_loc": "on_data"})
         if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
             print("\n<<< PLOTTING UMAP >>>")

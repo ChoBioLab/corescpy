@@ -137,8 +137,9 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         )  # process (e.g., multi-probe names) & filter by # gRNA
     
     # Add Results to AnnData
-    if "feature_split" not in kws_pga:
-        kws_pga["feature_split"] = None
+    for x in ["feature_split", "guide_split"]:
+        if x not in kws_pga:
+            kws_pga[x] = None
     try:
         tg_info = tg_info.loc[ann.obs.index]
     except Exception as err:
@@ -194,6 +195,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     ann = remove_guide_counts_from_gex(ann, col_guide_rna, key_ignore=k_i)
     ann.uns["grna_keywords"], ann.uns["grna_feats_n"] = kws_pga, feats_n
     ann.uns["grna_info"], ann.uns["grna_info_all"] = tg_info, tg_info_all
+    ann.obs = ann.obs.assign(guide_split=kws_pga["guide_split"]
+                             )  # make sure guide split in `.obs`
     return ann
 
 
