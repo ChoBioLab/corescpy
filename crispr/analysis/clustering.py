@@ -17,6 +17,7 @@ import scanpy as sc
 
 def cluster(adata, layer=None,
             plot=True, colors=None,
+            model_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden",
             kws_pca=None, kws_neighbors=None, 
@@ -99,6 +100,11 @@ def cluster(adata, layer=None,
                     [method_cluster] + list(colors))))  # UMAP extra panels
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
+    if model_celltypist is not None:
+        ann.uns["celltypist"], figs["celltypist"] = perform_celltypist(
+            model=model_celltypist)  # celltypist annotations
+        ann.obs = ann.obs.join(ann.uns["celltypist"].predicted_labels, 
+                               lsuffix="_last")  # to data
     return ann, figs
 
 

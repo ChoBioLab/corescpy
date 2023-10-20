@@ -2,7 +2,6 @@ from .preprocessing import (create_object,
                             create_object_multi,
                             get_layer_dict,
                             process_data,
-                            integrate,
                             z_normalize_by_reference,
                             perform_qc, 
                             filter_qc)

@@ -77,16 +77,17 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
             adata, col_id, basis="X_pca", 
             adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
         adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
+        adata.uns["harmony"] = True
     return adata
 
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
-                  col_barcode=None, col_sample_id=None, 
-                  kws_process_guide_rna=None, plot=True, **kwargs):
+                  col_sample_id=None, kws_process_guide_rna=None, 
+                  **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
-    layers = cr.pp.get_layer_dict()  # standard layer names
+    # Load Object (or Copy if Already AnnData or MuData)
     if isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
         print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
@@ -95,7 +96,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         print(f"\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = cr.pp.combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, 
-            col_barcode=col_barcode, **kwargs)  # + metadata from protospacer
+            **kwargs)  # + metadata from protospacer
     elif not isinstance(file, (str, os.PathLike)):  # if already AnnData
         print(f"\n<<< LOADING OBJECT >>>")
         adata = file.copy()
@@ -111,6 +112,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     else:
         print(f"\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
+    
+    # Formatting & Initial QC Visualization
     adata.var_names_make_unique()
     adata.obs_names_make_unique()
     cr.tl.print_counts(adata, title="Raw")
@@ -119,7 +122,10 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
             adata[assay] = adata[assay].var.rename_axis(col_gene_symbols) 
         else:
             adata.var = adata.var.rename_axis(col_gene_symbols)
-    if kws_process_guide_rna:  # process guide RNA
+    cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
+    
+    # Process Guide RNA
+    if kws_process_guide_rna:
         if assay:
             adata[assay]  = cr.pp.process_guide_rna(
                 adata[assay], **kws_process_guide_rna)
@@ -130,12 +136,13 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         cr.tl.print_counts(adata[assay] if assay else adata, 
                            title="Post-Guide RNA Processing", group_by=cct)
         # TODO: FIGURE
+    
+    # Layers & QC
+    layers = cr.pp.get_layer_dict()  # standard layer names
     if assay: 
         adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
     else:
         adata.layers[layers["counts"]] = adata.X.copy()
-    if plot is True:
-        cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
     print("\n\n", adata)
     return adata
     
@@ -397,7 +404,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...") 
     for k in patterns:
         try:
-            adata.var[k] = adata.var_names.str.startswith(patterns[k])
+            gvars = adata.var_names.str.startswith(patterns[k])
+            if len(gvars) > 0:
+                adata.var[k] = gvars
         except Exception as err:
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     qc_vars = list(set(patterns.keys()).intersection(
