@@ -73,111 +73,21 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
     if kws_harmony is not None:
         print(f"\n<<< INTEGRATING WITH HARMONY >>>")
         sc.tl.pca(adata)  # PCA
-        adata = sc.external.pp.harmony_integrate(
+        sc.external.pp.harmony_integrate(
             adata, col_id, basis="X_pca", 
             adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
         adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
     return adata
 
 
-def integrate(file, assay=None, col_sample_id="unique.ident", 
-              col_gene_symbols=None, kws_concat=None, 
-              kws_process_guide_rna=None, kws_harmony=None,
-              **kwargs):
-    """Concatenate and (optionally) integrate multiple datasets.
-
-    Args:
-        file (dict): A dictionary, keyed by sample/batch IDs,
-            with each entry containing the object to pass to the 
-            `create_object()` function 
-            (str, dict of keyword arguments, AnnData, etc.)
-        assay (str or list, optional): For multi-modal data, 
-            the name of the gene expression assay. String if the same
-            for all batches; otherwise, a list. Defaults to None.
-        col_sample_id (str, optional): Desired column name for the 
-            sample/batch IDs. Defaults to "unique.ident".
-        col_gene_symbols (str or list, optional): Name of column
-            containing the gene symbols. String if the same
-            for all batches; otherwise, a list. Defaults to None.
-        kws_concat (dict, optional): Dictionary of keyword arguments 
-            to pass to the AnnData concatenate function. 
-            Defaults to None.
-        kws_process_guide_rna (dict or list, optional): Keyword 
-            arguments to pass to the function processing the guide RNA. 
-            String if the same for all batches; otherwise, a list. 
-            Defaults to None.
-        kws_harmony (dict, optional): Dictionary of keyword arguments
-            to pass to `harmonypy.run_harmony()`. Defaults to None.
-
-    Returns:
-        AnnData: Concatenated/integrated object
-    """
-    if kws_concat is None:
-        kws_concat = {}
-    adatas = [None] * len(file)
-    harmony = kws_harmony is not None
-    batch_categories = list(file.keys())  # keys = sample IDs
-    file = [file[f] for f in file]  # turn to list 
-    print(f"\n<<< INTEGRATING{['', ' (HARMONY)'][int(harmony)]} >>>")
-    for f in range(len(file)):
-        print(f"\n\n\t*** Creating object {f + 1} of {len(file)}")
-        kpr = kws_process_guide_rna[f] if isinstance(
-            kws_process_guide_rna, list) else kws_process_guide_rna
-        asy = assay if isinstance(
-            assay, str) or assay is None else assay[f]  # GEX/RNA assay 
-        cgs = col_gene_symbols if isinstance(col_gene_symbols, str) or (
-            col_gene_symbols is None) else col_gene_symbols[f]  # symbols
-        adatas[f] = cr.pp.create_object(
-            file[f], assay=asy, col_gene_symbols=cgs, col_sample_id=None,
-            kws_process_guide_rna=kpr, plot=False,
-            **kwargs)  # AnnData
-        print(f"\n<<< CONCATENATING FILES {file} >>>")
-    # adata = anndata.concat(
-    #     adatas, label=col_sample_id, keys=batch_categories, 
-    #     **{**dict(join="outer", uns_merge="unique", index_unique="-",
-    #                 fill_value=None), **kws_concat})  # concatenate batches
-    adata = AnnData.concatenate(
-        *adatas, join="outer", batch_key=col_sample_id,
-        batch_categories=batch_categories, **{
-            **dict(uns_merge="same", index_unique="-", fill_value=None), 
-            **kws_concat})  # concatenate AnnData objects
-    if kws_harmony is not None:
-        print(f"\n<<< INTEGRATING WITH HARMONY >>>")
-        sc.tl.pca(adata)  # PCA
-        adata = sc.external.pp.harmony_integrate(
-            adata, col_sample_id, basis="X_pca", 
-            adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
-        adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
-    adata.varm["guide_rna"]["keywords"] = kws_process_guide_rna
-    return adata
-
-
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   col_barcode=None, col_sample_id=None, 
-                  kws_process_guide_rna=None, 
-                  kws_concat=None, plot=True, **kwargs):
+                  kws_process_guide_rna=None, plot=True, **kwargs):
     """
-    Create object from Scanpy- or Muon-compatible file(s).
-    
-    Provide as a dictionary (keyed by your desired 
-    subject/sample names) consisting of whatever objects you would pass 
-    to `create_object()`'s `file` argument if you want to concatenate
-    multiple datasets. You must also specify col_sample (a string
-    with the desired name of the sample/subject ID column). The 
-    other arguments of this function can be specified as normal
-    if they are common across samples; otherwise, specify them as 
-    lists in the same order as the `file` dictionary.
+    Create object from Scanpy- or Muon-compatible file(s) or object.
     """
     layers = cr.pp.get_layer_dict()  # standard layer names
-    if col_sample_id is not None:  # concatenate multiple datasets
-        adata = cr.pp.integrate(
-            file, assay=assay, col_sample_id=col_sample_id, 
-            kws_concat=kws_concat, col_gene_symbols=col_gene_symbols, 
-            kws_process_guide_rna=kws_process_guide_rna, 
-            harmony=False, **kwargs
-            )  # concatenate datasets
-        kws_process_guide_rna = None  # don't perform again on concatenated
-    elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
+    if isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
         print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)

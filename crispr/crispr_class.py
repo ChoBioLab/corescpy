@@ -7,12 +7,11 @@
 
 import scanpy as sc
 # import subprocess
-import os
 import warnings
 import matplotlib.pyplot as plt
 import seaborn as sns
 # import re
-import muon
+import copy
 import pertpy as pt
 import crispr as cr
 from crispr.defaults import (names_layers)
@@ -23,28 +22,28 @@ COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 
 
+def get_default_init(key):
+    """Get default Crispr initialization arguments."""
+    kws_init_default = dict(
+        assay=None, assay_protein=None, col_gene_symbols="gene_symbols", 
+        col_cell_type="leiden", col_sample_id="standard_sample_id", 
+        col_batch=None, col_condition="perturbation",
+        col_perturbed="perturbation", col_guide_rna="guide_ids",
+        col_num_umis="num_umis", key_control="NT", key_treatment="KO", 
+        key_nonperturbed="NP", kws_process_guide_rna=None,
+        remove_multi_transfected=True)
+    if key is None:
+        return list(kws_init_default.keys())
+    else:
+        return kws_init_default[key] if key in kws_init_default else None
+
+
 class Crispr(object):
     """An object class for CRISPR analysis and visualization."""
     
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
-    def __init__(self, file_path, 
-                 assay=None, 
-                 assay_protein=None,
-                 col_gene_symbols="gene_symbols", 
-                 col_cell_type="leiden",
-                 col_sample_id="standard_sample_id", 
-                 col_batch=None,
-                 col_condition="perturbation",
-                 col_perturbed="perturbation",
-                 col_guide_rna="guide_ids",
-                 col_num_umis="num_umis",
-                 key_control="NT", 
-                 key_treatment="KO", 
-                 key_nonperturbed="NP", 
-                 kws_process_guide_rna=None,
-                 remove_multi_transfected=True,
-                 **kwargs):
+    def __init__(self, file_path, **kwargs):
         """Initialize Crispr class object.
 
         Args:
@@ -76,6 +75,29 @@ class Crispr(object):
                         specified as normal if they are common across 
                         samples; otherwise, specify them as lists in 
                         the same order as the `file` dictionary. 
+            **kwargs (dict, optional): Object creation keyword 
+                arguments. 
+                - (a) A dictionary, keyed by 
+                    "kws_init," "kws_pp," "kws_cluster,"
+                    and "kws_harmony," containing
+                    keyword arguments to pass to Crispr initialization, 
+                    preprocessing, and clustering methods, and to 
+                    Harmony integration, respectively. 
+                    Each of these can be a single dictionary, or a 
+                    list in the same order as `kws_init['file_path']` 
+                    (which should be keyed by subject/batch IDs) to
+                    have different argument sets across data sources. 
+                    Defaults to None (single dataset case).
+                - (b) Keyword arguments as outlined in 
+                    `get_default_init()` if only using a 
+                    single data source.
+                The details are documented in the argument
+                descriptions below. The arguments documented below
+                should be passed directly (for a single data source),
+                or if passing a `file_path` argument corresponding to 
+                multiple data sources, should be combined into a 
+                a dictionary passed through an argument "kws_init".
+                (See below examples section.)
             assay (str, optional): Name of the gene expression assay if 
                 loading a multi-modal data object (e.g., "rna"). 
                 Defaults to None.
@@ -287,28 +309,79 @@ class Crispr(object):
                         the argument would be "-" so the function can 
                         identify all of those as targeting STAT1. 
                         Defaults to "-".
-            remove_multi_transfected (bool, optional): In designs with 
-                multiple guides per cell, remove multiply-transfected 
-                cells (i.e., cells where more than one target 
-                guide survived application of any filtering criteria set 
-                in `kws_process_guide_rna`). If 
-                `kws_process_guide_rna["max_percent_umis_control_drop"]` 
-                is greater than 0, then cells with one target guide and 
-                control guides which together make up less than 
-                `max_percent_umis_control_drop`% of total UMI counts 
-                will be considered pseudo-single-transfected for the 
-                target guide. Defaults to True. Some functionality may 
-                be limited and/or problems occur if set to False and if 
-                multiply-transfected cells remain in data. 
+                    - `remove_multi_transfected` (bool, optional): In 
+                        designs with multiple guides per cell, remove 
+                        multiply-transfected cells (i.e., cells where 
+                        more than one target guide survived application 
+                        of any filtering criteria set in 
+                        `kws_process_guide_rna`). If 
+                        `kws_process_guide_rna[
+                        "max_percent_umis_control_drop"]` 
+                        is greater than 0, then cells with one target 
+                        guide and control guides which together make up 
+                        less than `max_percent_umis_control_drop`% of 
+                        total UMI counts will be considered 
+                        pseudo-single-transfected for the 
+                        target guide. Defaults to True. 
+                        Some functionality may be limited and/or 
+                        problems occur if set to False and if 
+                        multiply-transfected cells remain in data. 
         """
-        print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
-        self._assay = assay
-        self._assay_protein = assay_protein
-        self._file_path = file_path
+        # Set Up Arguments
+        self._integrated = "kws_init" in kwargs  # multi-data source?
+        if self._integrated is True:
+            print("\n\n<<< INTEGRATING DATASETS >>>\n")
+            kws_init, kws_pp, kws_cluster, kws_harmony = [
+                {**kwargs[x]} if x in kwargs else None for x in [
+                    "kws_init", "kws_pp", "kws_cluster", "kws_harmony"]]
+        else:
+            kws_init = {**kwargs}
+        args = get_default_init(None)
+        for x in args:
+            if x not in kws_init:
+                kws_init[x] = get_default_init(x)
+        self._assay, self._assay_protein = [
+            kws_init[f"assay{x}"] if "assay" in kws_init else None 
+            for x in ["", "_protein"]]  # extract assay arguments
+        if "assay_protein" in kws_init:
+            _ = kws_init.pop("assay_protein")
+            
+        # Add Guide Processing Arguments Duplicative of Initialization Ones
+        kws_pg = kws_init["kws_process_guide_rna"] if \
+            "kws_process_guide_rna" in kws_init else None
+        if kws_pg:  # if specified any guide-processing RNA arguments
+            kws_pg_extra = ["col_guide_rna", "col_num_umis", "key_control", 
+                            "col_guide_rna_new", "remove_multi_transfected"]
+            for x in kws_pg_extra:
+                if x not in kws_pg and x in kws_init:
+                    kws_pg[x] = kws_init[x]
+        kws_init["kws_process_guide_rna"] = kws_pg
+        
+        # Separate Arguments Used in Object Initialization vs. Creation
+        kws_obj = {}
+        for x in ["col_cell_type", "col_batch", "col_perturbed",
+                  "col_guide_rna", "col_num_umis", "col_condition", 
+                  "key_control", "key_treatment", "key_nonperturbed"]:
+            if x in kws_init:
+                kws_obj[x] = kws_init.pop(x)  # don't want to pass to create
+            elif x in kws_pg:
+                kws_obj[x] = copy.deepcopy(kws_pg[x]
+                                           )  # still keep for gRNA processing
+            
+        # Integrate Datasets if Needed or Create Single One
+        if self._integrated is True:
+            self.adata = cr.pp.create_object_multi(
+                file_path, kws_init=kws_init, kws_pp=kws_pp, 
+                kws_cluster=kws_cluster, kws_harmony=kws_harmony
+                )  # create integrated AnnData object to pass to create_object
+            cr.pp.perform_qc(self.adata.copy(), hue=kws_init["col_sample_id"])
+            print("\n\n<<< INITIALIZING INTEGRATED CRISPR CLASS OBJECT >>>\n")
+        else:
+            print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
+            print(kws_init)
+            self.adata = cr.pp.create_object(file_path, **kws_init)  # adata
         self._layers = {**cr.pp.get_layer_dict(), 
                         "layer_perturbation": "X_pert"}
-        if kwargs:
-            print(f"\nUnused keyword arguments: {kwargs}.\n")
         
         # Create Attributes to Store Results/Figures
         self.figures = {"main": {}}
@@ -318,47 +391,27 @@ class Crispr(object):
                      "methods": {}}  # extra info to store post-use of methods
         
         # Create Object & Store Raw Counts
-        if isinstance(col_sample_id, (list, tuple)):  # multi-dataset
-            col_sample_id, kws_concat = col_sample_id
-            col_sample_arg = col_sample_id
-            self._integrated = False
-        else:  # only 1 dataset
-            kws_concat = None
-            col_sample_arg = None  # even if col_sample_id is specified...
-            # ...we don't want to pass to create_object because it will
-            # assume we need that column created through concatenation
-            # when it's actually already in the dataset
-            self._integrated = True
-        self.adata = cr.pp.create_object(
-            self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
-            col_sample_id=col_sample_arg, kws_concat=kws_concat,
-            kws_process_guide_rna={
-                "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis, 
-                "key_control": key_control, 
-                "col_guide_rna_new": col_condition, 
-                "remove_multi_transfected": remove_multi_transfected, 
-                **kws_process_guide_rna}
-            if kws_process_guide_rna else None)  # make AnnData
-        self.info["guide_rna"]["keywords"] = kws_process_guide_rna
-        if kws_process_guide_rna and "guide_split" in kws_process_guide_rna:
-            self.info["guide_rna"]["guide_split"] = kws_process_guide_rna[
-                "guide_split"]
+        self.info["guide_rna"]["keywords"] = kws_pg
+        if kws_pg and "guide_split" in kws_pg:
+            self.info["guide_rna"]["guide_split"] = kws_pg["guide_split"]
         elif "guide_split" in self.rna.obs:
             self.info["guide_rna"]["guide_split"] = str(
                 self.rna.obs["guide_split"].iloc[0])
         else:
             self.info["guide_rna"]["guide_split"] = None
-        if kws_process_guide_rna and "feature_split" in kws_process_guide_rna:
-            self.info["guide_rna"]["feature_split"] = kws_process_guide_rna[
-                "feature_split"]
+        if kws_pg and "feature_split" in kws_pg:
+            self.info["guide_rna"]["feature_split"] = kws_pg["feature_split"]
         elif "feature_split" in self.rna.obs:
             self.info["guide_rna"]["feature_split"] = str(
                 self.rna.obs["feature_split"].iloc[0])
         else:
             self.info["guide_rna"]["feature_split"] = None
-        print(self.adata, "\n\n") if assay else None
         
         # Check Arguments & Data
+        col_guide_rna, col_perturbed, col_condition = [kws_obj[x] for x in [
+            "col_guide_rna", "col_perturbed", "col_condition"]]
+        key_control, key_treatment, key_nonperturbed = [kws_obj[x] for x in [
+            "key_control", "key_treatment", "key_nonperturbed"]]
         if any((x in self.rna.obs for x in [
             col_guide_rna, col_perturbed, col_condition])):
             if col_perturbed in self.rna.obs and (
@@ -375,7 +428,6 @@ class Crispr(object):
         else:
             raise ValueError("col_condition or "
                              "col_guide_rna must be in `.obs`.")
-        print(self.adata.obs, "\n\n") if assay else None
 
         # Binary Perturbation Column
         if (col_perturbed not in 
@@ -389,25 +441,24 @@ class Crispr(object):
         
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
-            col_gene_symbols=col_gene_symbols, col_condition=col_condition,
-            col_target_genes=col_condition, col_perturbed=col_perturbed, 
-            col_cell_type=col_cell_type, col_sample_id=col_sample_id, 
-            col_batch=col_batch if col_batch else col_sample_arg,
-            col_guide_rna=col_guide_rna, col_num_umis=col_num_umis,
-            col_guide_split="guide_split")
+            col_gene_symbols=kws_obj["col_gene_symbols"], 
+            col_condition=col_condition,
+            col_target_genes=col_condition, 
+            col_perturbed=col_perturbed, 
+            col_cell_type=kws_obj["col_cell_type"], 
+            col_sample_id=kws_obj["col_sample_id"],
+            col_guide_rna=col_guide_rna, 
+            col_num_umis=kws_obj["col_num_umis"])
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment, 
                           key_nonperturbed=key_nonperturbed)
+        
+        # Print Information
+        print(self.adata, "\n\n") if kws_init["assay"] else None
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
         print("\n\n", self.rna)
-        if "raw" not in dir(self.rna):
-            self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
-        
-        # Correct 10x CellRanger Guide Count Incorporation
-        # raise NotImplementedError(
-        #     "Delete guides from var_names not yet implemented!")
 
     @property
     def rna(self):
