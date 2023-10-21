@@ -65,7 +65,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
                 hm_title += f" ({title})"
             try:
                 figs[lab] = sc.pl.heatmap(
-                    adata, genes, lab_cluster, layer=i, show=False, 
+                    adata, genes, layer=i, show=False, layer=i, 
                     gene_symbols=col_gene_symbols, **kws_hm)  # heatmap
                 # axes_gex[j].set_title(i.capitalize() if i else None)
                 figs[lab] = plt.gcf(), figs[lab]
