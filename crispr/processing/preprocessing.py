@@ -49,7 +49,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
 
     # Create AnnData Objects
     selves = dict(zip(file_path, [
-        cr.Crispr(file_path[f], **kws_init[f]) for f in file_path])
+        cr.Omics(file_path[f], **kws_init[f]) for f in file_path])
                   )  # create individual Crispr objects
 
     # Preprocessing & Clustering

@@ -17,6 +17,9 @@ import math
 import pandas as pd
 import numpy as np
 
+COLOR_PALETTE = "tab20"
+COLOR_MAP = "coolwarm"
+
 
 def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
     """Make plots facetted/split by cell type/cluster."""
@@ -81,3 +84,62 @@ def square_grid(number):
 #     except Exception as err:
 #         figs["qc_log"] = err
 #         print(err)
+
+
+def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None, 
+              legend_loc="on_data", genes=None, col_gene_symbols=None, 
+              cell_types_circle=None, **kwargs):
+    """Make UMAP-based plots."""
+    figs = {}
+    if "cmap" in kwargs:  # in case use wrong form of argument
+        kwargs["color_map"] = kwargs.pop("cmap")
+    kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE, 
+              "frameon": False, **kwargs}
+    if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
+        print("\n<<< PLOTTING UMAP >>>")
+        try:
+            figs["clustering"] = sc.pl.umap(
+                adata, color=col_cell_type, return_fig=True, 
+                title=title,  **kwargs)  # UMAP ~ cell type
+        except Exception as err:
+            warnings.warn(f"{err}\n\nCould not plot UMAP clusters.")
+            figs["clustering"] = err
+        if genes is not None:
+            print("\n<<< PLOTTING GEX ON UMAP >>>")
+            try:
+                figs["clustering_gene_expression"] = sc.pl.umap(
+                    adata, title=genes, return_fig=True, 
+                    gene_symbols=col_gene_symbols, color=genes,
+                    legend_loc=legend_loc, **kwargs)  # UMAP ~ GEX
+            except Exception as err:
+                warnings.warn(f"{err}\n\nCould not plot GEX UMAP.")
+                figs["clustering_gene_expression"] = err
+        if color is not None:
+            print(f"\n<<< PLOTTING {color} on UMAP >>>")
+            try:
+                figs[f"clustering_{color}"] = sc.pl.umap(
+                    adata, title=title if title else None, 
+                    return_fig=True, color=color, **kwargs)  # UMAP ~ GEX
+            except Exception as err:
+                warnings.warn(f"{err}\n\nCould not plot UMAP ~ {color}.")
+                figs[f"clustering_{color}"] = err
+        if cell_types_circle and "X_umap" in adata.obsm:
+            figs["circled"], axu = plt.subplots(figsize=(3, 3))
+            sc.pl.umap(adata, color=[col_cell_type], ax=axu, show=False)
+            for h in cell_types_circle:  # circle cell type
+                locs = adata[adata.obs[col_cell_type] == h, :].obsm['X_umap']
+                coordinates = [locs[:, i].mean() for i in [0, 1]]
+                circle = plt.Circle(tuple(coordinates), 1.5, color="r", 
+                                    clip_on=False, fill=False)  # circle
+                axu.add_patch(circle)
+            # l_1 = axu.get_legend()  # save original Legend
+            # l_1.set_title(lab_cluster)
+            # # Make a new Legend for the mark
+            # l_2 = axu.legend(handles=[Line2D(
+            #     [0],[0],marker="o", color="k", markerfacecolor="none", 
+            #     markersize=12, markeredgecolor="r", lw=0, 
+            #     label="selected")], frameon=False, 
+            #                 bbox_to_anchor=(3,1), title='Annotation')
+            #     # Add back the original Legend (was overwritten by new)
+            # _ = plt.gca().add_artist(l_1)
+        return figs

@@ -7,6 +7,8 @@
 
 import scanpy as sc
 import seaborn as sns
+import pertpy as pt
+import copy
 import crispr as cr
 
 COLOR_PALETTE = "tab20"
@@ -23,7 +25,7 @@ class Omics(object):
         col_gene_symbols="gene_symbols", col_cell_type="leiden", 
         col_sample_id="standard_sample_id", 
         col_condition=None, key_control=None, key_treatment=None, 
-        **kwargs):
+        kws_multi=None, **kwargs):
         """
         Initialize Omics class object.
 
@@ -102,9 +104,19 @@ class Omics(object):
                      "methods": {}}  # extra info to store post-use of methods
         
         # Create Object & Store Raw Counts
-        self.adata = cr.pp.create_object(
-            self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
-            col_sample_id=col_sample_id, **kwargs)  # make AnnData
+        if kws_multi:
+            self.adata = cr.pp.create_object_multi(
+                file_path, kws_init=dict(
+                    assay=assay, assay_protein=assay_protein, 
+                    col_gene_symbols=col_gene_symbols, 
+                    col_cell_type=col_cell_type, 
+                    col_sample_id=col_sample_id, **kwargs),
+                **kws_multi)  # create integrated object
+        else:
+            self.adata = cr.pp.create_object(
+                self._file_path, assay=assay, 
+                col_gene_symbols=col_gene_symbols,
+                col_sample_id=col_sample_id, **kwargs)  # make AnnData
         print(self.adata.obs, "\n\n") if assay else None
         
         # Store Columns & Keys within Columns as Dictionary Attributes
@@ -260,7 +272,7 @@ class Omics(object):
                 
     def cluster(self, assay=None, method_cluster="leiden", 
                 model_celltypist=None,
-                plot=True, colors=None, paga=False, 
+                plot=True, colors=None,
                 kws_pca=None, kws_neighbors=None, 
                 kws_umap=None, kws_cluster=None, 
                 copy=False, **kwargs):
@@ -281,13 +293,26 @@ class Omics(object):
             self.rna.copy() if copy is True else self.rna, 
             assay=assay, method_cluster=method_cluster,
             **self._columns, **self._keys,
-            plot=plot, colors=colors, paga=paga, 
+            plot=plot, colors=colors, model_celltypist=model_celltypist,
             kws_pca=kws_pca, kws_neighbors=kws_neighbors,
             kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
         if copy is False:
             self.figures.update({"clustering": figs_cl})
             self.rna = adata
         return figs_cl
+    
+    def annotate_clusters(self, model, copy=False, **kwargs):
+        """Use CellTypist to annotate clusters."""
+        preds, ct_dot = cr.ax.perform_celltypist(
+            self.rna.copy() if copy is True else self.rna, model, 
+            majority_voting=True, **kwargs)  # annotate
+        self.results["celltypist"] = preds
+        if copy is False:
+            self.rna.obs = self.rna.obs.join(preds.predicted_labels,
+                                             lsuffix="_last")
+        sc.pl.umap(self.rna, color=[self._columns["col_cell_type"]] + list(
+            preds.predicted_labels.columns))  # UMAP
+        return preds, ct_dot
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 
@@ -302,18 +327,54 @@ class Omics(object):
             col_cell_type=col_cell_type, **kwargs)
         print(marks)
         return marks, figs_m
-
-
-class Integrated(Omics):    
-    """A class for integrated single cell datasets."""
-    
-    def __init__(file_path, kws_init, kws_pp=None, 
-                 kws_cluster=None, kws_harmony=None):
-        """
-        Integrate multiple datasets into an Omics object.
-        """
-        adata = cr.pp.create_object_multi(
-            file_path, kws_init=kws_init, kws_pp=kws_pp, 
-            kws_cluster=kws_cluster, 
-            kws_harmony=kws_harmony)  # create integrated AnnData object
-        super().__init__(adata, **kws_init)
+            
+    def plot(self, genes=None, genes_highlight=None,
+             marker_genes_dict=None, cell_types_circle=None,
+             kws_qc=True, kws_umap=None, kws_heat=None, kws_violin=None, 
+             kws_matrix=None, kws_dot=None, **kwargs):
+        """Create a variety of plots."""
+        figs = {}
+        cct = kwargs["col_cell_type"] if (
+            "col_cell_type" in kwargs) else self._columns["col_cell_type"] 
+        if genes_highlight and not isinstance(genes_highlight, list):
+            genes_highlight = [genes_highlight] if isinstance(
+                genes_highlight, str) else list(genes_highlight)
+        if cell_types_circle and not isinstance(cell_types_circle, list):
+            cell_types_circle = [cell_types_circle] if isinstance(
+                cell_types_circle, str) else list(cell_types_circle)
+        cgs = self._columns["col_gene_symbols"] if self._columns[
+            "col_gene_symbols"] != self.rna.var.index.names[0] else None
+            
+        # Pre-Processing/QC
+        if "preprocessing" in self.figures:
+            print("\n<<< PLOTTING PRE-PROCESSING >>>")
+            figs["preprocessing"] = self.figures["preprocessing"]
+        if kws_qc:
+            if kws_qc is True:
+                kws_qc = {"hue": [self._columns["col_sample_id"]]}
+            cr.pp.perform_qc(self.adata.copy(), **kws_qc)  # plot QC
+        
+        # Gene Expression
+        kws_umap = {"frameon": False, "legend_loc": "on_data", 
+                    "vcenter": 0, **kws_umap}
+        lab_cluster = kws_umap.pop("col_cell_type") if (
+            "col_cell_type" in kws_umap) else cct
+        figs["gex"] = cr.pl.plot_gex(
+            self.rna, col_cell_type=lab_cluster, genes=list(pd.unique(genes)), 
+            col_gene_symbols=cgs, kind="all", **kws_umap,
+            marker_genes_dict=marker_genes_dict, kws_violin=kws_violin,
+            kws_heat=kws_heat, kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
+            
+        # UMAP
+        kws_umap = {"frameon": False, "legend_loc": "on_data", "vcenter": 0, 
+                    "cell_types_circle": cell_types_circle, **kws_umap}
+        lab_cluster = kws_umap.pop("col_cell_type") if (
+            "col_cell_type" in kws_umap) else cct
+        if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
+            print("\n<<< PLOTTING UMAP >>>")
+            figs["umap"] = cr.pl.plot_umap(
+                self.rna, col_cell_type=lab_cluster, **kws_umap, 
+                genes=list(pd.unique(genes)), col_gene_symbols=cgs)
+        else:
+            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
+        return figs
