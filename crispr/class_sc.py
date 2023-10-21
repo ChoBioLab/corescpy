@@ -10,6 +10,7 @@ import seaborn as sns
 import pertpy as pt
 import copy
 import crispr as cr
+import pandas as pd
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -334,8 +335,12 @@ class Omics(object):
              kws_matrix=None, kws_dot=None, **kwargs):
         """Create a variety of plots."""
         figs = {}
+        if kws_umap is None:
+            kws_umap = {}
         cct = kwargs["col_cell_type"] if (
             "col_cell_type" in kwargs) else self._columns["col_cell_type"] 
+        lab_cluster = kws_umap.pop("col_cell_type") if (
+            "col_cell_type" in kws_umap) else cct
         if genes_highlight and not isinstance(genes_highlight, list):
             genes_highlight = [genes_highlight] if isinstance(
                 genes_highlight, str) else list(genes_highlight)
@@ -346,35 +351,25 @@ class Omics(object):
             "col_gene_symbols"] != self.rna.var.index.names[0] else None
             
         # Pre-Processing/QC
-        if "preprocessing" in self.figures:
-            print("\n<<< PLOTTING PRE-PROCESSING >>>")
-            figs["preprocessing"] = self.figures["preprocessing"]
         if kws_qc:
             if kws_qc is True:
-                kws_qc = {"hue": [self._columns["col_sample_id"]]}
-            cr.pp.perform_qc(self.adata.copy(), **kws_qc)  # plot QC
+                kws_qc = {"hue": self._columns["col_sample_id"]}
+            cr.pp.perform_qc(self.adata.copy(), layer=self._layers["counts"], 
+                             **kws_qc)  # plot QC
         
         # Gene Expression
-        kws_umap = {"frameon": False, "legend_loc": "on_data", 
-                    "vcenter": 0, **kws_umap}
-        lab_cluster = kws_umap.pop("col_cell_type") if (
-            "col_cell_type" in kws_umap) else cct
         figs["gex"] = cr.pl.plot_gex(
-            self.rna, col_cell_type=lab_cluster, genes=list(pd.unique(genes)), 
-            col_gene_symbols=cgs, kind="all", **kws_umap,
-            marker_genes_dict=marker_genes_dict, kws_violin=kws_violin,
-            kws_heat=kws_heat, kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
+            self.rna, col_cell_type=lab_cluster, genes=genes, kind="all", 
+            col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict, 
+            kws_violin=kws_violin, kws_heat=kws_heat, 
+            kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
             
         # UMAP
-        kws_umap = {"frameon": False, "legend_loc": "on_data", "vcenter": 0, 
-                    "cell_types_circle": cell_types_circle, **kws_umap}
-        lab_cluster = kws_umap.pop("col_cell_type") if (
-            "col_cell_type" in kws_umap) else cct
         if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
             print("\n<<< PLOTTING UMAP >>>")
             figs["umap"] = cr.pl.plot_umap(
                 self.rna, col_cell_type=lab_cluster, **kws_umap, 
-                genes=list(pd.unique(genes)), col_gene_symbols=cgs)
+                genes=genes, col_gene_symbols=cgs)
         else:
             print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
         return figs

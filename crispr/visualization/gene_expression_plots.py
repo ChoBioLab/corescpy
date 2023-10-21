@@ -47,7 +47,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
         x in kws_plots) else {} for x in ["heat", "violin", "matrix", "dot"]]
     if not isinstance(genes, (list, np.ndarray)) and (
         genes is None or genes == "all"):
-        genes = list(adata.var_names)  # gene names
+        genes = list(pd.unique(adata.var_names))  # gene names
     else:  # if unspecified, random subset of genes
         if isinstance(genes, (int, float)):
             genes = list(pd.Series(adata.var_names).sample(genes))

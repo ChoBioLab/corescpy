@@ -94,7 +94,8 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
     if "cmap" in kwargs:  # in case use wrong form of argument
         kwargs["color_map"] = kwargs.pop("cmap")
     kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE, 
-              "frameon": False, **kwargs}
+              "frameon": False, "legend_loc": "on_data", 
+              "vcenter": 0, **kwargs}
     if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
         print("\n<<< PLOTTING UMAP >>>")
         try:
@@ -105,6 +106,12 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
             warnings.warn(f"{err}\n\nCould not plot UMAP clusters.")
             figs["clustering"] = err
         if genes is not None:
+            if not isinstance(genes, (list, np.ndarray)) and (
+                genes is None or genes == "all"):
+                genes = list(pd.unique(adata.var_names))  # gene names
+            else:  # if unspecified, random subset of genes
+                if isinstance(genes, (int, float)):
+                    genes = list(pd.Series(adata.var_names).sample(genes))
             print("\n<<< PLOTTING GEX ON UMAP >>>")
             try:
                 figs["clustering_gene_expression"] = sc.pl.umap(

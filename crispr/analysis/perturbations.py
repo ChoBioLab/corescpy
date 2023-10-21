@@ -116,6 +116,7 @@ def perform_mixscape(
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_perturbation_signature is None:
         kws_perturbation_signature = {}
+    key_nonperturbed = "NP"
         
     # Perturbation Signature
     adata_pert = (adata[assay] if assay else adata).copy()
@@ -163,9 +164,6 @@ def perform_mixscape(
                 figs["perturbation_clusters"] = err
                 warnings.warn(f"{err}\n\nCouldn't plot targeting efficiency!")
             for g in target_gene_idents:  # iterate target genes of interest
-                if g not in list(adata_pert.obs["mixscape_class"]):
-                    print(f"\n\nTarget gene {g} not in mixscape_class!")
-                    continue  # skip to next target gene if missing
                 try:
                     figs["DEX_ordered_by_ppp_heat"][
                         g] = pt.pl.ms.heatmap(
@@ -187,12 +185,12 @@ def perform_mixscape(
                     )  # gene: perturbed, NP, control
             figs["ppp_violin"][f"global"] = pt.pl.ms.violin(
                 adata=adata_pert, target_gene_idents=[
-                    key_control, "NP", key_treatment], rotation=45,
-                keys=f"mixscape_class_p_{key_treatment}".lower(),
+                    key_control, key_nonperturbed, key_treatment], 
+                rotation=45, keys=f"mixscape_class_p_{key_treatment}".lower(),
                 groupby="mixscape_class_global")  # same, but global
             try:
                 tg_conds = [key_control] + functools.reduce(
-                    lambda i, j: i + j, [[f"{g} NP", 
+                    lambda i, j: i + j, [[f"{g} {key_nonperturbed}", 
                             f"{g} {key_treatment}"] 
                     for g in target_gene_idents])  # conditions: all genes
                 figs["ppp_violin"]["all"] = pt.pl.ms.violin(
@@ -258,12 +256,14 @@ def perform_mixscape(
     if plot is True and target_gene_idents is not None:  # G/P EX
         figs["perturb_score"] = {}
         for g in target_gene_idents:  # iterate target genes of interest
-            if g not in list(adata_pert.obs["mixscape_class"]):
-                print(f"\n\nTarget gene {g} not in mixscape_class!")
-                continue  # skip to next target gene if missing
-            figs["perturb_score"][g] = pt.pl.ms.perturbscore(
-                adata=adata_pert, labels=col_target_genes, 
-                target_gene=g, color="red")
+            try:
+                figs["perturb_score"][g] = pt.pl.ms.perturbscore(
+                    adata=adata_pert, labels=col_target_genes, 
+                    target_gene=g, color="red", perturbation_type=key_control)
+                figs["perturb_score"][g].draw()
+            except Exception as err:
+                figs["perturb_score"][g] = err
+                warnings.warn(f"{err}\n\nCould not plot scores ({g})!")
         figs["targeting_efficiency"] = cr.pl.plot_targeting_efficiency(
             adata_pert, col_guide_rna=col_guide_rna, key_control=key_control, 
             key_treatment=key_treatment, key_nonperturbed=key_nonperturbed, 

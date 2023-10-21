@@ -6,23 +6,18 @@
 """
 
 import scanpy as sc
-# import subprocess
 import warnings
-import matplotlib.pyplot as plt
 import seaborn as sns
-# import re
-import copy
 import pertpy as pt
 import crispr as cr
-from crispr.defaults import (names_layers)
+from crispr.class_sc import Omics
 import pandas as pd
-import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 
 
-class Crispr:
+class Crispr(Omics):
     """A class for CRISPR analysis and visualization."""
     
     _columns_created = dict(guide_percent="Percent of Cell Guides")
@@ -371,17 +366,20 @@ class Crispr:
                 )  # create binary form of col_condition
         
         # Store Columns & Keys within Columns as Dictionary Attributes
-        self._columns = dict(
+        self._columns = {
             **self._columns,
-            col_gene_symbols=col_gene_symbols, col_condition=col_condition,
-            col_target_genes=col_condition, col_perturbed=col_perturbed, 
-            col_cell_type=col_cell_type, col_sample_id=col_sample_id, 
-            col_guide_rna=col_guide_rna, col_num_umis=col_num_umis,
-            col_guide_split="guide_split")
-        self._keys = dict(**self._keys,
-                          key_control=key_control, 
-                          key_treatment=key_treatment, 
-                          key_nonperturbed=key_nonperturbed)
+            **dict(col_gene_symbols=col_gene_symbols, 
+                   col_condition=col_condition, 
+                   col_target_genes=col_condition, 
+                   col_perturbed=col_perturbed, 
+                   col_cell_type=col_cell_type, 
+                   col_sample_id=col_sample_id, 
+                   col_guide_rna=col_guide_rna, col_num_umis=col_num_umis,
+                   col_guide_split="guide_split")}
+        self._keys = {**self._keys,
+                      **dict(key_control=key_control, 
+                             key_treatment=key_treatment, 
+                             key_nonperturbed=key_nonperturbed)}
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
@@ -454,7 +452,7 @@ class Crispr:
         if group_by:  # join group_by variables from adata
             cols += group_by
         cols = list(pd.unique(cols))
-        dff = self.info["guide_rna_all"].reset_index(
+        dff = self.uns["grna_feats_n"].reset_index(
             "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
             dff = dff[dff[self._columns["col_target_genes"]].isin(
@@ -475,7 +473,7 @@ class Crispr:
         fig.fig.suptitle("Guide RNA Counts" + str(
             f" by {', '.join(group_by)}" if group_by else ""))
         fig.fig.tight_layout()
-        return self.info["guide_rna"]["counts_unfiltered"], fig
+        return fig
         
     def run_mixscape(self, assay=None, assay_protein=None,
                      layer="scaled", col_cell_type=None,
@@ -591,6 +589,8 @@ class Crispr:
             col_cell_type = self._columns["col_cell_type"]
         if "col_cell_type" in kwargs:
             _ = kwargs.pop("col_cell_type")
+        if col_split_by is not False:  # unless explicitly forbid split_by
+            col_split_by = self._columns["col_sample_id"]
         if layer is None or layer not in self.rna.layers:
             if layer is not None and layer not in self.rna.layers:
                 raise ValueError(f"Layer {layer} not found in adata.layers")

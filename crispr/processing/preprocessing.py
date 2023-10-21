@@ -390,9 +390,11 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
 
 
 def perform_qc(adata, n_top=20, col_gene_symbols=None, 
-               hue=None, patterns=None):
+               hue=None, patterns=None, layer=None):
     """Calculate & plot quality control metrics."""
     figs = {}
+    if layer is not None:
+        adata.X = adata.layers[layer].copy()
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
         adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
     if patterns is None:
@@ -420,7 +422,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
         try:  # unravel axes to get coordinates, then scatterplot facet
             sc.pl.scatter(adata, x="total_counts", y=v, 
-                          ax=a, color=hue, show=False)  # scatterplot
+                            ax=a, color=hue, show=False)  # scatterplot
         except Exception as err:
             print(err)
     plt.show()

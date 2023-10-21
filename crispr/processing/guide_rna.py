@@ -127,7 +127,7 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         If they are changed (which should be avoided), be sure to 
         change throughout the package.
     """
-    print("\n\n<<<PERFORMING gRNA PROCESSING AND FILTERING>>>\n")
+    print("\n\n<<< PERFORMING gRNA PROCESSING AND FILTERING >>>\n")
     ann, kws_pga = adata.copy(), copy.deepcopy(kws_process_guide_rna)
     
     # Filter by Guide Counts
