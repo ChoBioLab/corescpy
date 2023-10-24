@@ -19,7 +19,7 @@ class CrisprObject:
     adata = pt.dt.adamson_2016_upr_perturb_seq()
     self = cr.Crispr(adata, **kwargs)
     
-    def test_attribute_presence:
+    def test_attribute_presence(self):
         """Ensure expected attributes are present."""
         assert "adata" in dir(CrisprObject.self)
         assert "rna" in dir(CrisprObject.self)
