@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=no-member
+"""
+Analyzing CRISPR experiment data.
+
+@author: E. N. Aslinger
+"""
+
 import pertpy as pt
 import arviz as az
 import scanpy as sc
@@ -254,15 +263,15 @@ def perform_mixscape(
         
     # Perturbation Score Plotting
     if plot is True and target_gene_idents is not None:  # G/P EX
-        figs["perturb_score"] = {}
+        figs["perturbation_score"] = {}
         for g in target_gene_idents:  # iterate target genes of interest
             try:
-                figs["perturb_score"][g] = pt.pl.ms.perturbscore(
+                figs["perturbation_score"][g] = pt.pl.ms.perturbscore(
                     adata=adata_pert, labels=col_target_genes, 
                     target_gene=g, color="red", perturbation_type=key_control)
-                figs["perturb_score"][g].draw()
+                figs["perturbation_score"][g].draw()
             except Exception as err:
-                figs["perturb_score"][g] = err
+                figs["perturbation_score"][g] = err
                 warnings.warn(f"{err}\n\nCould not plot scores ({g})!")
         figs["targeting_efficiency"] = cr.pl.plot_targeting_efficiency(
             adata_pert, col_guide_rna=col_guide_rna, key_control=key_control, 

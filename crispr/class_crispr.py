@@ -476,7 +476,7 @@ class Crispr(Omics):
         return fig
         
     def run_mixscape(self, assay=None, assay_protein=None,
-                     layer="scaled", col_cell_type=None,
+                     layer="log1p", col_cell_type=None,
                      target_gene_idents=True, 
                      col_split_by=None, min_de_genes=5,
                      copy=False, plot=True, **kwargs):

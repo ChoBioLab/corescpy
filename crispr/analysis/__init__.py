@@ -6,3 +6,4 @@ from .perturbations import (perform_mixscape,
                             compute_distance,
                             perform_gsea)
 from .clustering import cluster, find_markers, perform_celltypist
+from .rna import perform_tasccoda

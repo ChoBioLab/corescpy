@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=no-member
 """
-Preprocessing CRISPR experiment data.
+Preprocessing single-cell data.
 
 @author: E. N. Aslinger
 """
