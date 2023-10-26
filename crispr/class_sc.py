@@ -228,6 +228,51 @@ class Omics(object):
         #     warnings.warn(f"{err}\n\n\nCould not describe cell counts.")
         self.info["descriptives"].update(desc)
         return figs
+            
+    def plot(self, genes=None, genes_highlight=None,
+             marker_genes_dict=None, cell_types_circle=None,
+             kws_qc=True, kws_umap=None, kws_heat=None, kws_violin=None, 
+             kws_matrix=None, kws_dot=None, **kwargs):
+        """Create a variety of plots."""
+        figs = {}
+        if kws_umap is None:
+            kws_umap = {}
+        cct = kwargs["col_cell_type"] if (
+            "col_cell_type" in kwargs) else self._columns["col_cell_type"] 
+        lab_cluster = kws_umap.pop("col_cell_type") if (
+            "col_cell_type" in kws_umap) else cct
+        if genes_highlight and not isinstance(genes_highlight, list):
+            genes_highlight = [genes_highlight] if isinstance(
+                genes_highlight, str) else list(genes_highlight)
+        if cell_types_circle and not isinstance(cell_types_circle, list):
+            cell_types_circle = [cell_types_circle] if isinstance(
+                cell_types_circle, str) else list(cell_types_circle)
+        cgs = self._columns["col_gene_symbols"] if self._columns[
+            "col_gene_symbols"] != self.rna.var.index.names[0] else None
+            
+        # Pre-Processing/QC
+        if kws_qc:
+            if kws_qc is True:
+                kws_qc = {"hue": self._columns["col_sample_id"]}
+            cr.pp.perform_qc(self.adata.copy(), layer=self._layers["counts"], 
+                             **kws_qc)  # plot QC
+        
+        # Gene Expression
+        figs["gex"] = cr.pl.plot_gex(
+            self.rna, col_cell_type=lab_cluster, genes=genes, kind="all", 
+            col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict, 
+            kws_violin=kws_violin, kws_heat=kws_heat, 
+            kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
+            
+        # UMAP
+        if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
+            print("\n<<< PLOTTING UMAP >>>")
+            figs["umap"] = cr.pl.plot_umap(
+                self.rna, col_cell_type=lab_cluster, **kws_umap, 
+                genes=genes, col_gene_symbols=cgs)
+        else:
+            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
+        return figs
     
     def preprocess(self, assay_protein=None, layer_in=None, copy=False, 
                    kws_scale=True,  by_batch=None, **kwargs):
@@ -328,51 +373,6 @@ class Omics(object):
             col_cell_type=col_cell_type, **kwargs)
         print(marks)
         return marks, figs_m
-            
-    def plot(self, genes=None, genes_highlight=None,
-             marker_genes_dict=None, cell_types_circle=None,
-             kws_qc=True, kws_umap=None, kws_heat=None, kws_violin=None, 
-             kws_matrix=None, kws_dot=None, **kwargs):
-        """Create a variety of plots."""
-        figs = {}
-        if kws_umap is None:
-            kws_umap = {}
-        cct = kwargs["col_cell_type"] if (
-            "col_cell_type" in kwargs) else self._columns["col_cell_type"] 
-        lab_cluster = kws_umap.pop("col_cell_type") if (
-            "col_cell_type" in kws_umap) else cct
-        if genes_highlight and not isinstance(genes_highlight, list):
-            genes_highlight = [genes_highlight] if isinstance(
-                genes_highlight, str) else list(genes_highlight)
-        if cell_types_circle and not isinstance(cell_types_circle, list):
-            cell_types_circle = [cell_types_circle] if isinstance(
-                cell_types_circle, str) else list(cell_types_circle)
-        cgs = self._columns["col_gene_symbols"] if self._columns[
-            "col_gene_symbols"] != self.rna.var.index.names[0] else None
-            
-        # Pre-Processing/QC
-        if kws_qc:
-            if kws_qc is True:
-                kws_qc = {"hue": self._columns["col_sample_id"]}
-            cr.pp.perform_qc(self.adata.copy(), layer=self._layers["counts"], 
-                             **kws_qc)  # plot QC
-        
-        # Gene Expression
-        figs["gex"] = cr.pl.plot_gex(
-            self.rna, col_cell_type=lab_cluster, genes=genes, kind="all", 
-            col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict, 
-            kws_violin=kws_violin, kws_heat=kws_heat, 
-            kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
-            
-        # UMAP
-        if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
-            print("\n<<< PLOTTING UMAP >>>")
-            figs["umap"] = cr.pl.plot_umap(
-                self.rna, col_cell_type=lab_cluster, **kws_umap, 
-                genes=genes, col_gene_symbols=cgs)
-        else:
-            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
-        return figs
           
     def run_composition_analysis(
         self, assay=None, layer=None, col_list_lineage_tree=None,

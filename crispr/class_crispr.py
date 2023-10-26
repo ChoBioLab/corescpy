@@ -11,6 +11,7 @@ import seaborn as sns
 import pertpy as pt
 import crispr as cr
 from crispr.class_sc import Omics
+from crispr.analysis.perturbations import layer_perturbation
 import pandas as pd
 
 COLOR_PALETTE = "tab20"
@@ -295,7 +296,7 @@ class Crispr(Omics):
         self._assay_protein = assay_protein
         self._file_path = file_path
         self._layers = {**cr.pp.get_layer_dict(), 
-                        "layer_perturbation": "X_pert"}
+                        "mixscape": layer_perturbation}
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
         
@@ -612,6 +613,32 @@ class Crispr(Omics):
             return figs_mix
         else:
             return adata_pert, figs_mix
+        
+    def plot_mixscape(self, target_gene_idents=True, protein_of_interest=None, 
+                      color="red", subsample_number=100):
+        """Plot the Mixscape score(s) for one or more target genes."""
+        g_s = self.info["guide_rna"]["keywords"]["guide_split"] if (
+            "keywords" in self.info["guide_rna"] and 
+            "guide_split" in self.info["guide_rna"]["keywords"]) else None
+        f_s = self.info["guide_rna"]["keywords"]["feature_split"] if (
+            "keywords" in self.info["guide_rna"] and 
+            "feature_split" in self.info["guide_rna"]["keywords"]) else None
+        figs = cr.pl.plot_mixscape(
+            self.rna, self._columns["col_target_genes"], 
+            self._keys["key_treatment"], 
+            adata_protein=self.adata[
+                self._assay_protein] if self._assay_protein else None,
+            protein_of_interest=protein_of_interest,
+            key_control=self._keys["key_control"], 
+            key_nonperturbed=self._keys["key_nonperturbed"], 
+            layer=self._layers["mixscape"], 
+            target_gene_idents=target_gene_idents, 
+            subsample_number=subsample_number, color=color,
+            col_guide_rna=self._columns["col_guide_rna"], guide_split=g_s, 
+            feature_split=f_s)
+        for x in print(figs["perturbation_score"]):
+            print(figs["perturbation_score"][x])
+        return figs
     
     def run_augur(self, assay=None, layer=None,
                   classifier="random_forest_classifier", 
@@ -797,8 +824,7 @@ class Crispr(Omics):
         self.figures["dialogue"] = fig
         return fig
     
-    def run_gsea(self, key_condition=None, 
-                 filter_by_highly_variable=False, 
+    def run_gsea(self, filter_by_highly_variable=False, 
                  **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         for x in [self._columns, self._keys]:

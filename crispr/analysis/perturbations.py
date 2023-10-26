@@ -23,6 +23,7 @@ import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
+layer_perturbation = "X_pert"
     
     
 def perform_mixscape(
@@ -32,7 +33,7 @@ def perform_mixscape(
     col_guide_rna="guide_ID", col_split_by=None, 
     col_target_genes="gene_target", iter_num=10, min_de_genes=5, 
     pval_cutoff=5e-2, logfc_threshold=0.25, subsample_number=300,
-    n_comps_lda=None, guide_split="-", feature_split=None, 
+    n_comps_lda=10, guide_split="-", feature_split="|",
     target_gene_idents=None, kws_perturbation_signature=None, 
     plot=True, **kwargs):
     """
@@ -104,7 +105,7 @@ def perform_mixscape(
             Defaults to 0.25.
         n_comps_lda (int, optional): Number of principal components 
             (e.g., 10) for PCA xperformed as part of LDA for pooled 
-            CRISPR screen data. Defaults to None.
+            CRISPR screen data. Defaults to 10.
         iter_num (float, optional): Iterations to run to converge 
             if needed.
         plot (bool, optional): Make plots? 
@@ -131,7 +132,7 @@ def perform_mixscape(
     adata_pert = (adata[assay] if assay else adata).copy()
     if layer is not None:
         adata_pert.X = adata_pert.layers[layer]
-    layer = "X_pert"  # new layer
+    layer = layer_perturbation  # new layer
     adata_pert.raw = None  
     # so scanpy.tl.rank_genes_groups doesn't use raw 
     # pertpy doesn't specify use_raw, so if raw available
@@ -160,56 +161,13 @@ def perform_mixscape(
     if target_gene_idents is True:  # to plot all target genes
         target_gene_idents = list(adata_pert.uns["mixscape"].keys())
     if plot is True:
-        if target_gene_idents is not None:  # G/P EX
-            figs["DEX_ordered_by_ppp_heat"] = {}
-            figs["ppp_violin"] = {}
-            figs["perturb_score"] = {}
-            try:
-                fpp = cr.pl.plot_perturbation_scores_by_guide(
-                    adata_pert, col_guide_rna=col_guide_rna, 
-                    guide_split=guide_split)
-                figs["targeting_efficacy"] = fpp
-            except Exception as err:
-                figs["perturbation_clusters"] = err
-                warnings.warn(f"{err}\n\nCouldn't plot targeting efficiency!")
-            for g in target_gene_idents:  # iterate target genes of interest
-                try:
-                    figs["DEX_ordered_by_ppp_heat"][
-                        g] = pt.pl.ms.heatmap(
-                            adata=adata_pert, 
-                            subsample_number=subsample_number,
-                            labels=col_target_genes, target_gene=g, 
-                            layer=layer, control=key_control
-                            )  # differential expression heatmap, sort by PPs
-                except Exception as err:
-                    figs["DEX_ordered_by_ppp_heat"][g] = err
-                    warnings.warn(f"{err}\n\nCould not plot DEX heatmap!")
-                tg_conds = [
-                    key_control, f"{g} NP", 
-                    f"{g} {key_treatment}"]  # conditions: gene g
-                figs["ppp_violin"][g] = pt.pl.ms.violin(
-                    adata=adata_pert, target_gene_idents=tg_conds, 
-                    rotation=45, groupby="mixscape_class",
-                    keys=f"mixscape_class_p_{key_treatment}".lower()
-                    )  # gene: perturbed, NP, control
-            figs["ppp_violin"][f"global"] = pt.pl.ms.violin(
-                adata=adata_pert, target_gene_idents=[
-                    key_control, key_nonperturbed, key_treatment], 
-                rotation=45, keys=f"mixscape_class_p_{key_treatment}".lower(),
-                groupby="mixscape_class_global")  # same, but global
-            try:
-                tg_conds = [key_control] + functools.reduce(
-                    lambda i, j: i + j, [[f"{g} {key_nonperturbed}", 
-                            f"{g} {key_treatment}"] 
-                    for g in target_gene_idents])  # conditions: all genes
-                figs["ppp_violin"]["all"] = pt.pl.ms.violin(
-                    adata=adata_pert,
-                    keys=f"mixscape_class_p_{key_treatment}".lower(),
-                    target_gene_idents=tg_conds, rotation=45,
-                    groupby="mixscape_class")  # gene: perturbed, NP, control
-            except Exception as err:
-                figs["ppp_violin"]["all"] = err
-                print(err)
+        figs = cr.pl.plot_mixscape(
+            adata_pert, col_target_genes, 
+            key_treatment, key_control=key_control, 
+            key_nonperturbed=key_nonperturbed, layer=layer, 
+            target_gene_idents=target_gene_idents, 
+            subsample_number=subsample_number,
+            col_guide_rna=col_guide_rna, guide_split=guide_split)
             
     # Perturbation-Specific Cell Clusters
     print("\n<<< RUNNING LINEAR DISCRIMINANT ANALYSIS (CLUSTERING) >>>") 
@@ -220,66 +178,32 @@ def perform_mixscape(
                 layer=layer, control=key_control, 
                 min_de_genes=min_de_genes,
                 split_by=col_split_by, 
-                copy=False,
+                copy=False, 
                 perturbation_type=key_treatment,
                 mixscape_class_global="mixscape_class_global",
                 n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
                 pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
-        if plot is True:
-            try:
-                figs["perturbation_clusters"] = pt.pl.ms.lda(
-                    adata=adata_pert, 
-                    control=key_control)  # cluster perturbation
-            except Exception as err:
-                figs["perturbation_clusters"] = err
-                warnings.warn(f"{err}\n\nPerturbation response plot failed!")
-            if n_comps_lda is not None:  # LDA clusters
-                try:
-                    figs["cluster_perturbation_response"] = pt.pl.ms.lda(
-                        adata_pert, control=key_control)  # perturbed response
-                except Exception as err:
-                    figs["perturbation_clusters"] = err
-                    warnings.warn(
-                        f"{err}\nCluster perturbation response plot failed!")
-                try:
-                    if assay_protein is not None and (
-                        target_gene_idents is not None):
-                        f_pr = pt.pl.ms.violin(
-                            adata=adata_pert,
-                            # adata=adata_pert, 
-                            target_gene_idents=target_gene_idents,
-                            keys=protein_of_interest, 
-                            groupby=col_target_genes, 
-                            hue="mixscape_class_global")
-                        figs[f"protein_{protein_of_interest}"] = f_pr 
-                except Exception as err:
-                    figs[f"protein_{protein_of_interest}"] = err
-                    warnings.warn(
-                        f"{err}\n\nCould not plot protein expression!")
     except Exception as error:
         warnings.warn(
             f"{error}\n\nCouldn't perform perturbation-specific clustering!")
         figs["lda"] = error
-        
+    if assay_protein:
+        adata[assay_protein].obs[:, "mixscape_class_global"] = adata_pert[
+            assay].obs["mixscape_class_global"].loc[
+                adata[assay_protein].index]  # classification -> protein assay
+
     # Perturbation Score Plotting
     if plot is True and target_gene_idents is not None:  # G/P EX
-        figs["perturbation_score"] = {}
-        for g in target_gene_idents:  # iterate target genes of interest
-            try:
-                figs["perturbation_score"][g] = pt.pl.ms.perturbscore(
-                    adata=adata_pert, labels=col_target_genes, 
-                    target_gene=g, color="red", perturbation_type=key_control)
-                figs["perturbation_score"][g].draw()
-            except Exception as err:
-                figs["perturbation_score"][g] = err
-                warnings.warn(f"{err}\n\nCould not plot scores ({g})!")
-        figs["targeting_efficiency"] = cr.pl.plot_targeting_efficiency(
-            adata_pert, col_guide_rna=col_guide_rna, key_control=key_control, 
-            key_treatment=key_treatment, key_nonperturbed=key_nonperturbed, 
-            guide_split=guide_split, feature_split="|",
-            mixscape_class_global="mixscape_class_global")
+        fff = cr.pl.plot_mixscape(
+            adata_pert, col_target_genes, key_treatment, 
+            adata_protein=adata[assay_protein] if assay_protein else None,
+            key_control=key_control, key_nonperturbed=key_nonperturbed, 
+            layer=layer, target_gene_idents=target_gene_idents, 
+            subsample_number=subsample_number, col_guide_rna=col_guide_rna, 
+            guide_split=guide_split, feature_split=feature_split)
+        figs = {**figs, **fff}
     else:
-        figs["mixscape_perturb_score"] = None
+        figs = None
     return figs, adata_pert
 
 

@@ -39,12 +39,19 @@ def analyze_composition(
     if layer is not None:
         adata.X = adata.layers[layer]
     if col_list_lineage_tree is None:  # scCoda
-        results, figures, adata = perform_sccoda(
-            adata, col_condition, col_cell_type, covariates=covariates,
-            reference_cell_type=reference_cell_type, assay=assay, 
-            analysis_type=analysis_type, col_cell_type=col_cell_type,
-            generate_sample_level=generate_sample_level, est_fdr=est_fdr, 
-            sample_identifier=col_sample_id, plot=plot, out_file=out_file)
+        cells = [reference_cell_type] if reference_cell_type else adata.obs[
+            col_cell_type].unique()
+        for x in cells:  # if "automatic", try w/ all b/c required for scCoda
+            results[x], figures[x], tmp = perform_sccoda(
+                adata.copy(), col_condition, col_cell_type, x,
+                covariates=covariates, assay=assay, 
+                analysis_type=analysis_type, col_cell_type=col_cell_type,
+                generate_sample_level=generate_sample_level, est_fdr=est_fdr, 
+                sample_identifier=col_sample_id, plot=plot, out_file=out_file)
+            if reference_cell_type is not None:
+                results, figures, adata = results[x], figures[x], tmp
+            else:
+                del(tmp)
     else:  # TASCCODA
         results, figures, adata = perform_tasccoda(
             adata, col_condition, col_cell_type, col_list_lineage_tree, 
@@ -58,7 +65,7 @@ def analyze_composition(
 
 def perform_sccoda(
     adata, col_condition, col_cell_type, 
-    assay=None, reference_cell_type="automatic", 
+    reference_cell_type, assay=None, 
     analysis_type="cell_level", 
     generate_sample_level=True, sample_identifier="batch", 
     covariates=None, est_fdr=0.05, plot=True, out_file=None):
