@@ -810,25 +810,6 @@ class Crispr(Omics):
             **kwargs)  # GSEA
         self.results["gsea"] = output
         return output
-          
-    def run_composition_analysis(self, reference_cell_type, 
-                                 assay=None, analysis_type="cell_level", 
-                                 est_fdr=0.05, generate_sample_level=False,
-                                 plot=True, copy=False, **kwargs):
-        """Perform gene set enrichment analyses & plotting."""
-        for x in [self._columns, self._keys]:
-            for c in x:  # iterate column/key name attributes
-                if c not in kwargs:  # if not passed as argument to method...
-                    kwargs.update({c: x[c]})  # & use object attribute
-        output = cr.ax.analyze_composition(
-            self.rna.copy() if copy is True else self.rna,
-            reference_cell_type, assay=assay if assay else self._assay, 
-            analysis_type=analysis_type, 
-            generate_sample_level=generate_sample_level, 
-            est_fdr=est_fdr, plot=plot, **kwargs)
-        if copy is False:
-            self.results["composition"] = output
-        return output
         
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""
