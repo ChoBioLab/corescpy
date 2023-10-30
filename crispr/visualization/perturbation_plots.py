@@ -119,7 +119,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
             figs["perturbation_score"][g] = pt.pl.ms.perturbscore(
                 adata=adata, labels=col_target_genes, 
                 target_gene=g, color=color, mixscape_class="mixscape_class",
-                perturbation_type=f"{g} key_control")
+                perturbation_type=key_treatment)
             print(figs["perturbation_score"][g])
         except Exception as err:
             figs["perturbation_score"][g] = err

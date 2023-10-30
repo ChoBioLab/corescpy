@@ -641,8 +641,6 @@ class Crispr(Omics):
             subsample_number=subsample_number, color=color,
             col_guide_rna=self._columns["col_guide_rna"], guide_split=g_s, 
             feature_split=f_s)
-        for x in print(figs["perturbation_score"]):
-            print(figs["perturbation_score"][x])
         return figs
     
     def run_augur(self, assay=None, layer=None,
