@@ -19,7 +19,7 @@ def cluster(adata, layer=None,
             plot=True, colors=None,
             model_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
-            method_cluster="leiden",
+            method_cluster="leiden", 
             kws_pca=None, kws_neighbors=None, 
             kws_umap=None, kws_cluster=None, **kwargs):
     """
@@ -129,6 +129,8 @@ def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
 
 
 def perform_celltypist(adata, model, col_cell_type=None, 
+                       mode="best match", p_threshold=0.5, 
+                       over_clustering=None, min_proportion=0, 
                        majority_voting=False, **kwargs):
     """Annotate cell types using CellTypist."""
     figs = {}
@@ -139,7 +141,9 @@ def perform_celltypist(adata, model, col_cell_type=None,
         print(f"{err}\n\nFailed to load CellTypist model {model}. Try:\n\n")
         print(celltypist.models.models_description())
     preds = celltypist.annotate(
-        adata, model=model, majority_voting=majority_voting, **kwargs)  # run
+        adata, model=model, majority_voting=majority_voting, 
+        p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
+        min_prop=min_proportion, **kwargs)  # run
     if col_cell_type is not None:  # compare to a different cell type label
         figs = celltypist.dotplot(
             preds, use_as_reference=col_cell_type,

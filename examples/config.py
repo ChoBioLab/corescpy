@@ -33,8 +33,8 @@ files_data = {
 }
 
 col_cell_type_data = {
-    "CRISPRi_scr": "majority_voting",
-    "CRISPRi_scr_multi": "majority_voting",
+    "CRISPRi_scr": "predicted_labels",
+    "CRISPRi_scr_multi": "predicted_labels",
     "CRISPRi_wgs": "leiden",
     "CRISPRi_ess": "leiden",
     "pool": "",

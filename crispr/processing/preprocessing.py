@@ -115,14 +115,17 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     
     # Formatting & Initial QC Visualization
     adata.var_names_make_unique()
-    adata.obs_names_make_unique()
+    try: 
+        adata.obs_names_make_unique()
+    except Exception as err:
+        warn(f"{err}\n\n\nCoult not make obs names unique.")
     cr.tl.print_counts(adata, title="Raw")
     if col_gene_symbols not in adata.var.columns:
-        if assay: 
-            adata[assay] = adata[assay].var.rename_axis(col_gene_symbols) 
-        else:
-            adata.var = adata.var.rename_axis(col_gene_symbols)
-    cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
+        # if assay: 
+        #     adata[assay] = adata[assay].var.rename_axis(col_gene_symbols) 
+        # else:
+        adata.var = adata.var.rename_axis(col_gene_symbols)
+    # cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
     
     # Process Guide RNA
     if kws_process_guide_rna:

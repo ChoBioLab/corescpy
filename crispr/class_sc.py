@@ -8,9 +8,10 @@
 import scanpy as sc
 import seaborn as sns
 import pertpy as pt
-import copy
+# import copy
+import muon
 import crispr as cr
-import pandas as pd
+# import pandas as pd
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -129,6 +130,12 @@ class Omics(object):
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
+        
+        # Let Property Setters Run
+        self.rna = self.adata[self._assay] if self._assay else self.adata
+        self.obs = self.adata.obs
+        self.uns = self.rna.uns
+        self.var = self.rna.var
         print("\n\n", self.rna)
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
@@ -136,28 +143,54 @@ class Omics(object):
     @property
     def rna(self):
         """Get RNA modality of AnnData."""
-        return self.adata[self._assay] if self._assay else self.adata
+        return self._rna
 
     @rna.setter
     def rna(self, value) -> None:
-        if self._assay: 
-            self.adata[self._assay] = value
+        """Set gene expression modality of data."""
+        if isinstance(self.adata, muon.MuData):
+            self.adata.mod[self._assay] = value
+            self.adata.update()
+            # self.adata = muon.MuData({**dict(zip(self.adata.mod.keys(), [
+            #     self.adata[x] for x in self.adata.mod.keys()])), 
+            #                           self._assay: value})
+            self._rna = self.adata.mod[self._assay]
         else:
-            self.adata = value
+            if self._assay: 
+                self.adata[self._assay] = value
+            else:
+                self.adata = value
+            self._rna = value
             
     @property
     def obs(self):
         """Get `.obs` attribute of AnnData."""
-        return self.adata.obs
+        return self._obs
 
     @obs.setter
     def obs(self, value) -> None:
         self.adata.obs = value
+        self._obs = value
+        
+    @property
+    def gex(self):
+        """Get gene expression modality with prefix-less index."""
+        return self._gex
+
+    @gex.setter
+    def gex(self, value) -> None:
+        if isinstance(self.adata, muon.MuData):
+            ann = self.adata.mod[self._assay].copy()
+            ann.index = ann.obs.reset_index()[
+                self._columns["col_gene_symbol"]]  # prefix-less gene names
+        else:
+            ann = self.rna
+        self._gex = ann
             
     @property
     def uns(self):
         """Get `.uns` attribute of adata's gene expression modality."""
-        return self.adata[self._assay].uns if self._assay else self.adata.uns
+        return self._uns
 
     @uns.setter
     def uns(self, value) -> None:
@@ -165,31 +198,24 @@ class Omics(object):
             self.adata[self._assay].uns = value
         else:
             self.adata.uns = value
-            
+        self._uns = value
+        return self._uns  
+                
     @property
     def var(self):
         """Get `.var` attribute of .adata's gene expression modality."""
-        return self.adata[self._assay].var if self._assay else self.adata.var
+        return self._var
 
     @var.setter
     def var(self, value) -> None:
-        if self._assay: 
+        if isinstance(self.adata, muon.MuData):
+            self.adata.mod[self._assay].var = value
+            self.adata.update()
+        elif self._assay: 
             self.adata[self._assay].var = value
         else:
             self.adata.var = value
-            
-    @property
-    def obsm(self):
-        """Get `.obsm` attribute of .adata's gene expression modality."""
-        return self.adata[
-            self._assay].obsm if self._assay else self.adata.obsm
-
-    @obsm.setter
-    def obsm(self, value) -> None:
-        if self._assay: 
-            self.adata[self._assay].obsm = value
-        else:
-            self.adata.obsm = value
+        self._var = value
             
     def print(self):
         print(self.rna.obs.head(), "\n\n")
@@ -265,7 +291,7 @@ class Omics(object):
             kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
             
         # UMAP
-        if "X_umap" in self.adata.obsm or lab_cluster in self.rna.obs.columns:
+        if "X_umap" in self.rna.obsm or lab_cluster in self.rna.obs.columns:
             print("\n<<< PLOTTING UMAP >>>")
             figs["umap"] = cr.pl.plot_umap(
                 self.rna, col_cell_type=lab_cluster, **kws_umap, 
@@ -310,6 +336,7 @@ class Omics(object):
         # if assay_protein is not None:  # if includes protein assay
         #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
         self.figures["preprocessing"] = figs
+        print(type(adata))
         if copy is False:
             self.rna = adata
             # if assay_protein is not None:  # if includes protein assay
@@ -347,15 +374,20 @@ class Omics(object):
             self.rna = adata
         return figs_cl
     
-    def annotate_clusters(self, model, copy=False, **kwargs):
+    def annotate_clusters(self, model, mode="best match", 
+                          p_threshold=0.5, 
+                          over_clustering=None, min_proportion=0, 
+                          copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
         preds, ct_dot = cr.ax.perform_celltypist(
-            self.rna.copy() if copy is True else self.rna, model, 
-            majority_voting=True, **kwargs)  # annotate
-        self.results["celltypist"] = preds
-        if copy is False:
-            self.rna.obs = self.rna.obs.join(preds.predicted_labels,
-                                             lsuffix="_last")
+            self.rna, model, majority_voting=True, p_threshold=p_threshold,
+            mode=mode, over_clustering=over_clustering, 
+            min_proportion=min_proportion, **kwargs)  # annotate
+        self.results["celltypist"] = preds  # store results
+        if copy is False:  # assign if performing inplace
+            self.rna.obs = self.rna.obs[self.rna.obs.columns.difference(
+                preds.predicted_labels.columns)].join(
+                    preds.predicted_labels, lsuffix="_last")
         sc.pl.umap(self.rna, color=[self._columns["col_cell_type"]] + list(
             preds.predicted_labels.columns))  # UMAP
         return preds, ct_dot

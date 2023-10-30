@@ -607,6 +607,10 @@ class Crispr(Omics):
             guide_split=self.info["guide_rna"]["guide_split"], 
             feature_split=self.info["guide_rna"]["feature_split"], 
             **kwargs)
+        if "perturbation_score" in figs_mix and isinstance(
+            figs_mix["perturbation_score"], dict):
+            for x in figs_mix["perturbation_score"]:
+                print(figs_mix["perturbation_score"][x])
         if copy is False:  # store results
             self.figures.update({"mixscape": figs_mix})
             self.rna = adata_pert
