@@ -606,7 +606,8 @@ class Crispr(Omics):
             min_de_genes=min_de_genes, col_split_by=col_split_by, plot=plot, 
             guide_split=self.info["guide_rna"]["guide_split"], 
             feature_split=self.info["guide_rna"]["feature_split"], 
-            **kwargs)
+            layer=layer, **kwargs)
+        self._layers.update({"mixscape": layer})
         if "perturbation_score" in figs_mix and isinstance(
             figs_mix["perturbation_score"], dict):
             for x in figs_mix["perturbation_score"]:
