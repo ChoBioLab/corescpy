@@ -737,8 +737,8 @@ class Crispr(Omics):
         return data, results, figs_aug
     
     def compute_distance(self, distance_type="edistance", method="X_pca", 
-                         kws_plot=None, highlight_real_range=False,
-                         plot=True, **kwargs):
+                         layer=None, kws_plot=None, 
+                         highlight_real_range=False, plot=True, **kwargs):
         """
         Compute and visualize distance metrics.
 
@@ -789,8 +789,12 @@ class Crispr(Omics):
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
+        adata = self.rna if layer is None else self.rna.copy()
+        if layer:
+            print(f"Using layer {layer} for distance calculation.")
+            adata.X = adata.layers[layer]
         output = cr.ax.compute_distance(
-            self.adata, distance_type=distance_type, method=method,
+            adata, distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
             plot=plot, **kwargs)
         if plot is True:

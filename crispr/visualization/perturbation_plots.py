@@ -71,6 +71,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     figs["DEX_ordered_by_ppp_heat"] = {}
     figs["ppp_violin"] = {}
     figs["perturbation_score"] = {}
+    figs["perturbation_clusters"] = {}
     if adata_protein:
         if "mixscape_class_global" not in adata_protein:
             adata_protein.loc[:, "mixscape_class_global"] = adata.loc[
@@ -96,7 +97,6 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
             rotation=45, groupby="mixscape_class", show=False,
             keys=f"mixscape_class_p_{key_treatment}".lower()
             )  # gene: perturbed, NP, control
-        plt.show()
     figs["ppp_violin"][f"global"] = pt.pl.ms.violin(
         adata=adata, target_gene_idents=[
             key_control, key_nonperturbed, key_treatment], 
@@ -118,8 +118,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
         try:
             figs["perturbation_score"][g] = pt.pl.ms.perturbscore(
                 adata=adata, labels=col_target_genes, 
-                target_gene=g, color=color, mixscape_class="mixscape_class",
-                perturbation_type=key_treatment)
+                target_gene=g, color=color, perturbation_type=key_treatment)
             print(figs["perturbation_score"][g])
         except Exception as err:
             figs["perturbation_score"][g] = err
@@ -145,9 +144,15 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
             figs["targeting_efficiency"][g] = err
             warnings.warn(f"{err}\n\nCould not plot targeting efficiency!")
     try:  # LDA clusters
-        figs["perturbation_clusters"] = pt.pl.ms.lda(
-            adata=adata, control=key_control)  # cluster perturbation
+        figs["perturbation_clusters"] = plt.figure(figsize=(15, 15))
+        axis = figs["perturbation_clusters"].add_subplot(111)
+        pt.pl.ms.lda(adata=adata, perturbation_type=key_treatment, ax=axis, 
+                     control=key_control)  # UMAP
+        figs["perturbation_clusters"].tight_layout()
+        figs["perturbation_clusters"].suptitle(
+            "Perturbation-Specific Clusters")
+        print(figs["perturbation_clusters"])
     except Exception as err:
         figs["perturbation_clusters"] = err
-        warnings.warn(f"{err}\n\nPerturbation response plot failed!")
+        warnings.warn(f"{err}\n\nPerturbation cluster plot failed!")
     return figs
