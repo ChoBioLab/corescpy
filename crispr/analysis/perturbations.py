@@ -483,8 +483,9 @@ def compute_distance(adata, col_target_genes="target_genes",
         plt.xlabel('E-distance')
         plt.ylabel('Leiden clusters')
         plt.gca().yaxis.set_label_position("right")
-        plt.show()
         figs[f"distance_cluster_hierarchies_{distance_type}"] = plt.gcf()
+        figs[f"distance_cluster_hierarchies_{distance_type}"].tight_layout()
+        plt.show()
     return distance, data, dff, mat, figs
 
 
