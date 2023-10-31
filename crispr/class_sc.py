@@ -111,6 +111,9 @@ class Omics(object):
                 file_path, kws_init=dict(
                     assay=assay, assay_protein=assay_protein, 
                     col_gene_symbols=col_gene_symbols, 
+                    col_condition=col_condition,
+                    key_control=key_control, 
+                    key_treatment=key_treatment,
                     col_cell_type=col_cell_type, 
                     col_sample_id=col_sample_id, **kwargs),
                 **kws_multi)  # create integrated object
@@ -126,7 +129,8 @@ class Omics(object):
             col_gene_symbols=col_gene_symbols, col_cell_type=col_cell_type, 
             col_sample_id=col_sample_id, col_batch=col_sample_id, 
             col_condition=col_condition)
-        self._keys = dict(key_control=key_control, key_treatment=key_treatment)
+        self._keys = dict(key_control=key_control, 
+                          key_treatment=key_treatment)
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)

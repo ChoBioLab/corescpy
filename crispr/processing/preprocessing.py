@@ -14,12 +14,11 @@ import muon
 from  warnings import warn
 import seaborn
 import matplotlib.pyplot as plt 
-import copy
 # import anndata
 from anndata import AnnData
 import crispr as cr
+from crispr.class_sc import Omics
 import numpy as np
-import pandas as pd
 
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
@@ -49,8 +48,10 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
 
     # Create AnnData Objects
     selves = dict(zip(file_path, [
-        cr.Omics(file_path[f], **kws_init[f]) for f in file_path])
-                  )  # create individual Crispr objects
+        Omics(file_path[f], **kws_init[f]) if (
+            "kws_process_guide_rna" not in kws_init) else cr.Crispr(
+                file_path[f], **kws_init[f]) for f in file_path])
+                  )  # create individual objects
 
     # Preprocessing & Clustering
     for x in selves:  # preprocess & cluster each object
@@ -433,7 +434,6 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     figs[f"qc_{v}_scatter"] = fff
     varx = list(pct_ns + [hue]) if hue else pct_ns
     try:
-        varm = list(pct_ns + [hue]) if hue else pct_ns
         varm = varx + ["n_genes_by_counts"]
         figs["pairplot"] = seaborn.pairplot(
             adata.obs[varm].rename_axis("Metric", axis=1).rename({
