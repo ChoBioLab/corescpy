@@ -31,7 +31,7 @@ def analyze_composition(
     Returns:
         tuple: results summary, dictionary of figures, modified adata
     """
-    figs, results = {}, {}
+    figures, results = {}, {}
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     if copy is True:
@@ -43,9 +43,9 @@ def analyze_composition(
             col_cell_type].unique()
         for x in cells:  # if "automatic", try w/ all b/c required for scCoda
             results[x], figures[x], tmp = perform_sccoda(
-                adata.copy(), col_condition, col_cell_type, x,
+                adata, col_condition, col_cell_type, x,
                 covariates=covariates, assay=assay, 
-                analysis_type=analysis_type, col_cell_type=col_cell_type,
+                analysis_type=analysis_type, 
                 generate_sample_level=generate_sample_level, est_fdr=est_fdr, 
                 sample_identifier=col_sample_id, plot=plot, out_file=out_file)
             if reference_cell_type is not None:
@@ -59,13 +59,12 @@ def analyze_composition(
             col_sample_id=col_sample_id,
             key_reference_cell_type=key_reference_cell_type, 
             covariates=covariates, plot=True)
-        
     return (results, figures, adata)
 
 
 def perform_sccoda(
     adata, col_condition, col_cell_type, 
-    reference_cell_type, assay=None, 
+    reference_cell_type="automatic", assay=None, 
     analysis_type="cell_level", 
     generate_sample_level=True, sample_identifier="batch", 
     covariates=None, est_fdr=0.05, plot=True, out_file=None):
@@ -77,43 +76,58 @@ def perform_sccoda(
                       Setting `generate_sample_level` to False.
                       """)
         generate_sample_level = False
-    mod = "coda"
-    covariate_obs = [covariates] + col_condition if isinstance(covariates, str
-        ) else covariates + [col_condition] if covariates else [col_condition]
+    mod, mod_o = "coda", assay if assay else "rna"
+    # covariate_obs = [covariates] + col_condition if isinstance(
+    #     covariates, str) else covariates + [
+    #         col_condition] if covariates else [col_condition]
+    covariate_obs = [col_condition] + covariates if covariates else [
+        col_condition]
+    print(covariate_obs)
     model = pt.tl.Sccoda()
     scodata = model.load(
-        (adata[assay] if assay else adata).copy(), 
-        type=analysis_type, modality_key_1=assay if assay else None,
-        modality_key_2=mod, generate_sample_level=generate_sample_level,
-        cell_type_identifier=col_cell_type, 
-        covariate_obs=covariate_obs, 
+        adata, type=analysis_type, 
+        modality_key_1=mod_o, modality_key_2=mod, 
+        generate_sample_level=generate_sample_level,
+        cell_type_identifier=col_cell_type, covariate_obs=covariate_obs, 
         sample_identifier=sample_identifier)  # load data
     # mod = assay if assay else list(set(sccoda_data.mod.keys()).difference(
     #     set(["coda"])))[0]  # original modality
-    if plot is True:
-        figs[
-            "find_reference"] = pt.pl.coda.rel_abundance_dispersion_plot(
-                scodata, modality_key=mod, 
-                abundant_threshold=0.9)  # helps choose rference cell type
-        figs["proportions"] = pt.pl.coda.boxplots(
-            scodata, modality_key=mod, 
-            feature_name=col_condition, add_dots=True)
-    scodata = model.prepare(scodata, modality_key=mod, formula=col_condition,
-                            reference_cell_type=reference_cell_type)  # setup
+    # scodata[mod].obs = scodata[mod].obs.join(scodata[mod_o].obs[
+    #     [col_cell_type, col_condition]])
+    print(scodata)
+    model.prepare(scodata, formula=col_condition,
+                  reference_cell_type=reference_cell_type)  # setup
     print(scodata)
     print(scodata["coda"].X)
     print(scodata["coda"].obs)
+    if plot is True:
+        try:
+            figs[
+                "find_reference"] = pt.pl.coda.rel_abundance_dispersion_plot(
+                    scodata, modality_key=mod, 
+                    abundant_threshold=0.9)  # helps choose rference cell type
+        except Exception as err:
+            print(f"{err}\n\nFailed to plot reference cell type.\n\n")
+            figs["find_reference"] = err
+        try:
+            figs["proportions"] = pt.pl.coda.boxplots(
+                scodata, modality_key=mod, 
+                feature_name=col_condition, add_dots=True)
+        except Exception as err:
+            print(f"{err}\n\nFailed to plot proportions.\n\n")
+            figs["proportions"] = err
     model.run_nuts(scodata, modality_key=mod)  # no-U-turn HMV sampling 
     model.summary(scodata, modality_key=mod)  # result
-    results["original"]["effects_credible"] = model.credible_effects(
+    results["effects_credible"] = model.credible_effects(
         scodata, modality_key=mod)  # filter credible effects
-    results["original"]["intercept"] = model.get_intercept_df(
+    results["intercept"] = model.get_intercept_df(
         scodata, modality_key=mod)  # intercept df
-    results["original"]["effects"] = model.get_effect_df(
+    results["effects"] = model.get_effect_df(
         scodata, modality_key=mod)  # effects df
     if out_file is not None:
         scodata.write_h5mu(out_file)
     if est_fdr is not None:
+        results = {"original": results, f"fdr_{est_fdr}": {}}
         model.set_fdr(scodata, modality_key=mod, 
                       est_fdr=est_fdr)  # adjust for expected FDR
         model.summary(scodata, modality_key=mod)
@@ -122,22 +136,34 @@ def perform_sccoda(
         results[f"fdr_{est_fdr}"]["effects"] = model.get_effect_df(
             scodata, modality_key=mod)  # effects df
         results[f"fdr_{est_fdr}"][
-            "effects_credible"] = scodata.credible_effects(
+            "effects_credible"] = model.credible_effects(
                 scodata, modality_key=mod)  # filter credible effects
         if out_file is not None:
             scodata.write_h5mu(f"{out_file}_{est_fdr}_fdr")
     if plot is True:
-        figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
-            scodata, modality_key=mod, feature_name=col_condition)
-        plt.show()
-        figs["effects"] = pt.pl.coda.effects_barplot(
-            scodata, modality_key=mod, parameter="Final Parameter")
-        data_arviz = model.make_arviz(scodata, modality_key=mod)
-        figs["mcmc_diagnostics"] = az.plot_trace(
-            data_arviz, divergences=False,
-            var_names=["alpha", "beta"],
-            coords={"cell_type": data_arviz.posterior.coords["cell_type_nb"]}
-        )
+        try:
+            figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
+                scodata, modality_key=mod, feature_name=col_condition)
+            plt.show()
+        except Exception as err:
+            print(f"{err}\n\nFailed to plot stacked proportions.\n\n")
+            figs["proportions_stacked"] = err
+        try:
+            figs["effects"] = pt.pl.coda.effects_barplot(
+                scodata, modality_key=mod, parameter="Final Parameter")
+        except Exception as err:
+            print(f"{err}\n\nFailed to plot effects.\n\n")
+            figs["effects"] = err
+        try:
+            data_arviz = model.make_arviz(scodata, modality_key=mod)
+            figs["mcmc_diagnostics"] = az.plot_trace(
+                data_arviz, divergences=False,
+                var_names=["alpha", "beta"],
+                coords={
+                    "cell_type": data_arviz.posterior.coords["cell_type_nb"]})
+        except Exception as err:
+            print(f"{err}\n\nFailed to plot MCMC diagnostics.\n\n")
+            figs["mcmc_diagnostics"] = err
         plt.tight_layout()
         plt.show()
     return (results, figs, scodata)

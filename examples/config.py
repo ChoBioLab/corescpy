@@ -156,7 +156,7 @@ col_condition_data = {
     "screen": np.nan,
     "perturb-seq": "target_gene_name",
     "ECCITE": "gene_target",
-    "coda": np.nan,
+    "coda": "condition",
     "augur_ex": "label"
 }
 
@@ -211,7 +211,7 @@ col_sample_id_data = {
     "screen": np.nan,
     "perturb-seq": None,
     "ECCITE": "orig.ident",
-    "coda": np.nan, 
+    "coda": "batch", 
     "augur_ex": "orig.ident"
 }
 

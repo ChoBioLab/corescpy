@@ -273,7 +273,8 @@ def process_data(adata,
                        "pct_counts_in_top_20_genes"]
             outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
     cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
-    print(col_gene_symbols, "\n\n", n_top, "\n\n", ann.var.describe(), "\n\n")
+    print(col_gene_symbols, "\n\n", n_top, "\n\n", ann.var.describe(
+        ) if "var" in dir(ann) else None, "\n\n")
     
     # Exploration & QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")

@@ -379,8 +379,10 @@ class Omics(object):
                           over_clustering=None, min_proportion=0, 
                           copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
+        adata = self.rna.copy()
+        adata.X = adata.layers[self._layers["log1p"]]
         preds, ct_dot = cr.ax.perform_celltypist(
-            self.rna, model, majority_voting=True, p_threshold=p_threshold,
+            adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, 
             min_proportion=min_proportion, **kwargs)  # annotate
         self.results["celltypist"] = preds  # store results
@@ -408,27 +410,25 @@ class Omics(object):
           
     def run_composition_analysis(
         self, assay=None, layer=None, col_list_lineage_tree=None,
-        col_sample_id=None, covariates=None,
-        reference_cell_type="automatic", analysis_type="cell_level", 
-        est_fdr=0.05, generate_sample_level=False,
+        covariates=None, reference_cell_type="automatic", 
+        analysis_type="cell_level", est_fdr=0.05, generate_sample_level=False,
         plot=True, copy=False, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         for x in [self._columns, self._keys]:
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
-        col_condition, col_cell_type = kwargs.pop(
-            col_condition), kwargs.pop(col_cell_type)
+        col_condition, col_cell_type = [
+            kwargs.pop(x) if x in kwargs else None for x in [
+                "col_condition", "col_cell_type"]]  # extract from kwargs
         output = cr.ax.analyze_composition(
-            self.adata[assay] if assay else self.adata, 
-            col_condition,  col_cell_type, assay=None, 
-            layer=layer, reference_cell_type=reference_cell_type, 
+            self.adata, col_condition,  col_cell_type, 
+            assay=assay, layer=layer, reference_cell_type=reference_cell_type, 
             analysis_type=analysis_type, 
             generate_sample_level=generate_sample_level,
             col_list_lineage_tree=col_list_lineage_tree,  # only for TASCCoda
-            col_sample_id=col_sample_id, covariates=covariates,
-            est_fdr=est_fdr, key_reference_cell_type="automatic", 
-            plot=plot, out_file=None, copy=copy, **kwargs)
+            covariates=covariates, est_fdr=est_fdr, plot=plot, out_file=None, 
+            copy=copy, key_reference_cell_type="automatic", **kwargs)
         if copy is False:
             self.results["composition"] = output
         return output
