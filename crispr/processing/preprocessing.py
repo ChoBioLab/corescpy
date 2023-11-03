@@ -108,7 +108,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     elif os.path.splitext(file)[1] == ".h5":  # .h5 file
         print(f"\n<<< LOADING 10X .h5 FILE {file} >>>")
         print(f"H5 File Format ({file})\n\n")
-        cr.tl.explore_h5_file(file, "\n\n\n")
+        # cr.tl.explore_h5_file(file, "\n\n\n")
         adata = sc.read_10x_h5(file, **kwargs)
     else:
         print(f"\n<<< LOADING FILE {file} with sc.read() >>>")

@@ -143,6 +143,7 @@ class Omics(object):
         print("\n\n", self.rna)
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
+        self.rna.obs.head()
 
     @property
     def rna(self):
@@ -262,7 +263,7 @@ class Omics(object):
     def plot(self, genes=None, genes_highlight=None,
              marker_genes_dict=None, cell_types_circle=None,
              kws_qc=True, kws_umap=None, kws_heat=None, kws_violin=None, 
-             kws_matrix=None, kws_dot=None, **kwargs):
+             kws_matrix=None, kws_dot=None, kind="all", **kwargs):
         """Create a variety of plots."""
         figs = {}
         if kws_umap is None:
@@ -289,7 +290,7 @@ class Omics(object):
         
         # Gene Expression
         figs["gex"] = cr.pl.plot_gex(
-            self.rna, col_cell_type=lab_cluster, genes=genes, kind="all", 
+            self.rna, col_cell_type=lab_cluster, genes=genes, kind=kind, 
             col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict, 
             kws_violin=kws_violin, kws_heat=kws_heat, 
             kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
@@ -303,6 +304,22 @@ class Omics(object):
         else:
             print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
         return figs
+    
+    def plot_umap(self, color=None, group=None, **kwargs):
+        """Plot UMAP."""
+        if color is None:
+            color = self._columns["col_cell_type"]
+        if group:
+            fig = cr.pl.plot_umap_split(self.rna, group, 
+                                        color=color, **kwargs)
+        else:
+            if not isinstance(color, str) and len(color) > 1 and (
+                color[0] in self.rna.var_names):  # multi-feature UMAP
+                fig = cr.pl.plot_umap_multi(self.rna, color, **kwargs)
+            else:  # normal UMAP embedding (categorical or continous)
+                fig = sc.pl.umap(self.rna, color=color, 
+                                **{"legend_loc": "on data", **kwargs})
+        return fig
     
     def preprocess(self, assay_protein=None, layer_in=None, copy=False, 
                    kws_scale=True,  by_batch=None, **kwargs):

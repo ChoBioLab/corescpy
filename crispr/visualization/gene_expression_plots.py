@@ -10,10 +10,10 @@ Visualizing CRISPR experiment analysis results.
 import pertpy as pt
 import scanpy as sc
 import matplotlib.pyplot as plt
+from matplotlib import colors
 import seaborn as sb
 # import cowplot
 import warnings
-import math
 import crispr as cr
 import pandas as pd
 import numpy as np
@@ -170,3 +170,73 @@ def plot_gex(adata, col_cell_type=None, title=None,
                 print(f"{err} in plotting GEX matrix for label {i}")
                 figs[lab] = err
     return figs
+
+
+def plot_umap_multi(adata, genes, title=None, **kwargs):
+    """Plot multiple continuous features (e.g, genes) on same UMAP."""
+    fxs = [plt.cm.Reds, plt.cm.Blues, plt.cm.Greens, 
+           plt.cm.Purples, plt.cm.Oranges, plt.cm.Greys]
+    if len(genes) > len(fxs):
+        warnings.warn("More genes than colors. Splitting plot.")
+        ggg = np.array_split(genes, np.arange(len(fxs), len(genes), len(fxs)))
+        for g in ggg:
+            axis_list = plot_umap_multi(
+                adata, g, title=None, **kwargs)
+        return axis_list
+    cmaps = []
+    for i in np.arange(len(genes)):
+        colors2 = fxs[i](np.linspace(0, 1, 128))
+        colors_comb = np.vstack([colors2])
+        mymap = colors.LinearSegmentedColormap.from_list(
+            'my_colormap', colors_comb)
+        my_cmap = mymap(np.arange(mymap.N))
+        my_cmap[:,-1] = np.linspace(0, 1, mymap.N)
+        my_cmap = colors.ListedColormap(my_cmap)
+        cmaps += [my_cmap]
+    # fig = plt.figure.Figure()
+    if "ax" in kwargs:
+        axis = kwargs["ax"]
+        _ = kwargs.pop("ax")
+    else:
+        axis = None
+    for i in np.arange(len(genes)):
+        axis = sc.pl.umap(adata, color=genes[i], 
+                          ax=axis,  # use previous axis
+                          title=title, show=False, return_fig=None, 
+                          colorbar_loc=None, color_map=cmaps[i], **kwargs)
+        c_b = plt.colorbar(
+            axis.collections[i], ax=axis, pad=0.05, aspect=30, 
+             orientation="horizontal", ticklocation="top",
+            )
+        c_b.ax.spines[["left", "right", "top"]].set_visible(False)
+        c_b.minorticks_off()
+        c_b.set_ticklabels(c_b.get_ticks(), rotation=270, fontdict={
+            "fontsize": 3})  # tick labels font size
+        c_b.set_ticklabels([c_b.get_ticks()[0]] + [""] * (
+            len(c_b.get_ticks()) - 2) + ["{1:0.{0}f}\"".format(int(
+                c_b.get_ticks()[-1] % 1 > 0), c_b.get_ticks()[-1])], 
+            rotation=270, fontdict={"fontsize": 3})  # tick labels font size
+        c_b.set_label(genes[i], rotation=0, loc="center", fontdict={
+            "fontsize": 8}, labelpad=4, rotation_mode="anchor"
+                      )  # colorbar title
+        c_b.ax.xaxis.set_ticks_position("top")
+    return axis
+
+
+def plot_umap_split(adata, split_by, color="leiden", 
+                    ncol=2, nrow=None, **kwargs):
+    """Plot UMAP ~ group (from Scanpy GitHub issues/2333)."""
+    categories = adata.obs[split_by].cat.categories
+    if nrow is None:
+        nrow = int(np.ceil(len(categories) / ncol))
+    fig, axs = plt.subplots(nrow, ncol, figsize=(5 * ncol, 4 * nrow))
+    axs = axs.flatten()
+    for i, cat in enumerate(categories):
+        if not isinstance(color, str) and len(color) > 0:
+            plot_umap_multi(adata[adata.obs[split_by] == cat], color,
+                            ax=axs[i], **{"title": cat, **kwargs})
+        else:
+            sc.pl.umap(adata[adata.obs[split_by] == cat], color=color, 
+                       ax=axs[i], show=False, **{"title": cat, **kwargs})
+    plt.tight_layout()
+    return fig, axs
