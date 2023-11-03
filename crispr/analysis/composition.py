@@ -83,6 +83,11 @@ def perform_sccoda(
     covariate_obs = [col_condition] + covariates if covariates else [
         col_condition]
     print(covariate_obs)
+    adata = adata.copy()
+    adata = adata[~adata.obs[col_condition].isnull()].copy()
+    adata.obs.index.values = [adata.obs.index.values[i] + "_" + str(
+        adata.obs.iloc[i][col_condition]) + "_" + str(adata.obs.iloc[i][
+            col_cell_type]) for i in range(adata.obs.shape[0])]
     model = pt.tl.Sccoda()
     scodata = model.load(
         adata, type=analysis_type, 
@@ -95,6 +100,13 @@ def perform_sccoda(
     # scodata[mod].obs = scodata[mod].obs.join(scodata[mod_o].obs[
     #     [col_cell_type, col_condition]])
     print(scodata)
+    if plot is True:
+        figs["barplot"] = pt.pl.coda.boxplots(
+            scodata, modality_key=mod,
+            feature_name=col_condition,
+            figsize=(12, 5), add_dots=True,
+            args_swarmplot={"palette": ["red"]})
+        plt.show()
     model.prepare(scodata, formula=col_condition,
                   reference_cell_type=reference_cell_type)  # setup
     print(scodata)

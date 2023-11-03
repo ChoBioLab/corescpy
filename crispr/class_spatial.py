@@ -5,7 +5,9 @@
 @author: E. N. Aslinger
 """
 
+import os
 import squidpy as sq
+import matplotlib.pyplot as plt
 import crispr as cr
 from crispr.class_sc import Omics
 import pandas as pd
@@ -71,12 +73,72 @@ class Spatial(Omics):
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
             
-        def plot(self, color):
-            """Create basic plots."""
-            figs = {}
-            if color is None:
-                color = self._columns["col_cell_type"]
-            figs["spatial"] = sq.pl.spatial_scatter(
-                self.adata, library_id=self._assay_spatial,
-                shape=None, color=[color], wspace=0.4)
+    def plot(self, color):
+        """Create basic plots."""
+        figs = {}
+        if color is None:
+            color = self._columns["col_cell_type"]
+        figs["spatial"] = sq.pl.spatial_scatter(
+            self.adata, library_id=self._assay_spatial,
+            shape=None, color=[color], wspace=0.4)
+        return figs        
+    
+    def analyze_spatial(self, layer=None, col_cell_type=None, genes=None, 
+                        method_autocorr="moran", n_perms=100, copy=False):
+        """Analyze spatial (adapted Squidpy tutorial)."""
+        figs = {}
+        adata = self.rna if copy is False else self.rna.copy()
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+            
+        # Connectivity & Centrality
+        print("\n<<< CALCULATING CONNECTIVITY & CENTRALITY >>>")
+        print("\t*** Building connectivity matrix...")
+        sq.gr.spatial_neighbors(adata, coord_type="generic", 
+                                delaunay=True)  # connectivity matrix
+        print("\t*** Computing centrality scores...")
+        sq.gr.centrality_scores(
+            adata, cluster_key=col_cell_type)  # compute centrality
+        sq.pl.centrality_scores(adata, cluster_key=col_cell_type, 
+                                figsize=(16, 5))  # plot centrality scores
+        
+        # Co-Occurence
+        print("\n<<< VISUALIZING CO-OCCURRENCE>>>")
+        sq.gr.co_occurrence(adata, cluster_key=col_cell_type)
+        figs["co_occurrence"] = {}
+        for x in pd.unique(adata.obs[col_cell_type]):
+            figs["co_occurrence"][x] = sq.pl.co_occurrence(
+                adata, cluster_key=col_cell_type, clusters=x,
+                figsize=(10, 10))
+        figs["spatial_scatter"] = sq.pl.spatial_scatter(
+            adata, color=col_cell_type, shape=None, size=2)
+        
+        # Neighbors Enrichment Analysis
+        print("\n<<< PERFORMING NEIGHBORS ENRICHMENT ANALYSIS >>>")
+        sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type)
+        figs["enrichment"], axs = plt.subplots(1, 2, figsize=(13, 7))
+        sq.pl.nhood_enrichment(
+            adata, cluster_key=col_cell_type, figsize=(8, 8), 
+            title="Neighborhood Enrichment", ax=axs[0])  # enrichment heat
+        sq.pl.spatial_scatter(adata, color=col_cell_type, shape=None, 
+                                size=2, ax=axs[1])  # spatial scatterplot
+        
+        # Spatial Auto-Correlation
+        if method_autocorr not in [None, False]:
+            print("\n<<< QUANTIFYING AUTO-CORRELATION >>>")
+            jobs = os.cpu_count() - 1  # threads
+            sq.gr.spatial_autocorr(adata, mode=method_autocorr,
+                                    layer=layer, n_perms=n_perms, 
+                                    n_jobs=jobs)  # auto-correlation
+            print(adata.uns["moranI"].head(10))
+            if genes:  # if genes of interest specified, plot
+                figs["autocorrelation"] = sq.pl.spatial_scatter(
+                    adata, library_id=self._assay_spatial,
+                    color=genes, shape=None, size=2, img=False)
+        
+        # Output
+        if copy is False:
+            self.figures["spatial"] = figs
             return figs
+        else:
+            return adata, figs

@@ -148,7 +148,7 @@ class Omics(object):
     @property
     def rna(self):
         """Get RNA modality of AnnData."""
-        return self._rna
+        return self.adata[self._assay] if self._assay else self.adata
 
     @rna.setter
     def rna(self, value) -> None:
@@ -170,12 +170,12 @@ class Omics(object):
     @property
     def obs(self):
         """Get `.obs` attribute of AnnData."""
-        return self._obs
+        return self.adata.obs
 
     @obs.setter
     def obs(self, value) -> None:
         self.adata.obs = value
-        self._obs = value
+        self._obs = self.adata.obs
         
     @property
     def gex(self):
@@ -195,7 +195,7 @@ class Omics(object):
     @property
     def uns(self):
         """Get `.uns` attribute of adata's gene expression modality."""
-        return self._uns
+        return self.adata.uns
 
     @uns.setter
     def uns(self, value) -> None:
@@ -209,7 +209,7 @@ class Omics(object):
     @property
     def var(self):
         """Get `.var` attribute of .adata's gene expression modality."""
-        return self._var
+        return self.adata.var
 
     @var.setter
     def var(self, value) -> None:
@@ -220,7 +220,7 @@ class Omics(object):
             self.adata[self._assay].var = value
         else:
             self.adata.var = value
-        self._var = value
+        self._var = self.adata.var
             
     def print(self):
         print(self.rna.obs.head(), "\n\n")
@@ -319,6 +319,13 @@ class Omics(object):
             else:  # normal UMAP embedding (categorical or continous)
                 fig = sc.pl.umap(self.rna, color=color, 
                                 **{"legend_loc": "on data", **kwargs})
+        return fig
+    
+    def plot_coex(self, genes, use_raw=False, **kwargs):
+        """Plot co-expression of a list of genes on a UMAP."""
+        adata = sc.tl.score_genes(self.rna, genes, score_name="_".join(genes), 
+                                  use_raw=use_raw, copy=True)  # score co-GEX
+        fig = sc.pl.umap(adata, color="_".join(genes), **kwargs)  # plot
         return fig
     
     def preprocess(self, assay_protein=None, layer_in=None, copy=False, 
@@ -432,7 +439,7 @@ class Omics(object):
     def run_composition_analysis(
         self, assay=None, layer=None, col_list_lineage_tree=None,
         covariates=None, reference_cell_type="automatic", 
-        analysis_type="cell_level", est_fdr=0.05, generate_sample_level=False,
+        analysis_type="cell_level", est_fdr=0.05, generate_sample_level=True,
         plot=True, copy=False, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         for x in [self._columns, self._keys]:
