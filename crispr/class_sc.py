@@ -195,7 +195,7 @@ class Omics(object):
     @property
     def uns(self):
         """Get `.uns` attribute of adata's gene expression modality."""
-        return self.adata.uns
+        return (self.adata[self._assay] if self._assay else self.adata).uns
 
     @uns.setter
     def uns(self, value) -> None:
@@ -209,7 +209,7 @@ class Omics(object):
     @property
     def var(self):
         """Get `.var` attribute of .adata's gene expression modality."""
-        return self.adata.var
+        return (self.adata[self._assay] if self._assay else self.adata).uns
 
     @var.setter
     def var(self, value) -> None:

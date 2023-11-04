@@ -7,6 +7,7 @@
 
 import os
 import squidpy as sq
+import scanpy as sc
 import matplotlib.pyplot as plt
 import crispr as cr
 from crispr.class_sc import Omics
@@ -84,38 +85,40 @@ class Spatial(Omics):
         return figs        
     
     def analyze_spatial(self, layer=None, col_cell_type=None, genes=None, 
-                        method_autocorr="moran", n_perms=100, copy=False):
+                        method_autocorr="moran", alpha=0.005,
+                        col_sample_id=None, n_perms=100, seed=1618, copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
         adata = self.rna if copy is False else self.rna.copy()
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
+        jobs = os.cpu_count() - 1  # threads for parallel processing
             
         # Connectivity & Centrality
         print("\n<<< CALCULATING CONNECTIVITY & CENTRALITY >>>")
         print("\t*** Building connectivity matrix...")
-        sq.gr.spatial_neighbors(adata, coord_type="generic", 
-                                delaunay=True)  # connectivity matrix
+        sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True,
+                                spatial_key=self._assay_spatial)
+        adata.uns["spatial"] = self._assay_spatial
+        adata.uns["libary_id"] = col_sample_id if col_sample_id not in [
+            None, False] else self._columns["col_sample_id"]
         print("\t*** Computing centrality scores...")
-        sq.gr.centrality_scores(
-            adata, cluster_key=col_cell_type)  # compute centrality
+        sq.gr.centrality_scores(adata, cluster_key=col_cell_type, n_jobs=jobs)
         sq.pl.centrality_scores(adata, cluster_key=col_cell_type, 
                                 figsize=(16, 5))  # plot centrality scores
         
+        # Interaction Matrix
+        sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
+        
         # Co-Occurence
-        print("\n<<< VISUALIZING CO-OCCURRENCE>>>")
-        sq.gr.co_occurrence(adata, cluster_key=col_cell_type)
-        figs["co_occurrence"] = {}
-        for x in pd.unique(adata.obs[col_cell_type]):
-            figs["co_occurrence"][x] = sq.pl.co_occurrence(
-                adata, cluster_key=col_cell_type, clusters=x,
-                figsize=(10, 10))
-        figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata, color=col_cell_type, shape=None, size=2)
+        print("\n<<< QUANTIFYING CO-OCCURRENCE>>>")
+        adata, figs["cooccurrence"] = self.find_cooccurrence(
+            col_cell_type=col_cell_type, copy=False)
         
         # Neighbors Enrichment Analysis
-        print("\n<<< PERFORMING NEIGHBORS ENRICHMENT ANALYSIS >>>")
-        sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type)
+        print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
+        sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type, 
+                               n_jobs=jobs, seed=seed)
         figs["enrichment"], axs = plt.subplots(1, 2, figsize=(13, 7))
         sq.pl.nhood_enrichment(
             adata, cluster_key=col_cell_type, figsize=(8, 8), 
@@ -123,22 +126,99 @@ class Spatial(Omics):
         sq.pl.spatial_scatter(adata, color=col_cell_type, shape=None, 
                                 size=2, ax=axs[1])  # spatial scatterplot
         
-        # Spatial Auto-Correlation
+        # Spatially-Variable Genes
         if method_autocorr not in [None, False]:
-            print("\n<<< QUANTIFYING AUTO-CORRELATION >>>")
-            jobs = os.cpu_count() - 1  # threads
-            sq.gr.spatial_autocorr(adata, mode=method_autocorr,
-                                    layer=layer, n_perms=n_perms, 
-                                    n_jobs=jobs)  # auto-correlation
-            print(adata.uns["moranI"].head(10))
-            if genes:  # if genes of interest specified, plot
-                figs["autocorrelation"] = sq.pl.spatial_scatter(
-                    adata, library_id=self._assay_spatial,
-                    color=genes, shape=None, size=2, img=False)
+            figs["autocorrelation"] = self.find_svgs(
+                genes=genes, adata=adata, method=method_autocorr, 
+                layer=layer, n_perms=n_perms)
+            
+        # Receptor-Ligand Interaction
+        adata, figs["receptor_ligand"] = self.calculate_receptor_ligand(
+            key_source=None, key_targets=None, col_cell_type=col_cell_type, 
+            n_perms=n_perms, alpha=alpha)
         
         # Output
         if copy is False:
             self.figures["spatial"] = figs
+            self.rna = adata
             return figs
         else:
             return adata, figs
+        
+        
+    def find_cooccurrence(self, col_cell_type=None, copy=False):
+        """
+        Find co-occurrence using spatial data. (similar to neighborhood
+        enrichment analysis, but uses original spatial coordinates rather
+        than connectivity matrix).
+        """
+        figs = {}
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        jobs = os.cpu_count() - 1  # threads for parallel processing
+        adata = self.rna.copy() if copy is True else self.rna
+        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, 
+                            spatial_key=self._assay_spatial, n_jobs=jobs)
+        figs["co_occurrence"] = {}
+        figs["spatial_scatter"] = sq.pl.spatial_scatter(
+            adata, color=col_cell_type, shape=None, size=2)
+        try:
+            figs["co_occurrence"] = sq.pl.co_occurrence(
+                adata, cluster_key=col_cell_type, figsize=(10, 10))
+        except Exception as err:
+            figs["co_occurrence"] = err
+            print(f"{err}\n{type(err)}\n{err.args}\n\n"
+                  "Failed to plot co-occurrence!")
+        return adata, figs
+        
+    def find_svgs(self, genes=None, method="moran", n_perms=10,
+                  layer=None, adata=None, col_cell_type=None):
+        """Find spatially-variable genes."""
+        fig = {}
+        if genes is None:
+            genes = 10  # plot top 10 variable genes if un-specified
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if adata is None:
+            adata = self.rna
+        jobs = os.cpu_count() - 1  # threads for parallel processing
+        print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
+        sq.gr.spatial_autocorr(self.rna, mode=method, layer=layer, 
+                               n_perms=n_perms, n_jobs=jobs)  # auto-correlation
+        if isinstance(genes, int):
+            genes = adata.uns["moranI"].head(genes).index.values
+        fig["scatter"] = sq.pl.spatial_scatter(
+            adata, library_id=self._assay_spatial,
+            color=genes, shape=None, size=2, img=False)
+        fig["umap"] = sc.pl.spatial(adata, color=genes) 
+        return fig
+        
+    def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):
+        """
+        Use Ripley's statistics to determine whether distributions are 
+        random, dispersed, or clustered.
+        """
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        sq.gr.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
+        fig = sq.pl.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
+        return fig
+    
+    def calculate_receptor_ligand(self, key_source=None, key_targets=None, 
+                                  col_cell_type=None, n_perms=10, 
+                                  alpha=0.005, copy=False, **kwargs):
+        """Calculate receptor-ligand interactions."""
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        adata = self.rna.copy() if copy is True else self.rna
+        sq.gr.ligrec(
+            adata, n_perms=n_perms, cluster_key=col_cell_type,
+            transmitter_params={"categories": "ligand"}, 
+            receiver_params={"categories": "receptor"},
+            interactions_params={'resources': 'CellPhoneDB'}, **kwargs)
+        if key_source is not None and key_targets is not None:
+            fig = sq.pl.ligrec(res, alpha=alpha, source_groups=key_source, 
+                            target_groups=key_targets)  # plot 
+        else:
+            fig = None
+        return adata, fig
