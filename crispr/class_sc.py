@@ -11,7 +11,7 @@ import pertpy as pt
 # import copy
 import muon
 import crispr as cr
-# import pandas as pd
+import pandas as pd
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -159,13 +159,11 @@ class Omics(object):
             # self.adata = muon.MuData({**dict(zip(self.adata.mod.keys(), [
             #     self.adata[x] for x in self.adata.mod.keys()])), 
             #                           self._assay: value})
-            self._rna = self.adata.mod[self._assay]
         else:
             if self._assay: 
                 self.adata[self._assay] = value
             else:
                 self.adata = value
-            self._rna = value
             
     @property
     def obs(self):
@@ -175,7 +173,6 @@ class Omics(object):
     @obs.setter
     def obs(self, value) -> None:
         self.adata.obs = value
-        self._obs = self.adata.obs
         
     @property
     def gex(self):
@@ -372,11 +369,9 @@ class Omics(object):
         return adata, figs
                 
     def cluster(self, assay=None, method_cluster="leiden", 
-                model_celltypist=None,
-                plot=True, colors=None,
-                kws_pca=None, kws_neighbors=None, 
-                kws_umap=None, kws_cluster=None, 
-                copy=False, **kwargs):
+                resolution=1, kws_pca=None, kws_neighbors=None, 
+                kws_umap=None, kws_cluster=None, model_celltypist=None, 
+                plot=True, colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
@@ -393,7 +388,7 @@ class Omics(object):
         adata, figs_cl = cr.ax.cluster(
             self.rna.copy() if copy is True else self.rna, 
             assay=assay, method_cluster=method_cluster,
-            **self._columns, **self._keys,
+            **self._columns, **self._keys, resolution=resolution,
             plot=plot, colors=colors, model_celltypist=model_celltypist,
             kws_pca=kws_pca, kws_neighbors=kws_neighbors,
             kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
@@ -408,19 +403,25 @@ class Omics(object):
                           copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
         adata = self.rna.copy()
-        adata.X = adata.layers[self._layers["log1p"]]
-        preds, ct_dot = cr.ax.perform_celltypist(
+        adata.X = adata.layers[self._layers["log1p"]]  # log 1 p layer
+        preds, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, 
             min_proportion=min_proportion, **kwargs)  # annotate
         self.results["celltypist"] = preds  # store results
+        if not isinstance(figs, dict):
+            figs = {"original": figs}
         if copy is False:  # assign if performing inplace
             self.rna.obs = self.rna.obs[self.rna.obs.columns.difference(
-                preds.predicted_labels.columns)].join(
-                    preds.predicted_labels, lsuffix="_last")
-        sc.pl.umap(self.rna, color=[self._columns["col_cell_type"]] + list(
-            preds.predicted_labels.columns))  # UMAP
-        return preds, ct_dot
+                ["conf_score", "predicted_labels", "majority_voting"])].join(
+                    preds.obs[["conf_score", "predicted_labels", 
+                               "majority_voting"]], 
+                    lsuffix="_last")  # add celltypist data
+        for x in ["predicted_labels", "majority_voting"]:
+            if x in preds.obs:
+                figs[x] = sc.pl.umap(preds, color=list(pd.unique([
+                    self._columns["col_cell_type"], x])))  # UMAP plot
+        return preds, figs
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 

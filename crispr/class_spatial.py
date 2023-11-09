@@ -84,12 +84,14 @@ class Spatial(Omics):
             shape=None, color=[color], wspace=0.4)
         return figs        
     
-    def analyze_spatial(self, layer=None, col_cell_type=None, genes=None, 
-                        method_autocorr="moran", alpha=0.005,
+    def analyze_spatial(self, col_cell_type=None, genes=None, 
+                        method_autocorr="moran", alpha=0.005, layer="log1p",
                         col_sample_id=None, n_perms=100, seed=1618, copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
         adata = self.rna if copy is False else self.rna.copy()
+        layer = self._layers[layer] if layer in self._layers else layer
+        adata.X = adata.layers[layer]  # set data layer
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         jobs = os.cpu_count() - 1  # threads for parallel processing
@@ -99,9 +101,9 @@ class Spatial(Omics):
         print("\t*** Building connectivity matrix...")
         sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True,
                                 spatial_key=self._assay_spatial)
-        adata.uns["spatial"] = self._assay_spatial
-        adata.uns["libary_id"] = col_sample_id if col_sample_id not in [
-            None, False] else self._columns["col_sample_id"]
+        adata.uns["spatial"][
+            "library_id"] = col_sample_id if col_sample_id not in [
+                None, False] else self._columns["col_sample_id"]  # library ID
         print("\t*** Computing centrality scores...")
         sq.gr.centrality_scores(adata, cluster_key=col_cell_type, n_jobs=jobs)
         sq.pl.centrality_scores(adata, cluster_key=col_cell_type, 
@@ -118,13 +120,15 @@ class Spatial(Omics):
         # Neighbors Enrichment Analysis
         print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
         sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type, 
-                               n_jobs=jobs, seed=seed)
+                               n_jobs=None,
+                               # n_jobs=jobs,  # not working for some reason?
+                               seed=seed)
         figs["enrichment"], axs = plt.subplots(1, 2, figsize=(13, 7))
         sq.pl.nhood_enrichment(
             adata, cluster_key=col_cell_type, figsize=(8, 8), 
-            title="Neighborhood Enrichment", ax=axs[0])  # enrichment heat
+            title="Neighborhood Enrichment", ax=axs[0])  # heatmap (panel 1)
         sq.pl.spatial_scatter(adata, color=col_cell_type, shape=None, 
-                                size=2, ax=axs[1])  # spatial scatterplot
+                                size=2, ax=axs[1])  # scatterplot (panel 2)
         
         # Spatially-Variable Genes
         if method_autocorr not in [None, False]:

@@ -11,8 +11,11 @@ import pertpy as pt
 import muon as mu
 import warnings
 import celltypist
-import pandas as pd
+from anndata import AnnData
 import scanpy as sc
+import os
+import pandas as pd
+import numpy as np
 
 
 def cluster(adata, layer=None,
@@ -20,6 +23,7 @@ def cluster(adata, layer=None,
             model_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden", 
+            resolution=1,
             kws_pca=None, kws_neighbors=None, 
             kws_umap=None, kws_cluster=None, **kwargs):
     """
@@ -58,7 +62,8 @@ def cluster(adata, layer=None,
         print("\n\n<<< PERFORMING PCA >>>")
         if len(kws_pca) > 0:
             print("\n", kws_pca)
-        if "use_highly_variable" in kws_pca and "highly_variable" not in ann.var:
+        if "use_highly_variable" in kws_pca and (
+            "highly_variable" not in ann.var):
             warnings.warn("""use_highly_variable set to True, 
                         but 'highly_variable' not found in `adata.var`""")
             kws_pca["use_highly_variable"] = False
@@ -77,9 +82,11 @@ def cluster(adata, layer=None,
         sc.tl.umap(ann, **kws_umap)
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
     if str(method_cluster).lower() == "leiden":
-        sc.tl.leiden(ann, **kws_cluster)  # leiden clustering
+        sc.tl.leiden(ann, resolution=resolution, 
+                     **kws_cluster)  # leiden clustering
     elif str(method_cluster).lower() == "louvain":
-        sc.tl.louvain(ann, **kws_cluster)  # louvain clustering
+        sc.tl.louvain(ann,  resolution=resolution, 
+                      **kws_cluster)  # louvain clustering
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
     print(f"\n\n<<< CREATING UMAP PLOTS >>>")
@@ -130,23 +137,47 @@ def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
 
 def perform_celltypist(adata, model, col_cell_type=None, 
                        mode="best match", p_threshold=0.5, 
-                       over_clustering=None, min_proportion=0, 
-                       majority_voting=False, **kwargs):
-    """Annotate cell types using CellTypist."""
+                       over_clustering=True, min_proportion=0, 
+                       majority_voting=False, 
+                       kws_train=None, **kwargs):
+    """
+    Annotate cell types using CellTypist.
+    Provide string corresponding to CellTypist or, to train a custom 
+    model based on other data, provide an AnnData object with training
+    data (and, to provide further keyword arguments, including 
+    `labels` if `col_cell_type` is not the same as for the new data, 
+    also specify `kws_train`).
+    """
     figs = {}
-    try:
-        mod = celltypist.models.Model.load(
-            model=model if ".pkl" in model else model + ".pkl")  # load model
-    except Exception as err:
-        print(f"{err}\n\nFailed to load CellTypist model {model}. Try:\n\n")
-        print(celltypist.models.models_description())
+    jobs = kwargs.pop("n_jobs") if "n_jobs" in kwargs else os.cpu_count() - 1
+    if isinstance(model, AnnData):  # train custom model
+        if "n_jobs" not in kws_train:  # use cpus - 1 if # jobs unspecified
+            kws_train["n_jobs"] = jobs
+        if "col_cell_type" in kws_train:  # rename cell type argument if need
+            kws_train["label"] = kws_train.pop("col_cell_type")
+        model = celltypist.train(model, **kws_train)  # custom model
+        try:
+            model = celltypist.models.Model.load(
+                model=model if ".pkl" in model else model + ".pkl")  # model
+        except Exception as err:
+            print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
+            print(celltypist.models.models_description())
     preds = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
+    preds = preds.to_adata()
     if col_cell_type is not None:  # compare to a different cell type label
-        figs = celltypist.dotplot(
+        figs["label_transfer"] = celltypist.dotplot(
             preds, use_as_reference=col_cell_type,
-            use_as_prediction="predicted_labels")
+            use_as_prediction="predicted_labels"
+            )  # compare predicted & existing membership overlap
+        figs["markers"] = {}
+        for y in ["predicted_labels", "majority_voting"]:  # plot markers
+            figs["markers"][y] = {}
+            for x in preds.obs[y].unique():
+                markers = model.extract_top_markers(x, 3)
+                figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
+                    preds, markers, groupby=col_cell_type, rotation = 90)
     return preds, figs
 

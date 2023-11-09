@@ -404,7 +404,8 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
         adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
     if patterns is None:
         patterns = dict(zip(["mt", "ribo", "hb"], 
-                            [("MT-", "mt-"), ("RPS", "RPL"), ("^HB[^(P)]")]))
+                            [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
+                                "^HB[^(P)]", "^hb[^(p)]")]))
         patterns_names = dict(zip(patterns, [
             "Mitochondrial", "Ribosomal", "Hemoglobin"]))
     p_names = [patterns_names[k] for k in patterns_names]
