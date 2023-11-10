@@ -206,7 +206,7 @@ class Omics(object):
     @property
     def var(self):
         """Get `.var` attribute of .adata's gene expression modality."""
-        return (self.adata[self._assay] if self._assay else self.adata).uns
+        return (self.adata[self._assay] if self._assay else self.adata).var
 
     @var.setter
     def var(self, value) -> None:
@@ -217,7 +217,6 @@ class Omics(object):
             self.adata[self._assay].var = value
         else:
             self.adata.var = value
-        self._var = self.adata.var
             
     def print(self):
         print(self.rna.obs.head(), "\n\n")
