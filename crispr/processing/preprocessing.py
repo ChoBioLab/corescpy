@@ -376,7 +376,7 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     if layer is None:
-        layers = cr.pp.get_layer_dict()["counts"]  # raw counts layer
+        layer = cr.pp.get_layer_dict()["counts"]  # raw counts layer
     if layer is not None:
         adata.X = adata.layers[layer].copy()  # reset to raw counts
     if layer:
