@@ -426,11 +426,11 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     rrs, ccs = cr.pl.square_grid(len(pct_ns + ["n_genes_by_counts"]))  # dims
     fff, axs = plt.subplots(rrs, ccs, figsize=(5 * rrs, 5 * ccs))  # subplots
     for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
-        try:  # unravel axes to get coordinates, then scatterplot facet
-            sc.pl.scatter(adata, x="total_counts", y=v, 
-                            ax=a, color=hue, show=False)  # scatterplot
-        except Exception as err:
-            print(err)
+        # try:  # unravel axes to get coordinates, then scatterplot facet
+        sc.pl.scatter(adata, x="total_counts", y=v, 
+                        ax=a, color=hue, show=False)  # scatterplot
+        # except Exception as err:
+        #     print(err)
     plt.show()
     figs[f"qc_{v}_scatter"] = fff
     varx = list(pct_ns + [hue]) if hue else pct_ns
