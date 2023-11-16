@@ -88,7 +88,9 @@ def square_grid(number):
 
 def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None, 
               legend_loc="on_data", genes=None, col_gene_symbols=None, 
-              cell_types_circle=None, **kwargs):
+              cell_types_circle=None,  # create plot with cell types circled
+              figsize=30,  # scale of shorter axis (long plots proportional)
+              **kwargs):
     """Make UMAP-based plots."""
     figs = {}
     if "cmap" in kwargs:  # in case use wrong form of argument
@@ -101,7 +103,7 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
         try:
             figs["clustering"] = sc.pl.umap(
                 adata, color=col_cell_type, return_fig=True, 
-                title=title,  **kwargs)  # UMAP ~ cell type
+                title=title,  legend_loc=legend_loc, **kwargs)  # ~ cell type
         except Exception as err:
             warnings.warn(f"{err}\n\nCould not plot UMAP clusters.")
             figs["clustering"] = err
@@ -125,14 +127,16 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
             print(f"\n<<< PLOTTING {color} on UMAP >>>")
             try:
                 figs[f"clustering_{color}"] = sc.pl.umap(
-                    adata, title=title if title else None, 
+                    adata, title=title, legend_loc=legend_loc,
+                    figsize=(figsize, figsize),
                     return_fig=True, color=color, **kwargs)  # UMAP ~ GEX
             except Exception as err:
                 warnings.warn(f"{err}\n\nCould not plot UMAP ~ {color}.")
                 figs[f"clustering_{color}"] = err
-        if cell_types_circle and "X_umap" in adata.obsm:
-            figs["circled"], axu = plt.subplots(figsize=(3, 3))
-            sc.pl.umap(adata, color=[col_cell_type], ax=axu, show=False)
+        if cell_types_circle and "X_umap" in adata.obsm:  # circle cell type
+            figs["circled"], axu = plt.subplots(figsize=(figsize, figsize))
+            sc.pl.umap(adata, color=[color if color else col_cell_type], 
+                       ax=axu, legend_loc=legend_loc, show=False)  # umap base
             for h in cell_types_circle:  # circle cell type
                 locs = adata[adata.obs[col_cell_type] == h, :].obsm['X_umap']
                 coordinates = [locs[:, i].mean() for i in [0, 1]]
@@ -150,3 +154,19 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
             #     # Add back the original Legend (was overwritten by new)
             # _ = plt.gca().add_artist(l_1)
         return figs
+    
+
+def plot_umap_circled(adata, col_cell_type, cell_types_circle, color=None):
+    """Create a UMAP-embedded plot with cell types circled."""
+    if color is None:
+        color = col_cell_type
+    fig, axu = plt.subplots(figsize=(figsize, figsize))
+    sc.pl.umap(adata, color=[col_cell_type], ax=axu, 
+                legend_loc=legend_loc, show=False)  # umap base
+    for h in cell_types_circle:  # circle cell type
+        locs = adata[adata.obs[col_cell_type] == h, :].obsm['X_umap']
+        coordinates = [locs[:, i].mean() for i in [0, 1]]
+        circle = plt.Circle(tuple(coordinates), 1.5, color="r", 
+                            clip_on=False, fill=False)  # circle
+        axu.add_patch(circle)
+    return fig, axu

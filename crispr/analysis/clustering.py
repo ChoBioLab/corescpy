@@ -20,7 +20,7 @@ import numpy as np
 
 def cluster(adata, layer=None,
             plot=True, colors=None,
-            model_celltypist=None,
+            kws_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden", 
             resolution=1,
@@ -107,9 +107,9 @@ def cluster(adata, layer=None,
                     [method_cluster] + list(colors))))  # UMAP extra panels
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
-    if model_celltypist is not None:
+    if kws_celltypist is not None:
         ann.uns["celltypist"], figs["celltypist"] = perform_celltypist(
-            ann, model=model_celltypist)  # celltypist annotations
+            ann, **kws_celltypist)  # celltypist annotations
         ann.obs = ann.obs.join(ann.uns["celltypist"].predicted_labels, 
                                lsuffix="_last")  # to data
     return ann, figs
@@ -156,12 +156,12 @@ def perform_celltypist(adata, model, col_cell_type=None,
         if "col_cell_type" in kws_train:  # rename cell type argument if need
             kws_train["label"] = kws_train.pop("col_cell_type")
         model = celltypist.train(model, **kws_train)  # custom model
-        try:
-            model = celltypist.models.Model.load(
-                model=model if ".pkl" in model else model + ".pkl")  # model
-        except Exception as err:
-            print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
-            print(celltypist.models.models_description())
+    try:
+        model = celltypist.models.Model.load(
+            model=model if ".pkl" in model else model + ".pkl")  # model
+    except Exception as err:
+        print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
+        print(celltypist.models.models_description())
     preds = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 

@@ -97,6 +97,8 @@ class Omics(object):
                         "layer_perturbation": "X_pert"}
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
+        if kws_multi and col_sample_id is None:
+            col_sample_id = "unique.idents"
         
         # Create Attributes to Store Results/Figures
         self.figures = {"main": {}}
@@ -104,6 +106,17 @@ class Omics(object):
         self.info = {"descriptives": {}, 
                      "guide_rna": {},
                      "methods": {}}  # extra info to store post-use of methods
+        
+        # Store Columns & Keys within Columns as Dictionary Attributes
+        self._columns = dict(
+            col_gene_symbols=col_gene_symbols, col_cell_type=col_cell_type, 
+            col_sample_id=col_sample_id, col_batch=col_sample_id, 
+            col_condition=col_condition)
+        self._keys = dict(key_control=key_control, 
+                          key_treatment=key_treatment)
+        print("\n\n")
+        for q in [self._columns, self._keys]:
+            cr.tl.print_pretty_dictionary(q)
         
         # Create Object & Store Raw Counts
         if kws_multi:
@@ -123,17 +136,6 @@ class Omics(object):
                 col_gene_symbols=col_gene_symbols,
                 col_sample_id=col_sample_id, **kwargs)  # make AnnData
         print(self.adata.obs, "\n\n") if assay else None
-        
-        # Store Columns & Keys within Columns as Dictionary Attributes
-        self._columns = dict(
-            col_gene_symbols=col_gene_symbols, col_cell_type=col_cell_type, 
-            col_sample_id=col_sample_id, col_batch=col_sample_id, 
-            col_condition=col_condition)
-        self._keys = dict(key_control=key_control, 
-                          key_treatment=key_treatment)
-        print("\n\n")
-        for q in [self._columns, self._keys]:
-            cr.tl.print_pretty_dictionary(q)
         
         # Let Property Setters Run
         self.rna = self.adata[self._assay] if self._assay else self.adata
@@ -264,6 +266,8 @@ class Omics(object):
         figs = {}
         if kws_umap is None:
             kws_umap = {}
+        if "legend_loc" not in kws_umap:
+            kws_umap["legend_loc"] = "on data"
         cct = kwargs["col_cell_type"] if (
             "col_cell_type" in kwargs) else self._columns["col_cell_type"] 
         lab_cluster = kws_umap.pop("col_cell_type") if (
@@ -296,7 +300,8 @@ class Omics(object):
             print("\n<<< PLOTTING UMAP >>>")
             figs["umap"] = cr.pl.plot_umap(
                 self.rna, col_cell_type=lab_cluster, **kws_umap, 
-                genes=genes, col_gene_symbols=cgs)
+                genes=genes, col_gene_symbols=cgs, 
+                cell_types_circle=cell_types_circle)
         else:
             print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
         return figs
@@ -369,7 +374,7 @@ class Omics(object):
                 
     def cluster(self, assay=None, method_cluster="leiden", 
                 resolution=1, kws_pca=None, kws_neighbors=None, 
-                kws_umap=None, kws_cluster=None, model_celltypist=None, 
+                kws_umap=None, kws_cluster=None, kws_celltypist=None, 
                 plot=True, colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
@@ -388,7 +393,7 @@ class Omics(object):
             self.rna.copy() if copy is True else self.rna, 
             assay=assay, method_cluster=method_cluster,
             **self._columns, **self._keys, resolution=resolution,
-            plot=plot, colors=colors, model_celltypist=model_celltypist,
+            plot=plot, colors=colors, kws_celltypist=kws_celltypist,
             kws_pca=kws_pca, kws_neighbors=kws_neighbors,
             kws_umap=kws_umap, kws_cluster=kws_cluster, **kwargs)
         if copy is False:
@@ -397,7 +402,7 @@ class Omics(object):
         return figs_cl
     
     def annotate_clusters(self, model, mode="best match", 
-                          p_threshold=0.5, 
+                          p_threshold=0.5,
                           over_clustering=None, min_proportion=0, 
                           copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
@@ -406,7 +411,8 @@ class Omics(object):
         preds, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, 
-            min_proportion=min_proportion, **kwargs)  # annotate
+            min_proportion=min_proportion,
+            **kwargs)  # annotate
         self.results["celltypist"] = preds  # store results
         if not isinstance(figs, dict):
             figs = {"original": figs}
@@ -447,7 +453,7 @@ class Omics(object):
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
         col_condition, col_cell_type = [
-            kwargs.pop(x) if x in kwargs else None for x in [
+            kwargs.pop(x) if x in kwargs else self._columns[x] for x in [
                 "col_condition", "col_cell_type"]]  # extract from kwargs
         output = cr.ax.analyze_composition(
             self.adata, col_condition,  col_cell_type, 
