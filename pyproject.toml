@@ -19,11 +19,13 @@ maintainers = [
 urls.Source = "https://github.com/easlinger/crispr"
 urls.Home-page = "https://github.com/easlinger/crispr"
 dependencies = [
+    "python=3.10.4",
     "anndata",
     "scanpy[leiden]",
     "muon",
     "pertpy",
     "harmonypy",
+    "squidpy",
     "arviz",
     "celltypist",
     "ete3",
