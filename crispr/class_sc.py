@@ -7,6 +7,7 @@
 
 import scanpy as sc
 import seaborn as sns
+import matplotlib.pyplot as plt
 import pertpy as pt
 # import copy
 import muon
@@ -428,9 +429,9 @@ class Omics(object):
             figs[x] = sc.pl.umap(preds, color=list(pd.unique([
                 self._columns["col_cell_type"], x])), 
                                     return_fig=True)  # UMAP plot
-        figs["all"] = sc.pl.umap(preds, ccts)  # all on one figure
-        figs["all"].figure.subplots_adjust(wspace=0.5)
-        figs["all"].figure.show()
+        figs["all"] = sc.pl.umap(preds, color=ccts, return_fig=True, 
+                                 legend_fontsize=6,
+                                 wspace=0.5)  # all on one figure
         return preds, figs
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
