@@ -429,9 +429,10 @@ class Omics(object):
             figs[x] = sc.pl.umap(preds, color=list(pd.unique([
                 self._columns["col_cell_type"], x])), 
                                     return_fig=True)  # UMAP plot
-        figs["all"] = sc.pl.umap(preds, color=ccts, return_fig=True, 
-                                 legend_fontsize=6,
-                                 wspace=0.5)  # all on one figure
+        figs["all"] = sc.pl.umap(preds, color=ccts, return_fig=True,
+                                 wspace=1 if max([len(preds.obs[x].unique(
+                                     )) for x in ccts]) > 30 else 0.5, 
+                                 legend_fontsize=6)  # all on one figure
         return preds, figs
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
