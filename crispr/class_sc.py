@@ -421,10 +421,16 @@ class Omics(object):
                     preds.obs[["conf_score", "predicted_labels", 
                                "majority_voting"]], 
                     lsuffix="_last")  # add celltypist data
-        for x in ["predicted_labels", "majority_voting"]:
-            if x in preds.obs:
-                figs[x] = sc.pl.umap(preds, color=list(pd.unique([
-                    self._columns["col_cell_type"], x])))  # UMAP plot
+        ccts = list(set(pd.unique(
+            ["predicted_labels", "majority_voting", self._columns[
+                "col_cell_type"]])).intersection(preds.obs.columns))
+        for x in list(set(ccts).difference(self._columns["col_cell_type"])):
+            figs[x] = sc.pl.umap(preds, color=list(pd.unique([
+                self._columns["col_cell_type"], x])), 
+                                    return_fig=True)  # UMAP plot
+        figs["all"] = sc.pl.umap(preds, ccts)  # all on one figure
+        figs["all"].figure.subplots_adjust(wspace=0.5)
+        figs["all"].figure.show()
         return preds, figs
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
