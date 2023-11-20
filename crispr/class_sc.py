@@ -25,9 +25,8 @@ class Omics(object):
     def __init__(
         self, file_path, assay=None, assay_protein=None, 
         col_gene_symbols="gene_symbols", col_cell_type="leiden", 
-        col_sample_id="standard_sample_id", 
-        col_condition=None, key_control=None, key_treatment=None, 
-        kws_multi=None, **kwargs):
+        col_sample_id=None, col_condition=None, key_control=None, 
+        key_treatment=None, kws_multi=None, **kwargs):
         """
         Initialize Omics class object.
 
