@@ -20,6 +20,7 @@ import crispr as cr
 from crispr.class_sc import Omics
 import numpy as np
 
+pd.DataFrame.iteritems = pd.DataFrame.items  # back-compatibility
 regress_out_vars = ["total_counts", "pct_counts_mt"]
 
 
@@ -281,7 +282,7 @@ def process_data(adata,
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
     figs["qc_metrics"] = cr.pp.perform_qc(
         ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
-        hue=sids)  # QC metric calculation & plottomg
+        hue=sids)  # QC metric calculation & plotting
 
     # Basic Filtering (DO FIRST...ALL INPLACE)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
@@ -424,36 +425,37 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
                                log1p=True, inplace=True)  # QC metrics
     hhh, pres = [hue] if isinstance(hue, str) else hue, True
-    for h in hhh:
-        if h not in adata.obs and h not in adata.var:
-            warn(f"\n\t{h} not found in adata.obs or adata.var; "
-                 "skipping color-coding")
-            if pres is None:
-                continue  # skip if already did "None" hue
-            pres = None
-        rrs, ccs = cr.pl.square_grid(len(pct_ns + ["n_genes_by_counts"])
-                                     )  # dimensions for subplot grid
-        fff, axs = plt.subplots(rrs, ccs, figsize=(
-            5 * rrs, 5 * ccs))  # subplot figure & axes
-        for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
-            try:  # unravel axes to get coordinates, then scatterplot facet
-                sc.pl.scatter(adata, x="total_counts", y=v, ax=a, show=False,
-                              color=h if pres else None)  # scatter
+    if hhh:  # plots by hue
+        for h in hhh:
+            if h not in adata.obs and h not in adata.var:
+                warn(f"\n\t{h} not found in adata.obs or adata.var; "
+                    "skipping color-coding")
+                if pres is None:
+                    continue  # skip if already did "None" hue
+                pres = None
+            rrs, ccs = cr.pl.square_grid(len(pct_ns + ["n_genes_by_counts"])
+                                        )  # dimensions for subplot grid
+            fff, axs = plt.subplots(rrs, ccs, figsize=(
+                5 * rrs, 5 * ccs))  # subplot figure & axes
+            for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
+                try:  # facet "v" of scatterplot
+                    sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
+                                  show=False, color=h if pres else None)
+                except Exception as err:
+                    print(err)
+            plt.show()
+            figs[f"qc_scatter_by_{h}" if pres else "qc_scatter"] = fff
+            try:
+                varm = pct_ns + ["n_genes_by_counts"] + list([h] if pres else [])
+                fff = seaborn.pairplot(
+                    adata.obs[varm].rename_axis("Metric", axis=1).rename({
+                        "total_counts": "Total Counts", **patterns_names
+                        }, axis=1), diag_kind="kde", hue=h if pres else None, 
+                    diag_kws=dict(fill=True, cut=0))  # pairplot
             except Exception as err:
+                fff = err
                 print(err)
-        plt.show()
-        figs[f"qc_scatter_by_{h}" if pres else "qc_scatter"] = fff
-        try:
-            varm = pct_ns + ["n_genes_by_counts"] + list([h] if pres else [])
-            fff = seaborn.pairplot(
-                adata.obs[varm].rename_axis("Metric", axis=1).rename({
-                    "total_counts": "Total Counts", **patterns_names
-                    }, axis=1), diag_kind="kde", hue=h if pres else None, 
-                diag_kws=dict(fill=True, cut=0))  # pairplot
-        except Exception as err:
-            fff = err
-            print(err)
-        figs[f"pairplot_by_{h}" if pres else "pairpolot"] = fff
+            figs[f"pairplot_by_{h}" if pres else "pairpolot"] = fff
     try:
         figs["pct_counts_kde"] = seaborn.displot(
             adata.obs[pct_ns].rename_axis("Metric", axis=1).rename(

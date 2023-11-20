@@ -7,15 +7,12 @@ Preprocessing CRISPR experiment data.
 @author: E. N. Aslinger
 """
 
-import pertpy as pt
-import muon as mu
 import warnings
 import celltypist
 from anndata import AnnData
 import scanpy as sc
 import os
 import pandas as pd
-import numpy as np
 
 
 def cluster(adata, layer=None,
@@ -85,7 +82,7 @@ def cluster(adata, layer=None,
         sc.tl.leiden(ann, resolution=resolution, 
                      **kws_cluster)  # leiden clustering
     elif str(method_cluster).lower() == "louvain":
-        sc.tl.louvain(ann,  resolution=resolution, 
+        sc.tl.louvain(ann, resolution=resolution, 
                       **kws_cluster)  # louvain clustering
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
