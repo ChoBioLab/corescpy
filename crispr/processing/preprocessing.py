@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from anndata import AnnData
 import crispr as cr
 from crispr.class_sc import Omics
+import pandas as pd
 import numpy as np
 
 pd.DataFrame.iteritems = pd.DataFrame.items  # back-compatibility
