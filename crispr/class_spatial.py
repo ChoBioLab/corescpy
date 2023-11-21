@@ -215,14 +215,14 @@ class Spatial(Omics):
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         adata = self.rna.copy() if copy is True else self.rna
-        sq.gr.ligrec(
+        res = sq.gr.ligrec(
             adata, n_perms=n_perms, cluster_key=col_cell_type,
             transmitter_params={"categories": "ligand"}, 
             receiver_params={"categories": "receptor"},
             interactions_params={'resources': 'CellPhoneDB'}, **kwargs)
         if key_source is not None and key_targets is not None:
             fig = sq.pl.ligrec(res, alpha=alpha, source_groups=key_source, 
-                            target_groups=key_targets)  # plot 
+                               target_groups=key_targets)  # plot 
         else:
             fig = None
         return adata, fig

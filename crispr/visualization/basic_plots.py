@@ -25,7 +25,7 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
     """Make plots facetted/split by cell type/cluster."""
     if not isinstance(plot_types, str):
         raise TypeError("plot_types must be a string.")
-    plot_types = plot_types.lower()  # so not case-sensitive
+    figs, plot_types = {}, plot_types.lower()  # so not case-sensitive
     if method_cluster is None:
         if "leiden" in adata.uns: 
             method_cluster = "leiden" 
@@ -34,7 +34,6 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
         else:
             raise ValueError("No clustering method found in object.")
         warnings.warn("Clustering method unspecified. Using {method}.")
-    figs = {}
     if plot_types == "all" or "violin" in plot_types:
         figs["violin"] = sc.pl.violin(adata, genes, groupby=method_cluster)
         figs["violin_stacked"] = sc.pl.stacked_violin(
@@ -44,13 +43,12 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
     return figs
         
 
-def square_grid(number):
+def square_grid(num):
     """Return row-column dimensions (approximately a square)."""
-    if isinstance(number, (np.ndarray, list, set, tuple, pd.Series)):
-        number = len(number)  # if provided actual object, calculate length
-    rows = int(np.sqrt(number))  # number of rows
-    cols = rows if rows * 2 == number else math.ceil(
-        number / rows)  # number of columns
+    if isinstance(num, (np.ndarray, list, set, tuple, pd.Series)):
+        num = len(num)  # if provided actual object, calculate length
+    rows = int(np.sqrt(num))  # number of rows
+    cols = rows if rows * 2 == num else math.ceil(num / rows)  # column #
     return rows, cols
 
 
@@ -156,11 +154,13 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
         return figs
     
 
-def plot_umap_circled(adata, col_cell_type, cell_types_circle, color=None):
+def plot_umap_circled(adata, col_cell_type, cell_types_circle, 
+                      color=None, legend_loc="right margin", figsize=30):
     """Create a UMAP-embedded plot with cell types circled."""
     if color is None:
         color = col_cell_type
-    fig, axu = plt.subplots(figsize=(figsize, figsize))
+    fig, axu = plt.subplots(figsize=(figsize, figsize) if isinstance(
+        figsize, (int, float) else figsize))  # set up subplots
     sc.pl.umap(adata, color=[col_cell_type], ax=axu, 
                 legend_loc=legend_loc, show=False)  # umap base
     for h in cell_types_circle:  # circle cell type
