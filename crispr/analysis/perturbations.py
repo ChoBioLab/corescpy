@@ -319,7 +319,7 @@ def perform_augur(adata, assay=None, layer=None,
             if "vcenter" not in kwargs:
                 kwargs.update({"vcenter": 0})
             if "legend_loc" not in kwargs:
-                kwargs.update({"legend_loc": "on_data"})
+                kwargs.update({"legend_loc": "on data"})
             if "frameon" not in kwargs:
                 kwargs.update({"frameon": False})
             figs["perturbation_score_umap"] = sc.pl.umap(

@@ -94,7 +94,7 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
     if "cmap" in kwargs:  # in case use wrong form of argument
         kwargs["color_map"] = kwargs.pop("cmap")
     kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE, 
-              "frameon": False, "legend_loc": "on_data", 
+              "frameon": False, "legend_loc": "on data", 
               "vcenter": 0, **kwargs}
     if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
         print("\n<<< PLOTTING UMAP >>>")
