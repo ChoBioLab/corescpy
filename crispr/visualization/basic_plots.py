@@ -160,7 +160,7 @@ def plot_umap_circled(adata, col_cell_type, cell_types_circle,
     if color is None:
         color = col_cell_type
     fig, axu = plt.subplots(figsize=(figsize, figsize) if isinstance(
-        figsize, (int, float) else figsize))  # set up subplots
+        figsize, (int, float)) else figsize)  # set up subplots
     sc.pl.umap(adata, color=[col_cell_type], ax=axu, 
                 legend_loc=legend_loc, show=False)  # umap base
     for h in cell_types_circle:  # circle cell type
