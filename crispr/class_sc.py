@@ -425,6 +425,10 @@ class Omics(object):
         ccts = list(set(pd.unique(
             ["predicted_labels", "majority_voting", self._columns[
                 "col_cell_type"]])).intersection(preds.obs.columns))
+        # for x in list(set(ccts).difference(self._columns["col_cell_type"])):
+        #     figs[x] = sc.pl.umap(preds, color=list(pd.unique([
+        #         self._columns["col_cell_type"], x])), wspace=0.25,
+        #                             return_fig=True)  # UMAP plot
         figs["all"] = sc.pl.umap(
             preds, color=ccts, return_fig=True, legend_fontsize=6, 
             wspace=0.75 if max([len(preds.obs[x].unique()) for x in ccts]
