@@ -163,12 +163,12 @@ def perform_celltypist(adata, model, col_cell_type=None,
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
-    ann = ann.to_adata()
-    if col_cell_type is not None:  # compare to a different cell type label
+    if col_cell_type is not None:  # predicted-existing membership overlap
         figs["label_transfer"] = celltypist.dotplot(
-            ann, use_as_reference=col_cell_type,
-            use_as_prediction="predicted_labels"
-            )  # compare predicted & existing membership overlap
+            ann, use_as_reference=col_cell_type, 
+            use_as_prediction="predicted_labels")
+    ann = ann.to_adata()
+    if col_cell_type is not None:  # compare to a different cell type markers
         figs["markers"] = {}
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
             figs["markers"][y] = {}
@@ -176,8 +176,9 @@ def perform_celltypist(adata, model, col_cell_type=None,
                 markers = model.extract_top_markers(x, 3)
                 figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
                     ann, markers, groupby=col_cell_type, rotation = 90)
-    ccts = set(pd.unique(["predicted_labels", "majority_voting"] + list(
-        col_cell_type if col_cell_type else []))).intersection(ann.obs)
+    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
+    ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
+               ).intersection(ann.obs.columns)  # celltypist & original column
     if space is None:  # space b/t celltypist & cell type plot facets
         space = 0.75 if max([len(ann.obs[x].unique()) 
                              for x in ccts]) > 30 else 0.5
