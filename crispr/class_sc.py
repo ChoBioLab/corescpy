@@ -257,6 +257,15 @@ class Omics(object):
         #     warnings.warn(f"{err}\n\n\nCould not describe cell counts.")
         self.info["descriptives"].update(desc)
         return figs
+
+    def map(self, gene=None, col_cell_type=True, **kwargs):
+        """Plot GEX &/or cell type(s) on UMAP."""
+        if col_cell_type is True:
+            col_cell_type = self._columns["col_cell_type"]
+        col_cell_type, gene = [[] if x is None else [x] if isinstance(
+            x, str) else list(x) for x in [col_cell_type, gene]]
+        fig = sc.pl.umap(self.rna, color=gene + col_cell_type, **kwargs)
+        return fig
             
     def plot(self, genes=None, genes_highlight=None,
              marker_genes_dict=None, cell_types_circle=None,
@@ -410,18 +419,14 @@ class Omics(object):
         adata.X = adata.layers[self._layers["log1p"]]  # log 1 p layer
         c_t = kwargs.pop("col_cell_type") if "col_cell_type" in kwargs else \
             self._columns["col_cell_type"]  # cell type column 
-        preds, figs = cr.ax.perform_celltypist(
+        ann, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
             min_proportion=min_proportion, **kwargs)  # annotate
-        self.results["celltypist"] = preds  # store results
+        self.figures["celltypist"] = figs
         if copy is False:  # assign if performing inplace
-            self.rna = preds
-        # for x in list(set(ccts).difference(self._columns["col_cell_type"])):
-        #     figs[x] = sc.pl.umap(preds, color=list(pd.unique([
-        #         self._columns["col_cell_type"], x])), wspace=0.25,
-        #                             return_fig=True)  # UMAP plot
-        return preds, figs
+            self.rna = ann
+        return ann, figs
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 
