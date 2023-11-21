@@ -173,9 +173,13 @@ def perform_celltypist(adata, model, col_cell_type=None,
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
             figs["markers"][y] = {}
             for x in ann.obs[y].unique():
-                markers = model.extract_top_markers(x, 3)
-                figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
-                    ann, markers, groupby=col_cell_type, rotation = 90)
+                try:
+                    markers = model.extract_top_markers(x, 3)
+                    figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
+                        ann, markers, groupby=col_cell_type, rotation = 90)
+                except Exception as err:
+                    warnings.warn(f"{err}\n\n\nError in {y}={x} marker plot!")
+                    figs["markers"][y][f"markers_{x}"] = err
     ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
     ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
                ).intersection(ann.obs.columns)  # celltypist & original column
