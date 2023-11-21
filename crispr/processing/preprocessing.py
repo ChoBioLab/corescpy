@@ -427,15 +427,15 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
                                log1p=True, inplace=True)  # QC metrics
-    hhh, pres = [hue] if isinstance(hue, str) else hue, True
+    hhh, yes = [hue] if isinstance(hue, str) else hue, True
     if hhh:  # plot by hue variables (e.g., batch, sample)
         for h in hhh:
             if h not in adata.obs and h not in adata.var:
                 warn(f"\n\t{h} not found in adata.obs or adata.var; "
                     "skipping color-coding")
-                if pres is None:
+                if yes is None:
                     continue  # skip if already did "None" hue
-                pres = None
+                yes = None
             rrs, ccs = cr.pl.square_grid(len(pct_n + ["n_genes_by_counts"])
                                         )  # dimensions for subplot grid
             fff, axs = plt.subplots(rrs, ccs, figsize=(
@@ -443,22 +443,22 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
             for a, v in zip(axs.flat, pct_n + ["n_genes_by_counts"]):
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
-                                  show=False, color=h if pres else None)
+                                  show=False, color=h if yes else None)
                 except Exception as err:
                     print(err)
             plt.show()
-            figs[f"qc_scatter_by_{h}" if pres else "qc_scatter"] = fff
+            figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
             try:
                 vam = pct_n + ["n_genes_by_counts"] + list([h] if yes else [])
                 fff = seaborn.pairplot(
                     adata.obs[vam].rename_axis("Metric", axis=1).rename({
                         "total_counts": "Total Counts", **patterns_names
-                        }, axis=1), diag_kind="kde", hue=h if pres else None, 
+                        }, axis=1), diag_kind="kde", hue=h if yes else None, 
                     diag_kws=dict(fill=True, cut=0))  # pairplot
             except Exception as err:
                 fff = err
                 print(err)
-            figs[f"pairplot_by_{h}" if pres else "pairpolot"] = fff
+            figs[f"pairplot_by_{h}" if yes else "pairpolot"] = fff
     try:
         figs["pct_counts_kde"] = seaborn.displot(
             adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
