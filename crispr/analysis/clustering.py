@@ -136,7 +136,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
                        mode="best match", p_threshold=0.5, 
                        over_clustering=True, min_proportion=0, 
                        majority_voting=False, plot_markers=False,
-                       kws_train=None, space=None, out_file=None, **kwargs):
+                       kws_train=None, space=None, out_dir=None, **kwargs):
     """
     Annotate cell types using CellTypist.
     Provide string corresponding to CellTypist or, to train a custom 
@@ -164,11 +164,15 @@ def perform_celltypist(adata, model, col_cell_type=None,
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
     if col_cell_type is not None:  # predicted-existing membership overlap
-        figs["label_transfer"] = celltypist.dotplot(
+        figs["label_transfer_pl"] = celltypist.dotplot(
             ann, use_as_reference=col_cell_type, 
             use_as_prediction="predicted_labels")
-    if out_file:
-        ann.to_plots(out_file=out_file, plot_probability=True)
+        figs["label_transfer_mv"] = celltypist.dotplot(
+            ann, use_as_reference=col_cell_type, 
+            use_as_prediction="majority_voting")
+    if out_dir:
+        ann.to_plots(out_file=out_dir, plot_probability=True)
+        ann.to_table(out_file=out_dir, plot_probability=True)
     ann = ann.to_adata(insert_labels=True, insert_prob=True)
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
