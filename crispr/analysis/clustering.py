@@ -135,7 +135,7 @@ def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
 def perform_celltypist(adata, model, col_cell_type=None, 
                        mode="best match", p_threshold=0.5, 
                        over_clustering=True, min_proportion=0, 
-                       majority_voting=False, 
+                       majority_voting=False, plot_markers=False,
                        kws_train=None, space=None, **kwargs):
     """
     Annotate cell types using CellTypist.
@@ -168,7 +168,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
             ann, use_as_reference=col_cell_type, 
             use_as_prediction="predicted_labels")
     ann = ann.to_adata()
-    if col_cell_type is not None:  # compare to a different cell type markers
+    if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
             figs["markers"][y] = {}

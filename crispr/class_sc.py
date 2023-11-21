@@ -264,7 +264,8 @@ class Omics(object):
             col_cell_type = self._columns["col_cell_type"]
         col_cell_type, gene = [[] if x is None else [x] if isinstance(
             x, str) else list(x) for x in [col_cell_type, gene]]
-        fig = sc.pl.umap(self.rna, color=gene + col_cell_type, **kwargs)
+        fig = sc.pl.umap(self.rna, color=gene + col_cell_type, **{
+            "legend_loc": "on data", "legend_fontweight": "medium", **kwargs})
         return fig
             
     def plot(self, genes=None, genes_highlight=None,
@@ -328,7 +329,8 @@ class Omics(object):
                 fig = cr.pl.plot_umap_multi(self.rna, color, **kwargs)
             else:  # normal UMAP embedding (categorical or continous)
                 fig = sc.pl.umap(self.rna, color=color, 
-                                **{"legend_loc": "on data", **kwargs})
+                                **{"legend_loc": "on data", 
+                                   "legend_fontweight": "medium", **kwargs})
         return fig
     
     def plot_coex(self, genes, use_raw=False, **kwargs):
