@@ -372,8 +372,10 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
                              retain_zero_variance=True, 
                              layer=None, **kwargs):
     """
-    Mean-center & standardize by reference condition (within-batch option).
-    If `retain_zero_variance` is True, genes with zero variance are retained.
+    Mean-center & standardize by reference condition 
+    (within-batch option).
+    If `retain_zero_variance` is True, genes with 
+    zero variance are retained.
     """
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
@@ -404,13 +406,13 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
         adata.X = adata.layers[layer].copy()
     figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
         adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
+    names = ["Mitochondrial", "Ribosomal", "Hemoglobin"]
     if patterns is None:
         patterns = dict(zip(["mt", "ribo", "hb"], 
                             [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
                                 "^HB[^(P)]", "^hb[^(p)]")]))
-        patterns_names = dict(zip(patterns, [
-            "Mitochondrial", "Ribosomal", "Hemoglobin"]))
-    p_names = [patterns_names[k] for k in patterns_names]
+    p_names = [names[k] if k  in names else k for k in patterns]  # "pretty"
+    patterns_names = dict(zip(patterns, p_names))  # map abbreviated to pretty
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...") 
     for k in patterns:
         try:
@@ -421,12 +423,12 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     qc_vars = list(set(patterns.keys()).intersection(
         adata.var.keys()))  # available QC metrics 
-    pct_ns = [f"pct_counts_{k}" for k in qc_vars]
-    print("\n\t*** Calculating & plotting QC metrics...\n\n") 
+    pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
+    print("\n\t*** Calculating & plotting QC metrics...\n\n")
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
                                log1p=True, inplace=True)  # QC metrics
     hhh, pres = [hue] if isinstance(hue, str) else hue, True
-    if hhh:  # plots by hue
+    if hhh:  # plot by hue variables (e.g., batch, sample)
         for h in hhh:
             if h not in adata.obs and h not in adata.var:
                 warn(f"\n\t{h} not found in adata.obs or adata.var; "
@@ -434,11 +436,11 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
                 if pres is None:
                     continue  # skip if already did "None" hue
                 pres = None
-            rrs, ccs = cr.pl.square_grid(len(pct_ns + ["n_genes_by_counts"])
+            rrs, ccs = cr.pl.square_grid(len(pct_n + ["n_genes_by_counts"])
                                         )  # dimensions for subplot grid
             fff, axs = plt.subplots(rrs, ccs, figsize=(
                 5 * rrs, 5 * ccs))  # subplot figure & axes
-            for a, v in zip(axs.flat, pct_ns + ["n_genes_by_counts"]):
+            for a, v in zip(axs.flat, pct_n + ["n_genes_by_counts"]):
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
                                   show=False, color=h if pres else None)
@@ -447,9 +449,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
             plt.show()
             figs[f"qc_scatter_by_{h}" if pres else "qc_scatter"] = fff
             try:
-                varm = pct_ns + ["n_genes_by_counts"] + list([h] if pres else [])
+                vam = pct_n + ["n_genes_by_counts"] + list([h] if yes else [])
                 fff = seaborn.pairplot(
-                    adata.obs[varm].rename_axis("Metric", axis=1).rename({
+                    adata.obs[vam].rename_axis("Metric", axis=1).rename({
                         "total_counts": "Total Counts", **patterns_names
                         }, axis=1), diag_kind="kde", hue=h if pres else None, 
                     diag_kws=dict(fill=True, cut=0))  # pairplot
@@ -459,7 +461,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
             figs[f"pairplot_by_{h}" if pres else "pairpolot"] = fff
     try:
         figs["pct_counts_kde"] = seaborn.displot(
-            adata.obs[pct_ns].rename_axis("Metric", axis=1).rename(
+            adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
                 patterns_names, axis=1).stack().to_frame(
                     "Percent Counts"), x="Percent Counts", col="Metric", 
             kind="kde", cut=0, fill=True)  # KDE of pct_counts
@@ -468,7 +470,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
         print(err)
     try:
         figs["metrics_violin"] = sc.pl.violin(
-            adata, ["n_genes_by_counts", "total_counts"] + pct_ns,
+            adata, ["n_genes_by_counts", "total_counts"] + pct_n,
             jitter=0.4, multi_panel=True)  # violin of counts, genes
     except Exception as err:
         figs["qc_metrics_violin"] = err

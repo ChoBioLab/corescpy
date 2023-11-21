@@ -136,7 +136,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
                        mode="best match", p_threshold=0.5, 
                        over_clustering=True, min_proportion=0, 
                        majority_voting=False, 
-                       kws_train=None, **kwargs):
+                       kws_train=None, space=None, **kwargs):
     """
     Annotate cell types using CellTypist.
     Provide string corresponding to CellTypist or, to train a custom 
@@ -159,22 +159,29 @@ def perform_celltypist(adata, model, col_cell_type=None,
     except Exception as err:
         print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
         print(celltypist.models.models_description())
-    preds = celltypist.annotate(
+    ann = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
-    preds = preds.to_adata()
+    ann = ann.to_adata()
     if col_cell_type is not None:  # compare to a different cell type label
         figs["label_transfer"] = celltypist.dotplot(
-            preds, use_as_reference=col_cell_type,
+            ann, use_as_reference=col_cell_type,
             use_as_prediction="predicted_labels"
             )  # compare predicted & existing membership overlap
         figs["markers"] = {}
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
             figs["markers"][y] = {}
-            for x in preds.obs[y].unique():
+            for x in ann.obs[y].unique():
                 markers = model.extract_top_markers(x, 3)
                 figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
-                    preds, markers, groupby=col_cell_type, rotation = 90)
-    return preds, figs
+                    ann, markers, groupby=col_cell_type, rotation = 90)
+    ccts = set(pd.unique(["predicted_labels", "majority_voting"] + list(
+        col_cell_type if col_cell_type else []))).intersection(ann.obs)
+    if space is None:  # space b/t celltypist & cell type plot facets
+        space = 0.75 if max([len(ann.obs[x].unique()) 
+                             for x in ccts]) > 30 else 0.5
+    figs["all"] = sc.pl.umap(ann, return_fig=True, legend_fontsize=6, 
+                             color=list(ccts), wspace=space)  # all 1 plot
+    return ann, figs
 

@@ -408,31 +408,19 @@ class Omics(object):
         """Use CellTypist to annotate clusters."""
         adata = self.rna.copy()
         adata.X = adata.layers[self._layers["log1p"]]  # log 1 p layer
+        c_t = kwargs.pop("col_cell_type") if "col_cell_type" in kwargs else \
+            self._columns["col_cell_type"]  # cell type column 
         preds, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
-            mode=mode, over_clustering=over_clustering, 
-            min_proportion=min_proportion,
-            **kwargs)  # annotate
+            mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
+            min_proportion=min_proportion, **kwargs)  # annotate
         self.results["celltypist"] = preds  # store results
-        if not isinstance(figs, dict):
-            figs = {"original": figs}
         if copy is False:  # assign if performing inplace
-            self.rna.obs = self.rna.obs[self.rna.obs.columns.difference(
-                ["conf_score", "predicted_labels", "majority_voting"])].join(
-                    preds.obs[["conf_score", "predicted_labels", 
-                               "majority_voting"]], 
-                    lsuffix="_last")  # add celltypist data
-        ccts = list(set(pd.unique(
-            ["predicted_labels", "majority_voting", self._columns[
-                "col_cell_type"]])).intersection(preds.obs.columns))
+            self.rna.obs = preds
         # for x in list(set(ccts).difference(self._columns["col_cell_type"])):
         #     figs[x] = sc.pl.umap(preds, color=list(pd.unique([
         #         self._columns["col_cell_type"], x])), wspace=0.25,
         #                             return_fig=True)  # UMAP plot
-        figs["all"] = sc.pl.umap(
-            preds, color=ccts, return_fig=True, legend_fontsize=6, 
-            wspace=0.75 if max([len(preds.obs[x].unique()) for x in ccts]
-                            ) > 30 else 0.5)  # all on one figure
         return preds, figs
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
