@@ -416,7 +416,7 @@ class Omics(object):
             min_proportion=min_proportion, **kwargs)  # annotate
         self.results["celltypist"] = preds  # store results
         if copy is False:  # assign if performing inplace
-            self.rna.obs = preds
+            self.rna = preds
         # for x in list(set(ccts).difference(self._columns["col_cell_type"])):
         #     figs[x] = sc.pl.umap(preds, color=list(pd.unique([
         #         self._columns["col_cell_type"], x])), wspace=0.25,
