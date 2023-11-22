@@ -145,7 +145,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
     `labels` if `col_cell_type` is not the same as for the new data, 
     also specify `kws_train`).
     """
-    figs, kws_train = {}, {}
+    figs, kws_train = {}, kws_train if kws_train else {}
     jobs = kwargs.pop("n_jobs") if "n_jobs" in kwargs else os.cpu_count() - 1
     if isinstance(model, AnnData):  # train custom model
         if "n_jobs" not in kws_train:  # use cpus - 1 if # jobs unspecified
