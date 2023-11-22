@@ -164,15 +164,16 @@ def perform_celltypist(adata, model, col_cell_type=None,
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
     if col_cell_type is not None:  # predicted-existing membership overlap
-        figs["label_transfer_pl"] = celltypist.dotplot(
-            res, use_as_reference=col_cell_type, 
-            use_as_prediction="predicted_labels")
-        figs["label_transfer_mv"] = celltypist.dotplot(
-            res, use_as_reference=col_cell_type, 
-            use_as_prediction="majority_voting")
+        for x in ["majority_voting", "predicted_labels"]:
+            if x == "predicted_labels" or majority_voting is True:
+                figs[f"label_transfer_{x}"] = celltypist.dotplot(
+                    res, use_as_reference=col_cell_type, 
+                    use_as_prediction=x, 
+                    title=f"Label Transfer: {col_cell_type} vs. {x}")
     figs["label_transfer_mv_pl"] = celltypist.dotplot(
         res, use_as_reference="predicted_labels", 
-        use_as_prediction="majority_voting")
+        use_as_prediction="majority_voting", 
+        title="Majority Voting versus Predicted Labels")  # mv vs. pl
     if out_dir:
         res.to_plots(out_file=out_dir, plot_probability=True)
         res.to_table(out_file=out_dir, plot_probability=True)
