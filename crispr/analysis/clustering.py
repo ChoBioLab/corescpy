@@ -170,11 +170,14 @@ def perform_celltypist(adata, model, col_cell_type=None,
         figs["label_transfer_mv"] = celltypist.dotplot(
             ann, use_as_reference=col_cell_type, 
             use_as_prediction="majority_voting")
+    figs["label_transfer_mv_pl"] = celltypist.dotplot(
+        ann, use_as_reference="predicted_labels", 
+        use_as_prediction="majority_voting")
     if out_dir:
         ann.to_plots(out_file=out_dir, plot_probability=True)
         ann.to_table(out_file=out_dir, plot_probability=True)
     # ann = ann.to_adata(insert_labels=True, insert_prob=True)
-    ann = ann.to_adata()
+    ann = ann.to_adata(insert_labels=True)
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
