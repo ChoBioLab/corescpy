@@ -421,14 +421,15 @@ class Omics(object):
         adata.X = adata.layers[self._layers["log1p"]]  # log 1 p layer
         c_t = kwargs.pop("col_cell_type") if "col_cell_type" in kwargs else \
             self._columns["col_cell_type"]  # cell type column 
-        ann, figs = cr.ax.perform_celltypist(
+        ann, res, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
             min_proportion=min_proportion, **kwargs)  # annotate
-        self.figures["celltypist"] = figs
+        self.figures["celltypist"], self.results["celltypist"] = figs, res
+         
         if copy is False:  # assign if performing inplace
             self.rna = ann
-        return ann, figs
+        return ann, [res, figs]
     
     def find_markers(self, assay=None, n_genes=5, layer="scaled", 
                      method="wilcoxon", key_reference="rest", 

@@ -159,25 +159,25 @@ def perform_celltypist(adata, model, col_cell_type=None,
     except Exception as err:
         print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
         print(celltypist.models.models_description())
-    ann = celltypist.annotate(
+    res = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
     if col_cell_type is not None:  # predicted-existing membership overlap
         figs["label_transfer_pl"] = celltypist.dotplot(
-            ann, use_as_reference=col_cell_type, 
+            res, use_as_reference=col_cell_type, 
             use_as_prediction="predicted_labels")
         figs["label_transfer_mv"] = celltypist.dotplot(
-            ann, use_as_reference=col_cell_type, 
+            res, use_as_reference=col_cell_type, 
             use_as_prediction="majority_voting")
     figs["label_transfer_mv_pl"] = celltypist.dotplot(
-        ann, use_as_reference="predicted_labels", 
+        res, use_as_reference="predicted_labels", 
         use_as_prediction="majority_voting")
     if out_dir:
-        ann.to_plots(out_file=out_dir, plot_probability=True)
-        ann.to_table(out_file=out_dir, plot_probability=True)
-    # ann = ann.to_adata(insert_labels=True, insert_prob=True)
-    ann = ann.to_adata(insert_labels=True)
+        res.to_plots(out_file=out_dir, plot_probability=True)
+        res.to_table(out_file=out_dir, plot_probability=True)
+    # ann = res.to_adata(insert_labels=True, insert_prob=True)
+    ann = res.to_adata(insert_labels=True)
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
@@ -198,5 +198,5 @@ def perform_celltypist(adata, model, col_cell_type=None,
                              for x in ccts]) > 30 else 0.5
     figs["all"] = sc.pl.umap(ann, return_fig=True, legend_fontsize=6, 
                              color=list(ccts), wspace=space)  # all 1 plot
-    return ann, figs
+    return ann, res, figs
 
