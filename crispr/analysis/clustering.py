@@ -152,6 +152,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
             kws_train["n_jobs"] = jobs
         if "col_cell_type" in kws_train:  # rename cell type argument if need
             kws_train["label"] = kws_train.pop("col_cell_type")
+        print(f"\n\n<<< TRAINING CUSTOM CELLTYPIST MODEL >>>")
         model = celltypist.train(model, **kws_train)  # custom model
     try:
         model = celltypist.models.Model.load(
