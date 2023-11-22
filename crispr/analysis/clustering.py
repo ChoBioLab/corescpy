@@ -151,7 +151,9 @@ def perform_celltypist(adata, model, col_cell_type=None,
         if "n_jobs" not in kws_train:  # use cpus - 1 if # jobs unspecified
             kws_train["n_jobs"] = jobs
         if "col_cell_type" in kws_train:  # rename cell type argument if need
-            kws_train["label"] = kws_train.pop("col_cell_type")
+            kws_train["labels"] = kws_train.pop("col_cell_type")
+        if "labels" not in kws_train and col_cell_type:
+            kws_train["labels"] = col_cell_type
         print(f"\n\n<<< TRAINING CUSTOM CELLTYPIST MODEL >>>")
         model = celltypist.train(model, **kws_train)  # custom model
     try:
