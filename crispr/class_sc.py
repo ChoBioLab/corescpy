@@ -426,7 +426,6 @@ class Omics(object):
             mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
             min_proportion=min_proportion, **kwargs)  # annotate
         self.figures["celltypist"], self.results["celltypist"] = figs, res
-         
         if copy is False:  # assign if performing inplace
             self.rna = ann
         return ann, [res, figs]

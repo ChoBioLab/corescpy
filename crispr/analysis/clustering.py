@@ -181,10 +181,6 @@ def perform_celltypist(adata, model, col_cell_type=None,
                     res, use_as_reference=col_cell_type, 
                     use_as_prediction=x, 
                     title=f"Label Transfer: {col_cell_type} vs. {x}")
-    figs["label_transfer_mv_pl"] = celltypist.dotplot(
-        res, use_as_reference="predicted_labels", 
-        use_as_prediction="majority_voting", 
-        title="Majority Voting versus Predicted Labels")  # mv vs. pl
     if out_dir:
         res.to_plots(out_file=out_dir, plot_probability=True)
         res.to_table(out_file=out_dir, plot_probability=True)
@@ -202,6 +198,10 @@ def perform_celltypist(adata, model, col_cell_type=None,
                 except Exception as err:
                     warnings.warn(f"{err}\n\n\nError in {y}={x} marker plot!")
                     figs["markers"][y][f"markers_{x}"] = err
+    figs["label_transfer_mv_pl"] = celltypist.dotplot(
+        res, use_as_reference="predicted_labels", 
+        use_as_prediction="majority_voting", 
+        title="Majority Voting versus Predicted Labels")  # mv vs. pl
     ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
     ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
                ).intersection(ann.obs.columns)  # celltypist & original column
