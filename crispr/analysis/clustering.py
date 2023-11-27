@@ -147,7 +147,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
     """
     figs, kws_train = {}, kws_train if kws_train else {}
     jobs = kwargs.pop("n_jobs") if "n_jobs" in kwargs else os.cpu_count() - 1
-    if isinstance(model, AnnData):  # train custom model
+    if isinstance(model, AnnData):  # anndata provided; train custom model
         if "n_jobs" not in kws_train:  # use cpus - 1 if # jobs unspecified
             kws_train["n_jobs"] = jobs
         if "col_cell_type" in kws_train:  # rename cell type argument if need
@@ -161,12 +161,15 @@ def perform_celltypist(adata, model, col_cell_type=None,
             sc.pp.normalize_total(mod, target_sum=1e4)
             sc.pp.log1p(mod)
         model = celltypist.train(model, **kws_train)  # custom model
-    try:
-        model = celltypist.models.Model.load(
-            model=model if ".pkl" in model else model + ".pkl")  # model
-    except Exception as err:
-        print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
-        print(celltypist.models.models_description())
+    elif isinstance(model, str):  # model name provided
+        try:
+            model = celltypist.models.Model.load(
+                model=model if ".pkl" in model else model + ".pkl")  # model
+        except Exception as err:
+            print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
+            print(celltypist.models.models_description())
+    else:  # CellTypist model object provided
+            print(f"CellTypist model provided: {model}.")
     res = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
