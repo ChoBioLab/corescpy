@@ -321,12 +321,13 @@ class Omics(object):
         if color is None:
             color = self._columns["col_cell_type"]
         if group:
-            fig = cr.pl.plot_umap_split(self.rna, group, 
-                                        color=color, **kwargs)
+            fig = cr.pl.plot_umap_split(self.rna, group, color=color, **{
+                "frameon": False, **kwargs})
         else:
             if not isinstance(color, str) and len(color) > 1 and (
                 color[0] in self.rna.var_names):  # multi-feature UMAP
-                fig = cr.pl.plot_umap_multi(self.rna, color, **kwargs)
+                fig = cr.pl.plot_umap_multi(self.rna, color, **{
+                    "frameon": False, **kwargs})
             else:  # normal UMAP embedding (categorical or continous)
                 fig = sc.pl.umap(self.rna, color=color, 
                                 **{"legend_loc": "on data", 
