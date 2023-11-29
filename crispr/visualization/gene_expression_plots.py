@@ -224,12 +224,14 @@ def plot_umap_multi(adata, genes, title=None, **kwargs):
 
 
 def plot_umap_split(adata, split_by, color="leiden", 
-                    ncol=2, nrow=None, **kwargs):
+                    ncol=2, nrow=None, figsize=None, **kwargs):
     """Plot UMAP ~ group (from Scanpy GitHub issues/2333)."""
     categories = adata.obs[split_by].cat.categories
     if nrow is None:
         nrow = int(np.ceil(len(categories) / ncol))
-    fig, axs = plt.subplots(nrow, ncol, figsize=(5 * ncol, 4 * nrow))
+    if figsize is None:
+        figsize = (5 * ncol, 4 * nrow)
+    fig, axs = plt.subplots(nrow, ncol, figsize=figsize)
     axs = axs.flatten()
     for i, cat in enumerate(categories):
         if not isinstance(color, str) and len(color) > 0:
