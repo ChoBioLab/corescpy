@@ -277,7 +277,7 @@ class Omics(object):
         if kind == "all":
             kind = ["all", "umap"]
         if "umap" in kind:
-            kind.remove(umap)
+            kind.remove("umap")
             umap = True
         else:
             umap = False
