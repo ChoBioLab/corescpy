@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import warnings
 import functools
 import pandas as pd 
+import numpy as np
 
 
 def plot_targeting_efficiency(
