@@ -1,6 +1,7 @@
 # from scanpy.plotting import _utils
 import seaborn as sns 
 import crispr as cr
+import scanpy as sc
 import pertpy as pt
 import matplotlib.pyplot as plt
 import warnings
@@ -164,12 +165,12 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
         figsize = (5 * ncol, 5 * nrow)
     figs[f"gex_violin"], axs = plt.subplots(nrow, ncol, figsize=figsize)
     axs = axs.flatten()
-    for i, x in enumerate(target_gene_idents):  # iterate target genes
-        try:
-            sc.pl.violin(
-                adata[adata.obs[col_target_genes] == x], key=x,
-                groupby="mixscape_class_global", ax=axs[i])
-        except Exception as err:
-            print(f"{err}\n\nGene expression violin plot failed for {x}!")
-            figs[f"gex_violin_{x}"] = err
+    # for i, x in enumerate(target_gene_idents):  # iterate target genes
+    #     try:
+    #         sc.pl.violin(
+    #             adata[adata.obs[col_target_genes] == x], key=x,
+    #             groupby="mixscape_class_global", ax=axs[i])
+    #     except Exception as err:
+    #         print(f"{err}\n\nGene expression violin plot failed for {x}!")
+    #         figs[f"gex_violin_{x}"] = err
     return figs

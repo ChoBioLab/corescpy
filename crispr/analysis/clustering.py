@@ -174,6 +174,11 @@ def perform_celltypist(adata, model, col_cell_type=None,
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
         min_prop=min_proportion, **kwargs)  # run
+    if out_dir:
+        res.to_plots(out_file=out_dir, plot_probability=True)
+        res.to_table(out_file=out_dir, plot_probability=True)
+    # ann = res.to_adata(insert_labels=True, insert_prob=True)
+    ann = res.to_adata(insert_labels=True)
     if col_cell_type is not None:  # predicted-existing membership overlap
         for x in ["majority_voting", "predicted_labels"]:
             if x == "predicted_labels" or majority_voting is True:
@@ -181,11 +186,6 @@ def perform_celltypist(adata, model, col_cell_type=None,
                     res, use_as_reference=col_cell_type, 
                     use_as_prediction=x, 
                     title=f"Label Transfer: {col_cell_type} vs. {x}")
-    if out_dir:
-        res.to_plots(out_file=out_dir, plot_probability=True)
-        res.to_table(out_file=out_dir, plot_probability=True)
-    # ann = res.to_adata(insert_labels=True, insert_prob=True)
-    ann = res.to_adata(insert_labels=True)
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
         for y in ["predicted_labels", "majority_voting"]:  # plot markers
