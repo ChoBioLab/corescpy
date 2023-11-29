@@ -367,6 +367,11 @@ def normalize_genes(adata, max_value=None, kws_reference=None, **kwargs):
         sc.pp.scale(adata, copy=False, **kwargs)  # center/standardize
 
 
+def check_normalization(adata, n_genes=1000):
+    """Check if an AnnData object is log-normalized."""
+    return (adata.X[:1000].min() >= 0) or (adata.X[:n_genes].max() <= 9.22)
+
+
 def z_normalize_by_reference(adata, col_reference="Perturbation", 
                              key_reference="Control", 
                              retain_zero_variance=True, 

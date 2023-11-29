@@ -60,7 +60,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
                   assay=None, adata_protein=None, protein_of_interest=None, 
                   key_nonperturbed="NP", color="red",
                   layer="X_pert", target_gene_idents=True, 
-                  subsample_number=5,
+                  subsample_number=5, figsize=None, ncol=3,
                   col_guide_rna=None, guide_split="-", feature_split="|"):
     """Make Mixscape perturbation plots."""
     figs = {}
@@ -155,4 +155,20 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     except Exception as err:
         figs["perturbation_clusters"] = err
         warnings.warn(f"{err}\n\nPerturbation cluster plot failed!")
+    if ncol is None:
+        nrow, ncol = cr.pl.square_grid(len(target_gene_idents))
+    else:
+        nrow = int(np.ceil(len(target_gene_idents) / ncol))
+    if figsize is None:
+        figsize = (5 * ncol, 5 * nrow)
+    figs[f"gex_violin"], axs = plt.subplots(nrow, ncol, figsize=figsize)
+    axs = axs.flatten()
+    for i, x in enumerate(target_gene_idents):  # iterate target genes
+        try:
+            sc.pl.violin(
+                adata[adata.obs[col_target_genes] == x], key=x,
+                groupby="mixscape_class_global", ax=axs[i])
+        except Exception as err:
+            print(f"{err}\n\nGene expression violin plot failed for {x}!")
+            figs[f"gex_violin_{x}"] = err
     return figs

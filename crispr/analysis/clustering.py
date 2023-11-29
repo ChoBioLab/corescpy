@@ -155,7 +155,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
         if "labels" not in kws_train and col_cell_type:
             kws_train["labels"] = col_cell_type
         print(f"\n\n<<< TRAINING CUSTOM CELLTYPIST MODEL >>>")
-        if (mod.X[:1000].min() < 0) or (mod.X[:1000].max() > 9.22):
+        if cr.pp.check_normalization(mod) is False:
             print(f"*** Total-count & log-normalizing training data...")
             mod = mod.copy()
             sc.pp.normalize_total(mod, target_sum=1e4)
