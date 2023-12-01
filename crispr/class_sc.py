@@ -268,20 +268,30 @@ class Omics(object):
             "legend_loc": "on data", "legend_fontweight": "medium", **kwargs})
         return fig
             
-    def plot(self, genes=None, genes_highlight=None,
+    def plot(self, genes=None, genes_highlight=None, subset=None,
              marker_genes_dict=None, cell_types_circle=None,
-             kws_qc=True, kws_umap=None, kws_heat=None, kws_violin=None, 
+             kws_qc=False, kws_umap=None, kws_heat=None, kws_violin=None, 
              kws_matrix=None, kws_dot=None, kind="all", **kwargs):
         """Create a variety of plots."""
         figs = {}
+        if kind == "all":
+            kind = ["all", "umap"]
+        if "umap" in kind:
+            kind.remove("umap")
+            umap = True
+        else:
+            umap = False
+        if len(kind) == 1:
+            kind = kind[0]
+        adata = self.rna[subset].copy() if subset else self.rna.copy()
         if kws_umap is None:
             kws_umap = {}
         if "legend_loc" not in kws_umap:
             kws_umap["legend_loc"] = "on data"
         cct = kwargs["col_cell_type"] if (
             "col_cell_type" in kwargs) else self._columns["col_cell_type"] 
-        lab_cluster = kws_umap.pop("col_cell_type") if (
-            "col_cell_type" in kws_umap) else cct
+        group = kws_umap.pop("col_cell_type") if (
+            "col_cell_type" in kws_umap) else cct  # grouping variable
         if genes_highlight and not isinstance(genes_highlight, list):
             genes_highlight = [genes_highlight] if isinstance(
                 genes_highlight, str) else list(genes_highlight)
@@ -295,25 +305,33 @@ class Omics(object):
         if kws_qc:
             if kws_qc is True:
                 kws_qc = {"hue": self._columns["col_sample_id"]}
-            cr.pp.perform_qc(self.adata.copy(), layer=self._layers["counts"], 
+            cr.pp.perform_qc(adata.copy(), layer=self._layers["counts"], 
                              **kws_qc)  # plot QC
         
         # Gene Expression
+        if isinstance(kind, str) and (
+            kind != "all"):  # if only one type of plot to plot
+            kws_violin, kws_heat, kws_matrix, kws_dot = [
+                kwargs if kind in x[0] and x[1] is None else x 
+                for x in zip(["violin", ["heat", "hm"], "matrix", "dot"], [
+                    kws_violin, kws_heat, kws_matrix, kws_dot])
+                ]  # can specify plot arguments via overall keyword arguments
         figs["gex"] = cr.pl.plot_gex(
-            self.rna, col_cell_type=lab_cluster, genes=genes, kind=kind, 
+            adata, col_cell_type=group, genes=genes, kind=kind, 
             col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict, 
             kws_violin=kws_violin, kws_heat=kws_heat, 
             kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
             
         # UMAP
-        if "X_umap" in self.rna.obsm or lab_cluster in self.rna.obs.columns:
-            print("\n<<< PLOTTING UMAP >>>")
-            figs["umap"] = cr.pl.plot_umap(
-                self.rna, col_cell_type=lab_cluster, **kws_umap, 
-                genes=genes, col_gene_symbols=cgs, 
-                cell_types_circle=cell_types_circle)
-        else:
-            print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
+        if umap is True:
+            if "X_umap" in self.rna.obsm or group in self.rna.obs.columns:
+                print("\n<<< PLOTTING UMAP >>>")
+                figs["umap"] = cr.pl.plot_umap(
+                    adata, col_cell_type=group, **kws_umap, 
+                    genes=genes, col_gene_symbols=cgs, 
+                    cell_types_circle=cell_types_circle)
+            else:
+                print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
         return figs
     
     def plot_umap(self, color=None, group=None, **kwargs):

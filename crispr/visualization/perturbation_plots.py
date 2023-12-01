@@ -164,11 +164,12 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     if figsize is None:
         figsize = (5 * ncol, 5 * nrow)
     figs[f"gex_violin"], axs = plt.subplots(nrow, ncol, figsize=figsize)
-    axs = axs.flatten()
+    if "flatten" in dir(axs):  # if enough target genes for multi-row plot
+        axs = axs.flatten()  # flatten axis so can access by flat index
     # for i, x in enumerate(target_gene_idents):  # iterate target genes
     #     try:
     #         sc.pl.violin(
-    #             adata[adata.obs[col_target_genes] == x], keys=x,
+    #             adata[adata.obs[col_target_genes].isin([x, key_control], x,
     #             groupby="mixscape_class_global", ax=axs[i])
     #     except Exception as err:
     #         print(f"{err}\n\nGene expression violin plot failed for {x}!")
