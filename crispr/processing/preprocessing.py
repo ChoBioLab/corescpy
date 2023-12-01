@@ -287,8 +287,10 @@ def process_data(adata,
 
     # Basic Filtering (DO FIRST...ALL INPLACE)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
-    sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
-    sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
+    if cell_filter_ngene:
+        sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
+    if gene_filter_ncell:
+        sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
     cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
     
     # Further Filtering
@@ -409,14 +411,19 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None,
     figs = {}
     if layer is not None:
         adata.X = adata.layers[layer].copy()
-    figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
-        adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
-    names = ["Mitochondrial", "Ribosomal", "Hemoglobin"]
+    try:
+        figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
+            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
+    except Exception as err:
+        warn(f"{err}\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
+        figs["highly_expressed_genes"] = err
     if patterns is None:
         patterns = dict(zip(["mt", "ribo", "hb"], 
                             [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
                                 "^HB[^(P)]", "^hb[^(p)]")]))
-    p_names = [names[k] if k  in names else k for k in patterns]  # "pretty"
+    names = dict(zip(["mt", "ribo", "hb"], 
+                     ["Mitochondrial", "Ribosomal", "Hemoglobin"]))
+    p_names = [names[k] if k in names else k for k in patterns]  # "pretty"
     patterns_names = dict(zip(patterns, p_names))  # map abbreviated to pretty
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...") 
     for k in patterns:
