@@ -168,7 +168,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     # for i, x in enumerate(target_gene_idents):  # iterate target genes
     #     try:
     #         sc.pl.violin(
-    #             adata[adata.obs[col_target_genes] == x], key=x,
+    #             adata[adata.obs[col_target_genes] == x], keys=x,
     #             groupby="mixscape_class_global", ax=axs[i])
     #     except Exception as err:
     #         print(f"{err}\n\nGene expression violin plot failed for {x}!")
