@@ -142,10 +142,11 @@ class Omics(object):
         self.obs = self.adata.obs
         self.uns = self.rna.uns
         self.var = self.rna.var
-        print("\n\n", self.rna)
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
-        self.rna.obs.head()
+        print("\n\n", self.rna)
+        print(self.rna.var.head())
+        print(self.rna.obs.head())
 
     @property
     def rna(self):
