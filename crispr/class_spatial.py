@@ -22,7 +22,8 @@ class Spatial(Omics):
     
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
-    def __init__(self, file_path, file_path_spatial, **kwargs):
+    def __init__(self, file_path, file_path_spatial=None, 
+                 visium=False, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -55,18 +56,29 @@ class Spatial(Omics):
                         specified as normal if they are common across 
                         samples; otherwise, specify them as lists in 
                         the same order as the `file` dictionary. 
-            file_path_spatial (str): Path to spatial information csv 
-                file. For instance, .
+            file_path_spatial (str, optional): Path to spatial 
+                information csv file, if needed.
+            visium (bool or dict, optional): File path provided is to 
+                10x Visium data? Provide as a dictionary of keyword
+                arguments to pass to `scanpy.read_visium()` or simply
+                as True to use default arguments. The default is False
+                (assumes 10x Xenium data format and 
+                `file_path_spatial` provided).
             kwargs (dict, optional): Keyword arguments to pass to the 
                 Omics class initialization method.
         """
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
+        if isinstance(visium, dict) or visium is True:
+            if not isinstance(visium, dict):
+                visium = {}  # unpack file path & arguments
+            file_path = sq.read.visium(file_path, **visium)  # read Visium
         super().__init__(file_path, **kwargs)  # Omics initialization
         self._assay_spatial = "spatial"
-        self.adata.obs = pd.read_csv(file_path_spatial).set_index(
-            self.adata.obs_names).copy()  # read in spatial information
-        self.adata.obsm["spatial"] = self.adata.obs[
-            ["x_centroid", "y_centroid"]].copy().to_numpy()  # coordinates
+        if file_path_spatial:  # if need to read in additional spatial data
+            self.adata.obs = pd.read_csv(file_path_spatial).set_index(
+                self.adata.obs_names).copy()  # read in spatial information
+            self.adata.obsm["spatial"] = self.adata.obs[
+                ["x_centroid", "y_centroid"]].copy().to_numpy()  # coordinates
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
@@ -150,7 +162,7 @@ class Spatial(Omics):
             return adata, figs
         
         
-    def find_cooccurrence(self, col_cell_type=None, copy=False):
+    def find_cooccurrence(self, col_cell_type=None, layer=None, copy=False):
         """
         Find co-occurrence using spatial data. (similar to neighborhood
         enrichment analysis, but uses original spatial coordinates rather
@@ -161,6 +173,8 @@ class Spatial(Omics):
             col_cell_type = self._columns["col_cell_type"]
         jobs = os.cpu_count() - 1  # threads for parallel processing
         adata = self.rna.copy() if copy is True else self.rna
+        if layer:
+            adata.X = adata.layers[self._layers[layer]].X.copy()
         sq.gr.co_occurrence(adata, cluster_key=col_cell_type, 
                             spatial_key=self._assay_spatial, n_jobs=jobs)
         figs["co_occurrence"] = {}
