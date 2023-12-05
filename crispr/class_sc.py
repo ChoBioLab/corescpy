@@ -431,15 +431,14 @@ class Omics(object):
             self.rna = adata
         return figs_cl
     
-    def annotate_clusters(self, model, mode="best match", 
-                          p_threshold=0.5,
-                          over_clustering=None, min_proportion=0, 
-                          copy=False, **kwargs):
+    def annotate_clusters(self, model, mode="best match", layer="log1p", 
+                          p_threshold=0.5, over_clustering=None, 
+                          min_proportion=0, copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
         adata = self.rna.copy()
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
         c_t = kwargs.pop("col_cell_type") if "col_cell_type" in kwargs else \
-            self._columns["col_cell_type"]  # cell type column 
+            self._columns["col_cell_type"]  # cell type column
         ann, res, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
@@ -449,7 +448,7 @@ class Omics(object):
             self.rna = ann
         return ann, [res, figs]
     
-    def find_markers(self, assay=None, n_genes=5, layer="log1p", 
+    def find_markers(self, assay=None, n_genes=25, layer="log1p", 
                      method="wilcoxon", key_reference="rest", 
                      plot=True, col_cell_type=None, **kwargs):
         if assay is None:
@@ -463,9 +462,9 @@ class Omics(object):
             self.adata, assay=assay, method=method, n_genes=n_genes, 
             layer=layer, key_reference=key_reference, plot=plot,
             col_cell_type=col_cell_type, **kwargs)  # find marker genes
-        print(marks)
+        marks.groupby(col_cell_type).apply(lambda x: print(x.head(3)))
         return marks, figs_m
-          
+
     def run_composition_analysis(
         self, assay=None, layer=None, col_list_lineage_tree=None,
         covariates=None, reference_cell_type="automatic", 

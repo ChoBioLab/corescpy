@@ -119,19 +119,18 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden",
     figs = {}
     adata = adata.copy()
     if layer:
-        adata.X = adata.layers[layer].X.copy()
-    sc.tl.rank_genes_groups(adata, col_cell_type, method=method, 
-                            reference=key_reference, 
-                            key_added="rank_genes_groups", 
-                            **kwargs)
+        adata.X = adata.layers[layer].copy()  # change anndata layer if need
+    sc.tl.rank_genes_groups(
+        adata, col_cell_type, method=method, reference=key_reference, 
+        key_added="rank_genes_groups", **kwargs)  # rank markers
     if plot is True:
         figs["marker_rankings"] = sc.pl.rank_genes_groups(
-            adata, n_genes=n_genes, sharey=False)
+            adata, n_genes=n_genes, sharey=False)  # plot rankings
     ranks = sc.get.rank_genes_groups_df(
         adata, None, key='rank_genes_groups', pval_cutoff=None, 
-        log2fc_min=None, log2fc_max=None, gene_symbols=None)
+        log2fc_min=None, log2fc_max=None, gene_symbols=None)  # rank dataframe
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
-        [col_cell_type, "names"])
+        [col_cell_type, "names"])  # format ranking dataframe
     return ranks, figs
 
 
@@ -150,7 +149,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
     """
     figs, kws_train = {}, kws_train if kws_train else {}
     jobs = kwargs.pop("n_jobs") if "n_jobs" in kwargs else os.cpu_count() - 1
-    if isinstance(model, AnnData):  # anndata provided; train custom model
+    if isinstance(model, AnnData):  # if anndata provided; train custom model
         if "n_jobs" not in kws_train:  # use cpus - 1 if # jobs unspecified
             kws_train["n_jobs"] = jobs
         if "col_cell_type" in kws_train:  # rename cell type argument if need
@@ -164,48 +163,47 @@ def perform_celltypist(adata, model, col_cell_type=None,
             sc.pp.normalize_total(mod, target_sum=1e4)
             sc.pp.log1p(mod)
         model = celltypist.train(model, **kws_train)  # custom model
-    elif isinstance(model, str):  # model name provided
+    elif isinstance(model, str):  # if model name provided
         try:
             model = celltypist.models.Model.load(
                 model=model if ".pkl" in model else model + ".pkl")  # model
         except Exception as err:
             print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
             print(celltypist.models.models_description())
-    else:  # CellTypist model object provided
+    else:  # if CellTypist model object provided
             print(f"CellTypist model provided: {model}.")
     res = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
-        min_prop=min_proportion, **kwargs)  # run
-    if out_dir:
-        res.to_plots(out_file=out_dir, plot_probability=True)
-        res.to_table(out_file=out_dir, plot_probability=True)
+        min_prop=min_proportion, **kwargs)  # run celltypist
+    if out_dir:  # save results?
+        res.to_plots(out_file=out_dir, plot_probability=True)  # save plots
+        res.to_table(out_file=out_dir, plot_probability=True)  # save tables
     # ann = res.to_adata(insert_labels=True, insert_prob=True)
-    ann = res.to_adata(insert_labels=True)
+    ann = res.to_adata(insert_labels=True)  # results object -> anndata
     if col_cell_type is not None:  # predicted-existing membership overlap
         for x in ["majority_voting", "predicted_labels"]:
-            if x == "predicted_labels" or majority_voting is True:
+            if x == "predicted_labels" or majority_voting is True and (
+                col_cell_type != x):  # label transfer dotplot if appropriate
                 figs[f"label_transfer_{x}"] = celltypist.dotplot(
-                    res, use_as_reference=col_cell_type, 
-                    use_as_prediction=x, 
-                    title=f"Label Transfer: {col_cell_type} vs. {x}")
+                    res, use_as_reference=col_cell_type, use_as_prediction=x, 
+                    title=f"Label Transfer: {col_cell_type} vs. {x}")  # plot
+    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
-        for y in ["predicted_labels", "majority_voting"]:  # plot markers
+        for y in ctc:  # plot markers
             figs["markers"][y] = {}
             for x in ann.obs[y].unique():
                 try:
                     markers = model.extract_top_markers(x, 3)
                     figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
-                        ann, markers, groupby=col_cell_type, rotation = 90)
+                        ann, markers, groupby=col_cell_type, rotation=90)
                 except Exception as err:
                     warnings.warn(f"{err}\n\n\nError in {y}={x} marker plot!")
                     figs["markers"][y][f"markers_{x}"] = err
     figs["label_transfer_mv_pl"] = celltypist.dotplot(
-        res, use_as_reference="predicted_labels", 
-        use_as_prediction="majority_voting", 
-        title="Majority Voting versus Predicted Labels")  # mv vs. pl
-    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
+        res, use_as_reference=ctc[0], use_as_prediction=ctc[1], 
+        title="Majority Voting versus Predicted Labels")  # mv vs. pl dotplot
     ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
                ).intersection(ann.obs.columns)  # celltypist & original column
     if space is None:  # space b/t celltypist & cell type plot facets
@@ -214,4 +212,3 @@ def perform_celltypist(adata, model, col_cell_type=None,
     figs["all"] = sc.pl.umap(ann, return_fig=True, legend_fontsize=6, 
                              color=list(ccts), wspace=space)  # all 1 plot
     return ann, res, figs
-
