@@ -437,7 +437,7 @@ class Omics(object):
                           copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
         adata = self.rna.copy()
-        adata.X = adata.layers[self._layers["log1p"]]  # log 1 p layer
+        adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
         c_t = kwargs.pop("col_cell_type") if "col_cell_type" in kwargs else \
             self._columns["col_cell_type"]  # cell type column 
         ann, res, figs = cr.ax.perform_celltypist(
@@ -449,7 +449,7 @@ class Omics(object):
             self.rna = ann
         return ann, [res, figs]
     
-    def find_markers(self, assay=None, n_genes=5, layer="scaled", 
+    def find_markers(self, assay=None, n_genes=5, layer="log1p", 
                      method="wilcoxon", key_reference="rest", 
                      plot=True, col_cell_type=None, **kwargs):
         if assay is None:

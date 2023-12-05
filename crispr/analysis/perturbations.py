@@ -440,7 +440,7 @@ def perform_differential_prioritization(
 
 
 def compute_distance(adata, col_target_genes="target_genes", 
-                     col_cell_type="leiden",
+                     col_cell_type="leiden", obsm_key="X_pca",
                      distance_type="edistance", method="X_pca",
                      kws_plot=None, highlight_real_range=False, 
                      plot=True, **kwargs):
@@ -455,8 +455,8 @@ def compute_distance(adata, col_target_genes="target_genes",
         print(f"\nUn-used Keyword Arguments: {kwargs}")
         
     # Distance Metrics
-    distance = pt.tl.Distance(distance_type, method)
-    data = distance.pairwise(adata, groupby=col_target_genes, verbose=True)
+    distance = pt.tl.Distance(distance_type, obsm_key=method)
+    data = distance.pairwise(adata, groupby=col_target_genes)
     if plot is True:  # cluster heatmaps
         if highlight_real_range is True:
             vmin = np.min(np.ravel(data.values)[np.ravel(data.values) != 0])

@@ -112,11 +112,14 @@ def cluster(adata, layer=None,
     return ann, figs
 
 
-def find_markers(adata, assay=None, col_cell_type="leiden", layer="scaled",
+def find_markers(adata, assay=None, col_cell_type="leiden", layer="log1p",
                  key_reference="rest", n_genes=25, method="wilcoxon", 
                  plot=True, **kwargs):
     """Find cluster gene markers."""
     figs = {}
+    adata = adata.copy()
+    if layer:
+        adata.X = adata.layers[layer].X.copy()
     sc.tl.rank_genes_groups(adata, col_cell_type, method=method, 
                             reference=key_reference, 
                             key_added="rank_genes_groups", 

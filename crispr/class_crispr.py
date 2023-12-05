@@ -792,7 +792,8 @@ class Crispr(Omics):
         adata = self.rna if layer is None else self.rna.copy()
         if layer:
             print(f"Using layer {layer} for distance calculation.")
-            adata.X = adata.layers[layer]
+            adata.X = adata.layers[layer].copy() if (
+                layer in adata.layers) else adata.layers[self._layers[layer]]
         output = cr.ax.compute_distance(
             adata, distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
