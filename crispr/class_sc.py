@@ -114,7 +114,6 @@ class Omics(object):
             col_condition=col_condition)
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment)
-        print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
         

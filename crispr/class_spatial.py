@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import crispr as cr
 from crispr.class_sc import Omics
 import pandas as pd
+import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -86,21 +87,28 @@ class Spatial(Omics):
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
             
-    def plot(self, color):
+    def plot(self, color, col_sample_id=None, figsize=30):
         """Create basic plots."""
         figs = {}
+        if isinstance(figsize, (int, float)):
+            figsize = (figsize, figsize)
         if color is None:
             color = self._columns["col_cell_type"]
+        libid = col_sample_id if col_sample_id not in [
+            None, False] else self._columns["col_sample_id"]  # library ID
         figs["spatial"] = sq.pl.spatial_scatter(
-            self.adata, library_id=self._assay_spatial,
+            self.adata, library_id=libid, figsize=figsize,
             shape=None, color=[color], wspace=0.4)
         return figs        
     
-    def analyze_spatial(self, col_cell_type=None, genes=None, 
-                        method_autocorr="moran", alpha=0.005, layer="log1p",
+    def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
+                        figsize_multiplier=1, 
+                        method_autocorr="moran", alpha=0.005, 
                         col_sample_id=None, n_perms=100, seed=1618, copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
+        if isinstance(figsize, (int, float)):
+            figsize = (figsize, figsize)
         adata = self.rna if copy is False else self.rna.copy()
         layer = self._layers[layer] if layer in self._layers else layer
         adata.X = adata.layers[layer]  # set data layer
@@ -118,8 +126,9 @@ class Spatial(Omics):
                 None, False] else self._columns["col_sample_id"]  # library ID
         print("\t*** Computing centrality scores...")
         sq.gr.centrality_scores(adata, cluster_key=col_cell_type, n_jobs=jobs)
-        sq.pl.centrality_scores(adata, cluster_key=col_cell_type, 
-                                figsize=(16, 5))  # plot centrality scores
+        sq.pl.centrality_scores(
+            adata, cluster_key=col_cell_type, figsize=tuple(np.array(
+                [16, 5]) * figsize_multiplier))  # plot centrality score
         
         # Interaction Matrix
         sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
@@ -127,20 +136,21 @@ class Spatial(Omics):
         # Co-Occurence
         print("\n<<< QUANTIFYING CO-OCCURRENCE>>>")
         adata, figs["cooccurrence"] = self.find_cooccurrence(
-            col_cell_type=col_cell_type, copy=False)
+            col_cell_type=col_cell_type, copy=False)  # cooccurring cell types
         
         # Neighbors Enrichment Analysis
         print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
         sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type, 
                                n_jobs=None,
                                # n_jobs=jobs,  # not working for some reason?
-                               seed=seed)
-        figs["enrichment"], axs = plt.subplots(1, 2, figsize=(13, 7))
+                               seed=seed)  # neighborhood enrichment
+        figs["enrichment"], axs = plt.subplots(1, 2, figsize=np.array(
+            [13, 7]) * figsize_multiplier)  # set up facet grid figure
         sq.pl.nhood_enrichment(
             adata, cluster_key=col_cell_type, figsize=(8, 8), 
             title="Neighborhood Enrichment", ax=axs[0])  # heatmap (panel 1)
         sq.pl.spatial_scatter(adata, color=col_cell_type, shape=None, 
-                                size=2, ax=axs[1])  # scatterplot (panel 2)
+                              size=2, ax=axs[1])  # scatterplot (panel 2)
         
         # Spatially-Variable Genes
         if method_autocorr not in [None, False]:
@@ -162,27 +172,33 @@ class Spatial(Omics):
             return adata, figs
         
         
-    def find_cooccurrence(self, col_cell_type=None, layer=None, copy=False):
+    def find_cooccurrence(self, col_cell_type=None, layer=None, 
+                          figsize=30, copy=False, kws_plot=None, **kwargs):
         """
         Find co-occurrence using spatial data. (similar to neighborhood
         enrichment analysis, but uses original spatial coordinates rather
         than connectivity matrix).
         """
         figs = {}
+        if isinstance(figsize, (int, float)):
+            figsize = (figsize, figsize) 
+        if kws_plot is None:
+            kws_plot = {}
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         jobs = os.cpu_count() - 1  # threads for parallel processing
         adata = self.rna.copy() if copy is True else self.rna
         if layer:
             adata.X = adata.layers[self._layers[layer]].X.copy()
-        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, 
-                            spatial_key=self._assay_spatial, n_jobs=jobs)
+        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=jobs, 
+                            spatial_key=self._assay_spatial, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata, color=col_cell_type, shape=None, size=2)
+            adata, color=col_cell_type, shape=None, size=2,
+            figsize=figsize)
         try:
             figs["co_occurrence"] = sq.pl.co_occurrence(
-                adata, cluster_key=col_cell_type, figsize=(10, 10))
+                adata, cluster_key=col_cell_type, figsize=figsize, **kws_plot)
         except Exception as err:
             figs["co_occurrence"] = err
             print(f"{err}\n{type(err)}\n{err.args}\n\n"
@@ -190,9 +206,12 @@ class Spatial(Omics):
         return adata, figs
         
     def find_svgs(self, genes=None, method="moran", n_perms=10,
-                  layer=None, adata=None, col_cell_type=None):
+                  layer=None, adata=None, figsize=30,
+                  col_cell_type=None, col_sample_id=None):
         """Find spatially-variable genes."""
         fig = {}
+        if isinstance(figsize, (int, float)):
+            figsize = (figsize, figsize) 
         if genes is None:
             genes = 10  # plot top 10 variable genes if un-specified
         if col_cell_type is None:
@@ -205,10 +224,12 @@ class Spatial(Omics):
                                n_perms=n_perms, n_jobs=jobs)  # auto-correlation
         if isinstance(genes, int):
             genes = adata.uns["moranI"].head(genes).index.values
+        libid = col_sample_id if col_sample_id not in [
+            None, False] else self._columns["col_sample_id"]  # library ID
         fig["scatter"] = sq.pl.spatial_scatter(
-            adata, library_id=self._assay_spatial,
+            adata, library_id=libid, figsize=figsize,
             color=genes, shape=None, size=2, img=False)
-        fig["umap"] = sc.pl.spatial(adata, color=genes) 
+        fig["umap"] = sc.pl.spatial(adata, color=genes, library_id=libid)
         return fig
         
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):

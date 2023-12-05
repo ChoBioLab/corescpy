@@ -181,14 +181,15 @@ def perform_celltypist(adata, model, col_cell_type=None,
         res.to_table(out_file=out_dir, plot_probability=True)  # save tables
     # ann = res.to_adata(insert_labels=True, insert_prob=True)
     ann = res.to_adata(insert_labels=True)  # results object -> anndata
-    if col_cell_type is not None:  # predicted-existing membership overlap
+    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
+    if col_cell_type not in [
+        None] + ctc:  # plot predicted-existing membership overlap
         for x in ["majority_voting", "predicted_labels"]:
             if x == "predicted_labels" or majority_voting is True and (
                 col_cell_type != x):  # label transfer dotplot if appropriate
                 figs[f"label_transfer_{x}"] = celltypist.dotplot(
                     res, use_as_reference=col_cell_type, use_as_prediction=x, 
                     title=f"Label Transfer: {col_cell_type} vs. {x}")  # plot
-    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
         for y in ctc:  # plot markers
