@@ -4,5 +4,5 @@ from .perturbations import (perform_mixscape,
                             perform_differential_prioritization,
                             compute_distance,
                             perform_gsea)
-from .clustering import cluster, find_markers, perform_celltypist
+from .clustering import cluster, find_marker_genes, perform_celltypist
 from .composition import analyze_composition

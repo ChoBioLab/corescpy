@@ -112,9 +112,9 @@ def cluster(adata, layer=None,
     return ann, figs
 
 
-def find_markers(adata, assay=None, col_cell_type="leiden", layer="log1p",
-                 key_reference="rest", n_genes=25, method="wilcoxon", 
-                 plot=True, **kwargs):
+def find_marker_genes(adata, assay=None, col_cell_type="leiden", 
+                      layer="log1p", key_reference="rest", n_genes=25, 
+                      method="wilcoxon", plot=True, **kwargs):
     """Find cluster gene markers."""
     figs = {}
     adata = adata.copy()

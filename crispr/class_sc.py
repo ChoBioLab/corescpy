@@ -454,12 +454,15 @@ class Omics(object):
                      plot=True, col_cell_type=None, **kwargs):
         if assay is None:
             assay = self._assay
-        if col_cell_type is None:
-            col_cell_type = self.info["methods"]["clustering"]
-        marks, figs_m = cr.ax.find_markers(
+        if col_cell_type is None:  # if cell type column not specified...
+            if "clustering" in self.info["methods"]:  # use leiden/louvain #s
+                col_cell_type = self.info["methods"]["clustering"]
+            else:  # otherwise, try getting from _columns attribute
+                col_cell_type = self._columns["col_cell_type"]
+        marks, figs_m = cr.ax.find_marker_genes(
             self.adata, assay=assay, method=method, n_genes=n_genes, 
             layer=layer, key_reference=key_reference, plot=plot,
-            col_cell_type=col_cell_type, **kwargs)
+            col_cell_type=col_cell_type, **kwargs)  # find marker genes
         print(marks)
         return marks, figs_m
           
