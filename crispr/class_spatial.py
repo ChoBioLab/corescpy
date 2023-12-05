@@ -107,8 +107,6 @@ class Spatial(Omics):
                         col_sample_id=None, n_perms=100, seed=1618, copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
-        if isinstance(figsize, (int, float)):
-            figsize = (figsize, figsize)
         adata = self.rna if copy is False else self.rna.copy()
         layer = self._layers[layer] if layer in self._layers else layer
         adata.X = adata.layers[layer]  # set data layer
