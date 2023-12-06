@@ -105,7 +105,7 @@ class Spatial(Omics):
         return figs        
     
     def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
-                        figsize_multiplier=1, dpi=100,
+                        figsize_multiplier=1, dpi=100, palette=None,
                         kws_receptor_ligand=None,
                         key_source=None, key_targets=None,
                         method_autocorr="moran", alpha=0.005, 
@@ -122,24 +122,26 @@ class Spatial(Omics):
         print("\n<<< CALCULATING CENTRALITY SCORES >>>")
         self.calculate_graph(col_cell_type=col_cell_type, 
                              figsize_multiplier=figsize_multiplier)  # run
-        self.adata.uns[self._assay_spatial]["library_id"] = list(
-            self.adata.uns["spatial"].keys())[0]  # store library_id
+        # self.adata.uns[self._assay_spatial]["library_id"] = list(
+        #     self.adata.uns["spatial"].keys())[0]  # store library_id
+        self.adata.uns[self._assay_spatial]["library_id"] = self._columns[
+            "col_sample_id"] # store library_id
         
         # Co-Occurence
-        print("\n<<< QUANTIFYING CO-OCCURRENCE >>>")
+        print("\n<<< QUANTIFYING CELL TYPE CO-OCCURRENCE >>>")
         adata, figs["cooccurrence"] = self.find_cooccurrence(
-            col_cell_type=col_cell_type, copy=False)  # cooccurring cell types
+            col_cell_type=col_cell_type, copy=False)
         
         # Neighbors Enrichment Analysis
         print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
         figs["enrichment"] = self.calculate_neighborhood(
-            col_cell_type=col_cell_type, copy=False)  # analyze enrichment
+            col_cell_type=col_cell_type, copy=False, palette=palette)
         
         # Spatially-Variable Genes
         if method_autocorr not in [None, False]:
             figs["svgs_autocorrelation"] = self.find_svgs(
-                genes=genes, adata=adata, method=method_autocorr, 
-                layer=layer, n_perms=n_perms)  # find SVGs
+                genes=genes, method=method_autocorr, 
+                layer=layer, n_perms=n_perms, palette=palette)
             
         # Receptor-Ligand Interaction
         if kws_receptor_ligand is not False:
@@ -209,8 +211,8 @@ class Spatial(Omics):
         return fig
         
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
-                          layer=None, figsize=30, copy=False, 
-                          kws_plot=None, **kwargs):
+                          layer=None, figsize=30, copy=False, palette=None,
+                          kws_plot=None, shape="hex", size=2, **kwargs):
         """
         Find co-occurrence using spatial data. (similar to neighborhood
         enrichment analysis, but uses original spatial coordinates rather
@@ -231,7 +233,8 @@ class Spatial(Omics):
                             spatial_key=self._assay_spatial, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata, color=col_cell_type, shape=None, size=2, figsize=figsize)
+            adata, color=col_cell_type, shape=shape, size=size, 
+            figsize=figsize, palette=palette, return_ax=True)
         try:
             figs["co_occurrence"] = sq.pl.co_occurrence(
                 adata, cluster_key=col_cell_type, 
@@ -242,8 +245,8 @@ class Spatial(Omics):
                   "Failed to plot co-occurrence!")
         return adata, figs
         
-    def find_svgs(self, genes=None, method="moran", n_perms=10,
-                  layer=None, adata=None, figsize=30,
+    def find_svgs(self, genes=None, method="moran", shape="hex", n_perms=10,
+                  layer=None, figsize=30, palette=None,
                   col_cell_type=None, col_sample_id=None):
         """Find spatially-variable genes."""
         fig = {}
@@ -253,8 +256,7 @@ class Spatial(Omics):
             genes = 10  # plot top 10 variable genes if un-specified
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        if adata is None:
-            adata = self.rna
+        adata = self.rna.copy()
         jobs = os.cpu_count() - 1  # threads for parallel processing
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
         sq.gr.spatial_autocorr(self.rna, mode=method, layer=layer, 
@@ -264,7 +266,7 @@ class Spatial(Omics):
         libid = col_sample_id if col_sample_id not in [
             None, False] else self._columns["col_sample_id"]  # library ID
         fig["scatter"] = sq.pl.spatial_scatter(
-            adata, library_id=libid, figsize=figsize,
+            adata, library_id=libid, figsize=figsize, palette=palette,
             color=genes, shape=None, size=2, img=False)
         fig["umap"] = sc.pl.spatial(adata, color=genes, library_id=libid)
         return fig
@@ -283,9 +285,11 @@ class Spatial(Omics):
     def calculate_receptor_ligand(self, key_source=None, key_targets=None, 
                                   col_cell_type=None, n_perms=10, 
                                   pvalue_threshold=0.05, 
-                                  remove_nonsig=True, alpha=0.005, copy=False, 
+                                  remove_nonsig=True, alpha=None, copy=False, 
                                   kws_plot=None, **kwargs):
         """Calculate receptor-ligand interactions."""
+        if alpha is None:
+            alpha = p_value_threshold
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         adata = self.rna.copy()
