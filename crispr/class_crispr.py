@@ -809,31 +809,6 @@ class Crispr(Omics):
                     output[i] for i in range(len(output) - 1)]})
         return output
     
-    def run_dialogue(self, n_programs=3, col_cell_type=None,
-                     cmap="coolwarm", vcenter=0, 
-                     layer=None, **kws_plot):
-        """Analyze <`n_programs`> multicellular programs."""
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
-        adata = self.rna.copy()
-        if layer is not None:
-            adata.X = adata.layers[layer]
-        d_l = pt.tl.Dialogue(
-            sample_id=self._columns["col_perturbed"], n_mpcs=n_programs,
-            celltype_key=col_cell_type, 
-            n_counts_key=self._columns["col_num_umis"])
-        pdata, mcps, ws, ct_subs = d_l.calculate_multifactor_PMD(
-            adata, normalize=True)
-        mcp_cols = list(set(pdata.obs.columns).difference(adata.obs.columns))
-        cols = cr.pl.square_grid(len(mcp_cols) + 2)[1]
-        fig = sc.pl.umap(
-            pdata, color=mcp_cols + [
-                self._columns["col_perturbed"], col_cell_type],
-            ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
-        self.results["dialogue"] = pdata, mcps, ws, ct_subs
-        self.figures["dialogue"] = fig
-        return fig
-    
     def run_gsea(self, filter_by_highly_variable=False, 
                  **kwargs):
         """Perform gene set enrichment analyses & plotting."""
