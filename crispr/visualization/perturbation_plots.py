@@ -110,7 +110,8 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
                     f"{g} {key_treatment}"] 
             for g in target_gene_idents])  # conditions: all genes
         figs["ppp_violin"]["all"] = pt.pl.ms.violin(
-            adata=adata, keys=f"mixscape_class_p_{key_treatment}".lower(),
+            adata=adata, 
+            # keys=f"mixscape_class_p_{key_treatment}".lower(),
             target_gene_idents=tg_conds, rotation=45,
             groupby="mixscape_class")  # gene: perturbed, NP, control
     except Exception as err:
@@ -143,7 +144,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
                 guide_split=guide_split, feature_split=feature_split,
                 mixscape_class_global="mixscape_class_global")
         except Exception as err:
-            figs["targeting_efficiency"][g] = err
+            figs["targeting_efficiency"] = err
             warnings.warn(f"{err}\n\nCould not plot targeting efficiency!")
     try:  # LDA clusters
         figs["perturbation_clusters"] = plt.figure(figsize=(15, 15))

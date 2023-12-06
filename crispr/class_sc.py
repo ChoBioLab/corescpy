@@ -26,8 +26,8 @@ class Omics(object):
     def __init__(
         self, file_path, assay=None, assay_protein=None, 
         col_gene_symbols="gene_symbols", col_cell_type="leiden", 
-        col_sample_id=None, col_condition=None, key_control=None, 
-        key_treatment=None, kws_multi=None, **kwargs):
+        col_sample_id=None, col_condition=None, col_num_umis=None, 
+        key_control=None, key_treatment=None, kws_multi=None, **kwargs):
         """
         Initialize Omics class object.
 
@@ -88,6 +88,8 @@ class Omics(object):
                 `col_sample_id` as a tuple, with the second element 
                 containing a dictionary of keyword arguments to pass to
                 `AnnData.concatenate()` or None (to use defaults). 
+            col_num_umis (str, optional): Name of column in `.obs` with 
+                the UMI counts. Defaults to None
         """
         print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
         self._assay = assay
@@ -111,7 +113,7 @@ class Omics(object):
         self._columns = dict(
             col_gene_symbols=col_gene_symbols, col_cell_type=col_cell_type, 
             col_sample_id=col_sample_id, col_batch=col_sample_id, 
-            col_condition=col_condition)
+            col_condition=col_condition, col_num_umis=col_num_umis)
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment)
         for q in [self._columns, self._keys]:
@@ -490,27 +492,32 @@ class Omics(object):
             self.results["composition"] = output
         return output
     
-    def run_dialogue(self, n_programs=3, col_cell_type=None,
-                     cmap="coolwarm", vcenter=0, 
-                     layer=None, **kws_plot):
+    def run_dialogue(self, n_programs=3, col_confounder=None,
+                     col_cell_type=None, cmap="coolwarm", vcenter=0, 
+                     layer="log1p", **kws_plot):
         """Analyze <`n_programs`> multicellular programs."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         adata = self.rna.copy()
         if layer is not None:
             adata.X = adata.layers[layer]
+        col = self._columns["col_perturbed" if (
+            "col_perturbed" in self._columns) else "col_condition"] 
         d_l = pt.tl.Dialogue(
-            sample_id=self._columns["col_perturbed"], n_mpcs=n_programs,
-            celltype_key=col_cell_type, 
+            sample_id=col, n_mpcs=n_programs, celltype_key=col_cell_type, 
             n_counts_key=self._columns["col_num_umis"])
-        pdata, mcps, ws, ct_subs = d_l.calculate_multifactor_PMD(
+        pdata, mcps, w_s, ct_subs = d_l.calculate_multifactor_PMD(
             adata, normalize=True)
         mcp_cols = list(set(pdata.obs.columns).difference(adata.obs.columns))
         cols = cr.pl.square_grid(len(mcp_cols) + 2)[1]
         fig = sc.pl.umap(
-            pdata, color=mcp_cols + [
-                self._columns["col_perturbed"], col_cell_type],
+            pdata, color=mcp_cols + [col, col_cell_type],
             ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
-        self.results["dialogue"] = pdata, mcps, ws, ct_subs
+        if col_confounder:  # correct for a confounding variable?
+            res, p_new = d_l.multilevel_modeling(
+                ct_subs=ct_subs, mcp_scores=mcps, ws_dict=w_s,
+                confounder=col_confounder)
+            self.results[f"dialogue_confounder_{col_confounder}"] = res, p_new
+        self.results["dialogue"] = pdata, mcps, w_s, ct_subs
         self.figures["dialogue"] = fig
         return fig
