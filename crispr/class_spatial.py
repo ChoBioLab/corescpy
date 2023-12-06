@@ -87,22 +87,27 @@ class Spatial(Omics):
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
             
-    def plot(self, color, col_sample_id=None, figsize=30):
+    def plot(self, color, col_sample_id=None, shape="hex", 
+             figsize=30, **kwargs):
         """Create basic plots."""
         figs = {}
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
+        if "wspace" not in kwargs:
+            kwargs["wspace"] = 0.4
         if color is None:
             color = self._columns["col_cell_type"]
         libid = col_sample_id if col_sample_id not in [
             None, False] else self._columns["col_sample_id"]  # library ID
         figs["spatial"] = sq.pl.spatial_scatter(
-            self.adata, library_id=libid, figsize=figsize,
-            shape=None, color=[color], wspace=0.4)
+            self.adata, library_id=libid, figsize=figsize, shape=shape, 
+            color=[color] if isinstance(color, str) else color, **kwargs)
         return figs        
     
     def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
-                        figsize_multiplier=1, 
+                        figsize_multiplier=1, dpi=100,
+                        kws_receptor_ligand=None,
+                        key_source=None, key_targets=None,
                         method_autocorr="moran", alpha=0.005, 
                         col_sample_id=None, n_perms=100, seed=1618, copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
@@ -112,66 +117,100 @@ class Spatial(Omics):
         adata.X = adata.layers[layer]  # set data layer
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        jobs = os.cpu_count() - 1  # threads for parallel processing
             
-        # Connectivity & Centrality
-        print("\n<<< CALCULATING CONNECTIVITY & CENTRALITY >>>")
-        print("\t*** Building connectivity matrix...")
-        sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True,
-                                spatial_key=self._assay_spatial)
-        adata.uns["spatial"][
-            "library_id"] = col_sample_id if col_sample_id not in [
-                None, False] else self._columns["col_sample_id"]  # library ID
-        print("\t*** Computing centrality scores...")
-        sq.gr.centrality_scores(adata, cluster_key=col_cell_type, n_jobs=jobs)
-        sq.pl.centrality_scores(
-            adata, cluster_key=col_cell_type, figsize=tuple(np.array(
-                [16, 5]) * figsize_multiplier))  # plot centrality score
-        
-        # Interaction Matrix
-        sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
+        # Connectivity & Centrality + Interaction Matrix
+        print("\n<<< CALCULATING CENTRALITY SCORES >>>")
+        self.calculate_graph(col_cell_type=col_cell_type, 
+                             figsize_multiplier=figsize_multiplier)  # run
+        self.adata.uns[self._assay_spatial]["library_id"] = list(
+            self.adata.uns["spatial"].keys())[0]  # store library_id
         
         # Co-Occurence
-        print("\n<<< QUANTIFYING CO-OCCURRENCE>>>")
+        print("\n<<< QUANTIFYING CO-OCCURRENCE >>>")
         adata, figs["cooccurrence"] = self.find_cooccurrence(
             col_cell_type=col_cell_type, copy=False)  # cooccurring cell types
         
         # Neighbors Enrichment Analysis
         print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
-        sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type, 
-                               n_jobs=None,
-                               # n_jobs=jobs,  # not working for some reason?
-                               seed=seed)  # neighborhood enrichment
-        figs["enrichment"], axs = plt.subplots(1, 2, figsize=np.array(
-            [13, 7]) * figsize_multiplier)  # set up facet grid figure
-        sq.pl.nhood_enrichment(
-            adata, cluster_key=col_cell_type, figsize=(8, 8), 
-            title="Neighborhood Enrichment", ax=axs[0])  # heatmap (panel 1)
-        sq.pl.spatial_scatter(adata, color=col_cell_type, shape=None, 
-                              size=2, ax=axs[1])  # scatterplot (panel 2)
+        figs["enrichment"] = self.calculate_neighborhood(
+            col_cell_type=col_cell_type, copy=False)  # analyze enrichment
         
         # Spatially-Variable Genes
         if method_autocorr not in [None, False]:
-            figs["autocorrelation"] = self.find_svgs(
+            figs["svgs_autocorrelation"] = self.find_svgs(
                 genes=genes, adata=adata, method=method_autocorr, 
-                layer=layer, n_perms=n_perms)
+                layer=layer, n_perms=n_perms)  # find SVGs
             
         # Receptor-Ligand Interaction
-        adata, figs["receptor_ligand"] = self.calculate_receptor_ligand(
-            key_source=None, key_targets=None, col_cell_type=col_cell_type, 
-            n_perms=n_perms, alpha=alpha)
+        if kws_receptor_ligand is not False:
+            if not kws_receptor_ligand:
+                kws_receptor_ligand = {}
+            res_rl, figs["receptor_ligand"] = self.calculate_receptor_ligand(
+                col_cell_type=col_cell_type, n_perms=n_perms, alpha=alpha, 
+                dpi=dpi, key_source=None, key_targets=None,
+                **kws_receptor_ligand)  # run receptor-ligand analysis
+        
+        # Distribution Pattern
+        figs["distribution_pattern"] = self.calculate_distribution_pattern()
         
         # Output
         if copy is False:
+            self.results["spatial"]["receptor_ligand"] = res_rl
             self.figures["spatial"] = figs
             self.rna = adata
             return figs
         else:
             return adata, figs
+    
+    def calculate_centrality(self, col_cell_type=None, delaunay=True, 
+                             coord_type="generic", figsize_multiplier=1):
+        """
+        Characterize connectivity, centrality, and interaction matrix.
+        """
+        # Connectivity & Centrality
+        print("\t*** Building connectivity matrix...")
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        jobs = os.cpu_count() - 1  # threads for parallel processing
+        sq.gr.spatial_neighbors(
+            self.adata, coord_type=coord_type, delaunay=delaunay,
+            spatial_key=self._assay_spatial)  # spatial neighbor calculation
+        # adata.uns["spatial"][
+        #     "library_id"] = col_sample_id if col_sample_id not in [
+        #         None, False] else self._columns["col_sample_id"]  # library ID
+        print("\t*** Computing centrality scores...")
+        sq.gr.centrality_scores(self.adata, 
+                                cluster_key=col_cell_type, n_jobs=jobs)
+        sq.pl.centrality_scores(
+            self.adata, cluster_key=col_cell_type, figsize=tuple(np.array(
+                [16, 5]) * figsize_multiplier))  # plot centrality score
+        print("\t*** Computing interaction matrix...")
+        sq.gr.interaction_matrix(self.adata, col_cell_type, normalized=False)
         
+    def calculate_neighborhood(self, col_cell_type=None, figsize_multiplier=1, 
+                               shape="hex", seed=1618, **kwargs):
+        """Perform neighborhood enrichment analysis."""
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        sq.gr.nhood_enrichment(self.adata, cluster_key=col_cell_type, 
+                               n_jobs=None,
+                               # n_jobs=jobs,  # not working for some reason?
+                               seed=seed)  # neighborhood enrichment
+        fig, axs = plt.subplots(1, 2, figsize=np.array(
+            [13, 7]) * figsize_multiplier)  # set up facet grid figure
+        sq.pl.nhood_enrichment(
+            self.adata, cluster_key=col_cell_type, figsize=(8, 8), 
+            title="Neighborhood Enrichment", ax=axs[0])  # heatmap (panel 1)
+        sq.pl.spatial_scatter(self.adata, color=col_cell_type, shape=shape, 
+                              size=2 * figsize_multiplier, ax=axs[1], 
+                              figsize=tuple(np.array(
+                                  [2, 2]) * figsize_multiplier), **kwargs
+                              )  # scatterplot (panel 2)
+        return fig
         
-    def find_cooccurrence(self, col_cell_type=None, layer=None, 
-                          figsize=30, copy=False, kws_plot=None, **kwargs):
+    def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
+                          layer=None, figsize=30, copy=False, 
+                          kws_plot=None, **kwargs):
         """
         Find co-occurrence using spatial data. (similar to neighborhood
         enrichment analysis, but uses original spatial coordinates rather
@@ -192,11 +231,11 @@ class Spatial(Omics):
                             spatial_key=self._assay_spatial, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata, color=col_cell_type, shape=None, size=2,
-            figsize=figsize)
+            adata, color=col_cell_type, shape=None, size=2, figsize=figsize)
         try:
             figs["co_occurrence"] = sq.pl.co_occurrence(
-                adata, cluster_key=col_cell_type, figsize=figsize, **kws_plot)
+                adata, cluster_key=col_cell_type, 
+                clusters=key_cell_type, figsize=figsize, **kws_plot)
         except Exception as err:
             figs["co_occurrence"] = err
             print(f"{err}\n{type(err)}\n{err.args}\n\n"
@@ -243,19 +282,22 @@ class Spatial(Omics):
     
     def calculate_receptor_ligand(self, key_source=None, key_targets=None, 
                                   col_cell_type=None, n_perms=10, 
-                                  alpha=0.005, copy=False, **kwargs):
+                                  pvalue_threshold=0.05, 
+                                  remove_nonsig=True, alpha=0.005, copy=False, 
+                                  kws_plot=None, **kwargs):
         """Calculate receptor-ligand interactions."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        adata = self.rna.copy() if copy is True else self.rna
+        adata = self.rna.copy()
         res = sq.gr.ligrec(
             adata, n_perms=n_perms, cluster_key=col_cell_type,
             transmitter_params={"categories": "ligand"}, 
             receiver_params={"categories": "receptor"},
-            interactions_params={'resources': 'CellPhoneDB'}, **kwargs)
-        if key_source is not None and key_targets is not None:
-            fig = sq.pl.ligrec(res, alpha=alpha, source_groups=key_source, 
-                               target_groups=key_targets)  # plot 
-        else:
-            fig = None
-        return adata, fig
+            interactions_params={'resources': 'CellPhoneDB'}, 
+            copy=True, **kwargs)
+        fig = sq.pl.ligrec(res, alpha=alpha, 
+                           source_groups=key_source, target_groups=key_targets,
+                           remove_nonsig_interactions=remove_nonsig,
+                           pvalue_threshold=pvalue_threshold, 
+                           **{**dict(kws_plot if kws_plot else {})})  # plot 
+        return res, fig
