@@ -158,7 +158,7 @@ def process_data(adata,
                  col_cell_type=None,
                  # remove_doublets=True,
                  outlier_mads=None,
-                 cell_filter_pmt=5,
+                 cell_filter_pmt=None,
                  cell_filter_ncounts=None, 
                  cell_filter_ngene=None,
                  gene_filter_ncell=None,
@@ -252,8 +252,7 @@ def process_data(adata,
     if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
         col_gene_symbols = None  # ...so functions will refer to index name
     figs = {}
-    kws_scale, kws_hvg = [{} if x is True else x if x else {} 
-                          for x in [kws_scale, kws_hvg]]
+    kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 10
     # if kws_scale:
@@ -503,9 +502,11 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
               gene_filter_ncell=None):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
-    if cell_filter_pmt is None:
+    if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
+        cell_filter_pmt = [0, cell_filter_pmt]  # ...assume it's for maximum %
+    if cell_filter_pmt is None:  # None = no MT filter but calculates metrics
         cell_filter_pmt = [0, 
-                           100]  # so doesn't filter MT but calculates metrics
+                           100]
     min_pct_mt, max_pct_mt = cell_filter_pmt
     if outlier_mads is not None:  # automatic filtering using outlier stats
         outliers = ann.obs[outlier_mads.keys()]
@@ -530,6 +531,10 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
             ann.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
         print(f"\tNew Count: {ann.n_obs}")
         print("\n\t*** Filtering genes based on # of genes expressed...")
+        cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
+            gene_filter_ncell = [x if x else [None, None] for x in [
+                cell_filter_ngene, cell_filter_ncounts, 
+                gene_filter_ncell, gene_filter_ncell]]  # -> iterable if None
         if cell_filter_ngene[0] is not None:
             sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
             print(f"\n\tMinimum={cell_filter_ngene[0]}\tCount: {ann.n_obs}")
