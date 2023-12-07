@@ -581,7 +581,7 @@ class Crispr(Omics):
         if assay is None:
             assay = self._assay
         if assay_protein is None:
-            assay_protein = self._assay
+            assay_protein = self._assay_protein
         for x in [self._columns, self._keys, self._layers]:
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...

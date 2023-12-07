@@ -27,6 +27,7 @@ dependencies = [
     "squidpy",
     "arviz",
     "celltypist",
+    "numpy >= 1.24.4",
     "seaborn >= 0.13.0",
     "ete3",
     "scipy",

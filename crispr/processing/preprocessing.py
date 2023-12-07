@@ -22,7 +22,8 @@ import pandas as pd
 import numpy as np
 
 pd.DataFrame.iteritems = pd.DataFrame.items  # back-compatibility
-regress_out_vars = ["total_counts", "pct_counts_mt"]
+# regress_out_vars = ["total_counts", "pct_counts_mt"]
+regress_out_vars = None  # default variables to regress out
 
 
 def get_layer_dict():
@@ -562,12 +563,12 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
             sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
             print(f"\n\tMinimum={gene_filter_ncell[0]}\tCount: {ann.n_obs}")
         else:
-            print("\n\tNo minimum")
+            print("\n\tNo Minimum")
         if gene_filter_ncell[1] is not None:
             sc.pp.filter_genes(ann, max_cells=gene_filter_ncell[1])
             print(f"\n\tMaximum={gene_filter_ncell[1]}\tCount: {ann.n_obs}")
         else:
-            print("\n\tNo maximum")
+            print("\n\tNo Maximum")
         print(f"\nPost-Filtering Cell Count: {ann.n_obs}")
     return ann
 

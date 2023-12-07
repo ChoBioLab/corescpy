@@ -2,6 +2,9 @@
 data/
 cache/
 
+# Too Big
+# examples/spatial_visium.ipynb
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
