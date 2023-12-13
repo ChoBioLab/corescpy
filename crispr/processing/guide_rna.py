@@ -12,6 +12,7 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
                       key_control="NT", 
                       conserve_memory=False,
                       remove_multi_transfected=False,
+                      remove_from_gex=False,
                       **kws_process_guide_rna):
     """
     Process and filter guide RNAs, (optionally) remove cells considered 
@@ -84,6 +85,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
             those patterns). If blank entries should be interpreted as 
             control guides, then include np.nan/numpy.nan in this list.
             Defaults to None -> [np.nan].
+        remove_from_gex (bool, optional): If True, remove guide RNA
+            counts from the gene expression matrix.
         key_control (str, optional): The name you want the control 
             entries to be categorized as under the new `col_guide_rna`. 
             for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be 
@@ -192,7 +195,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         k_i += list(pd.Series([
             x if kws_pga["feature_split"] in x else np.nan 
             for x in ann.obs[col_guide_rna].unique()]).dropna())
-    ann = remove_guide_counts_from_gex(ann, col_guide_rna, key_ignore=k_i)
+    if remove_from_gex is True:
+        ann = remove_guide_counts_from_gex(ann, col_guide_rna, key_ignore=k_i)
     ann.uns["grna_keywords"], ann.uns["grna_feats_n"] = kws_pga, feats_n
     ann.uns["grna_info"], ann.uns["grna_info_all"] = tg_info, tg_info_all
     ann.obs = ann.obs.assign(guide_split=kws_pga["guide_split"]
