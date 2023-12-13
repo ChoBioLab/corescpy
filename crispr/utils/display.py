@@ -24,7 +24,7 @@ def make_printable_object(obj, show=False, numpy_alias="np"):
                                 for i in obj]) + "]"
         if isinstance(obj, np.ndarray):
             text = f"np.ndarray({text})"
-    elif isinstance(obj, str):
+    elif isinstance(obj, (str, float, int)):
         text = "np.nan" if obj == "nan" else f"'{obj}'"
     elif isinstance(obj, dict):
         if show is True:
@@ -41,14 +41,15 @@ def make_printable_object(obj, show=False, numpy_alias="np"):
             text = "dict(" + ", ".join(
                 [f"{i} = {make_printable_object(obj[i], show=False)}" 
                  for i in obj]) + ")"
-    elif pd.isnull(obj):
-        text = f"{numpy_alias}.nan"
     elif obj in [None, True, False]:
         text = str(obj)
+    elif pd.isnull(obj):
+        text = f"{numpy_alias}.nan"
     else:
         raise TypeError(f"Type of object {type(obj)} not supported.")
     if show is True:
         print(text)
+    text = re.sub("'", "\"", text)
     return text
 
 
