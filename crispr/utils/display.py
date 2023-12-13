@@ -25,7 +25,8 @@ def make_printable_object(obj, show=False, numpy_alias="np"):
         if isinstance(obj, np.ndarray):
             text = f"np.ndarray({text})"
     elif isinstance(obj, (str, float, int)):
-        text = "np.nan" if obj == "nan" else f"'{obj}'"
+        text = "np.nan" if obj == "nan" else f"'{obj}'" if isinstance(
+            obj, str) else str(obj)
     elif isinstance(obj, dict):
         if show is True:
             text = dict(zip(obj, [print_pretty_dictionary(text, show=False)  
@@ -50,6 +51,7 @@ def make_printable_object(obj, show=False, numpy_alias="np"):
     if show is True:
         print(text)
     text = re.sub("'", "\"", text)
+    text = re.sub(" = ", "=", text)
     return text
 
 

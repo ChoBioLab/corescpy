@@ -272,7 +272,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                            min_n_target_control_drop=100,
                            min_pct_avg_n=40,
                            min_pct_dominant=80,
-                           drop_multi_control=True,
+                           drop_multi_control=False,
                            feature_split="|", guide_split="-",
                            key_control_patterns=None,
                            key_control="Control", **kwargs):
