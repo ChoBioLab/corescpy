@@ -459,7 +459,9 @@ class Crispr(Omics):
             dff = dff[dff[self._columns["col_target_genes"]].isin(
                 target_gene_idents)]
         kws_plot = dict(
-            share_x=True, share_y=False, figsize=(30, 30), split=True, 
+            # share_x=True, share_y=False, 
+            # figsize=(30, 30), 
+            split=True,
             col=group_by[0] if group_by else None,
             hue=group_by[1] if group_by and len(group_by) > 2 else None,
             row=group_by[2] if group_by and len(group_by) > 2 else None,

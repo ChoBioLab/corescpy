@@ -217,7 +217,7 @@ def perform_augur(adata, assay=None, layer=None,
                   col_gene_symbols="gene_symbols",
                   key_control="NT", key_treatment=None,
                   seed=1618, plot=True, n_threads=None,
-                  kws_augur_predict=None, **kwargs):
+                  kws_augur_predict=None, cmap="coolwarm", **kwargs):
     """Calculates AUC using Augur and a specified classifier.
 
     Args:
@@ -302,8 +302,7 @@ def perform_augur(adata, assay=None, layer=None,
         loaded_data = ag_rfc.load(
             adata_pert, condition_label=key_control, 
             treatment_label=key_treatment,
-            cell_type_col=col_cell_new,
-            label_col=col_pert_new
+            cell_type_col=col_cell_new, label_col=col_pert_new
             )  # add dummy variables, rename cell type & label columns
 
         # Run Augur Predict
@@ -324,7 +323,7 @@ def perform_augur(adata, assay=None, layer=None,
                 kwargs.update({"frameon": False})
             figs["perturbation_score_umap"] = sc.pl.umap(
                 data, color=["augur_score", col_cell_type], 
-                cmap="coolwarm", vcenter=0, vmax=1)
+                cmap=cmap, vcenter=0, vmax=1)
             figs["perturbation_effect_by_cell_type"] = pt.pl.ag.lollipop(
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?
@@ -352,7 +351,6 @@ def perform_augur(adata, assay=None, layer=None,
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # most important genes for prioritization
             figs["perturbation_scores"] = {}
-        adata_pert
     return data, results, figs
 
 

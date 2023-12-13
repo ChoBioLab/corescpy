@@ -88,9 +88,10 @@ class Spatial(Omics):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
         self._library_id = None
             
-    def plot(self, color, col_sample_id=None, library_id=None, 
-             shape="hex", figsize=30, **kwargs):
-        """Create basic plots."""
+    def plot_spatial(self, color, include_umap=True, 
+                     col_sample_id=None, library_id=None, 
+                     shape="hex", figsize=30, cmap="magma", **kwargs):
+        """Create basic spatial plots."""
         figs = {}
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
@@ -98,13 +99,23 @@ class Spatial(Omics):
             kwargs["wspace"] = 0.4
         if color is None:
             color = self._columns["col_cell_type"]
+        if include_umap is True:
+            color = list([color] if isinstance(color, str) else color) + [
+                self._columns["col_cell_type"]]
+            color = list(pd.unique(color))
         if not library_id:
             library_id = self._library_id
+        if "title" not in kwargs:
+            kwargs.update({"title": color})
         # libid = col_sample_id if col_sample_id not in [
         #     None, False] else self._columns["col_sample_id"]  # library ID
         figs["spatial"] = sq.pl.spatial_scatter(
             self.adata, library_id=library_id, figsize=figsize, shape=shape, 
-            color=[color] if isinstance(color, str) else color, **kwargs)
+            color=[color] if isinstance(color, str) else color, 
+            cmap=cmap, alt_var=self._columns["col_gene_symbols"] if (
+                self._columns["col_gene_symbols"
+                              ] != self.rna.var.index.names[0]) else None,
+            **kwargs)
         return figs        
     
     def analyze_spatial(
@@ -112,7 +123,7 @@ class Spatial(Omics):
         figsize_multiplier=1, dpi=100, palette=None,
         kws_receptor_ligand=None, key_source=None, key_targets=None,
         method_autocorr="moran", alpha=0.005, n_perms=100, 
-        seed=1618, copy=False):
+        seed=1618, cmap="magma", copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
         adata = self.rna if copy is False else self.rna.copy()
@@ -136,7 +147,7 @@ class Spatial(Omics):
         # Neighbors Enrichment Analysis
         print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
         figs["enrichment"] = self.calculate_neighborhood(
-            col_cell_type=col_cell_type, copy=False, palette=palette)
+            col_cell_type=col_cell_type, copy=False, kws_plot=dict(cmap=cmap))
         
         # Spatially-Variable Genes
         if method_autocorr not in [None, False]:
@@ -291,7 +302,7 @@ class Spatial(Omics):
         #     size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         # kws_plot = {**dict(palette=palette, shape=shape, size=size), 
         #             **dict(kws_plot if kws_plot else {})}
-        kws_plot = {**dict(kws_plot if kws_plot else {})}
+        kws_plot = {"cmap": "magma", **dict(kws_plot if kws_plot else {})}
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
         sq.gr.spatial_autocorr(self.rna, mode=method, layer=layer, 
                                n_perms=n_perms, n_jobs=jobs)  # auto-correlate

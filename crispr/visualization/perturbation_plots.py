@@ -163,7 +163,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     else:
         nrow = int(np.ceil(len(target_gene_idents) / ncol))
     if figsize is None:
-        figsize = (5 * ncol, 5 * nrow)
+        figsize = (3 * ncol, 3 * nrow)
     figs[f"gex_violin"], axs = plt.subplots(nrow, ncol, figsize=figsize)
     if "flatten" in dir(axs):  # if enough target genes for multi-row plot
         axs = axs.flatten()  # flatten axis so can access by flat index

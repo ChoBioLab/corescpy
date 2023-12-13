@@ -11,6 +11,7 @@ import warnings
 import celltypist
 from anndata import AnnData
 import scanpy as sc
+import crispr as cr
 import os
 import pandas as pd
 
@@ -157,12 +158,12 @@ def perform_celltypist(adata, model, col_cell_type=None,
         if "labels" not in kws_train and col_cell_type:
             kws_train["labels"] = col_cell_type
         print(f"\n\n<<< TRAINING CUSTOM CELLTYPIST MODEL >>>")
-        if cr.pp.check_normalization(mod) is False:
-            print(f"*** Total-count & log-normalizing training data...")
-            mod = mod.copy()
-            sc.pp.normalize_total(mod, target_sum=1e4)
-            sc.pp.log1p(mod)
-        model = celltypist.train(model, **kws_train)  # custom model
+        mod = model.copy()
+        # if cr.pp.check_normalization(mod) is False:
+        print(f"*** Total-count & log-normalizing training data...")
+        sc.pp.normalize_total(mod, target_sum=1e4)
+        sc.pp.log1p(mod)
+        model = celltypist.train(mod, **kws_train)  # custom model
     elif isinstance(model, str):  # if model name provided
         try:
             model = celltypist.models.Model.load(
