@@ -196,7 +196,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
             x if kws_pga["feature_split"] in x else np.nan 
             for x in ann.obs[col_guide_rna].unique()]).dropna())
     if remove_from_gex is True:
-        ann = remove_guide_counts_from_gex(ann, col_guide_rna, key_ignore=k_i)
+        ann = remove_guide_counts_from_gex(ann, col_guide_rna + "_original", 
+                                           key_ignore=k_i)
     ann.uns["grna_keywords"], ann.uns["grna_feats_n"] = kws_pga, feats_n
     ann.uns["grna_info"], ann.uns["grna_info_all"] = tg_info, tg_info_all
     ann.obs = ann.obs.assign(guide_split=kws_pga["guide_split"]

@@ -271,7 +271,7 @@ class Omics(object):
         return fig
             
     def plot(self, genes=None, genes_highlight=None, subset=None,
-             marker_genes_dict=None, cell_types_circle=None,
+             marker_genes_dict=None, cell_types_circle=None, layer=None,
              kws_qc=False, kws_umap=None, kws_heat=None, kws_violin=None, 
              kws_matrix=None, kws_dot=None, kind="all", **kwargs):
         """Create a variety of plots."""
@@ -314,14 +314,24 @@ class Omics(object):
         if isinstance(kind, str) and (
             kind != "all"):  # if only one type of plot to plot
             kws_violin, kws_heat, kws_matrix, kws_dot = [
-                kwargs if kind in x[0] and x[1] is None else x 
+                kwargs if kind in x[0] and x[1] is None else x[1] 
                 for x in zip(["violin", ["heat", "hm"], "matrix", "dot"], [
                     kws_violin, kws_heat, kws_matrix, kws_dot])
                 ]  # can specify plot arguments via overall keyword arguments
+            for k in ["categories_order"]:
+                if k in kwargs:
+                    kws_violin, kws_heat, kws_matrix, kws_dot = [
+                        {k: kwargs[k], **x} if x else {
+                            k: kwargs[k]} for x in [
+                                kws_violin, kws_heat, kws_matrix, kws_dot]]
+        # print("TOP", kws_heat, "/n/n/n")
+        if "categories_order" in kwargs:  # subset to categories if needed
+            adata = adata[adata.obs[group].isin(
+                kwargs["categories_order"])].copy()
         figs["gex"] = cr.pl.plot_gex(
             adata, col_cell_type=group, genes=genes, kind=kind, 
             col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict, 
-            kws_violin=kws_violin, kws_heat=kws_heat, 
+            kws_violin=kws_violin, kws_heat=kws_heat, layer=layer,
             kws_matrix=kws_matrix, kws_dot=kws_dot)  # GEX
             
         # UMAP

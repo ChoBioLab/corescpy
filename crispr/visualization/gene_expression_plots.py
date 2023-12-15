@@ -23,10 +23,10 @@ COLOR_MAP = "coolwarm"
 
 
 def plot_gex(adata, col_cell_type=None, title=None, 
-             col_gene_symbols=None, 
+             col_gene_symbols=None, layer=None,
              genes=None, marker_genes_dict=None,
              genes_highlight=None, kind="all",
-              **kws_plots):
+             kws_heat=None, kws_violin=None, kws_matrix=None, kws_dot=None):
     """
     Make gene expression violin, heatmap.
     
@@ -43,8 +43,9 @@ def plot_gex(adata, col_cell_type=None, title=None,
         kind = ["dot", "heat", "violin"] if kind == "all" else [kind.lower()]
     kind = [x.lower() for x in kind]
     names_layers = cr.pp.get_layer_dict()
-    kws_hm, kws_violin, kws_matrix, kws_dot = [kws_plots[f"kws_{x}"] if (
-        x in kws_plots) else {} for x in ["heat", "violin", "matrix", "dot"]]
+    kws_heat, kws_violin, kws_matrix, kws_dot = [
+        x if x else {} for x in [kws_heat, kws_violin, kws_matrix, kws_dot]]
+    kws_heat = {**{"dendrogram": True, "show_gene_labels": True}, **kws_heat}
     if not isinstance(genes, (list, np.ndarray)) and (
         genes is None or genes == "all"):
         genes = list(pd.unique(adata.var_names))  # gene names
@@ -57,22 +58,25 @@ def plot_gex(adata, col_cell_type=None, title=None,
     # Heatmap(s)
     if "heat" in kind or "heatmap" in kind or "hm" in kind:
         print("\n<<< PLOTTING GEX (Heatmap) >>>")
-        kws_hm = {**{"dendrogram": True, "show_gene_labels": True}, **kws_hm}
-        if "cmap" not in kws_hm:
-            kws_hm.update({"cmap": COLOR_MAP})
-        layers = [kws_hm["layer"]] if "layer" in kws_hm else list(
-            [None] + list(adata.layers))  # layer(s) to plot
+        if "cmap" not in kws_heat:
+            kws_heat.update({"cmap": COLOR_MAP})
+        if layer is not None:
+            layers = [layer] if isinstance(layer, str) else layer
+        else:
+            layers = [kws_heat["layer"]] if "layer" in kws_heat else list(
+                [None] + list(adata.layers))  # layer(s) to plot
         for i in layers:
             lab = f"heat{str('_' + str(i) if i else '')}"
-            title_h = kws_hm["title"] if "title" in kws_hm else \
+            title_h = kws_heat["title"] if "title" in kws_heat else \
                 title if title else "Gene Expression"
             title_h = f"{title_h} ({i})" if i else title_h
+            print(kws_heat)
             try:
                 sc.tl.dendrogram(adata, col_cell_type)
                 figs[lab] = sc.pl.heatmap(
                     adata, marker_genes_dict if marker_genes_dict else genes, 
                     col_cell_type, show=False, gene_symbols=col_gene_symbols, 
-                    **{**kws_hm, "layer": i})  # heatmap
+                    **{**kws_heat, "layer": i})  # heatmap
                 # axes_gex[j].set_title(i.capitalize() if i else None)
                 figs[lab] = plt.gcf(), figs[lab]
                 figs[lab][0].suptitle(title_h)
@@ -100,8 +104,11 @@ def plot_gex(adata, col_cell_type=None, title=None,
                     [True, False, COLOR_MAP]):
             if i[0] not in kws_violin:  # add default arguments
                 kws_violin.update({i[0]: i[1]})
-        layers = [kws_violin["layer"]] if "layer" in kws_violin else list(
-            [None] + list(adata.layers))  # layer(s) to plot
+        if layer is not None:
+            layers = [layer] if isinstance(layer, str) else layer
+        else:
+            layers = [kws_violin["layer"]] if "layer" in kws_violin else list(
+                [None] + list(adata.layers))  # layer(s) to plot
         for i in layers:
             lab = f"violin{str('_' + str(i) if i else '')}"
             title_v = kws_violin["title"] if "title" in kws_violin else \
@@ -112,7 +119,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
                     adata, marker_genes_dict if marker_genes_dict else genes,
                     groupby=lab_cluster if lab_cluster in adata.obs else None, 
                     return_fig=True, gene_symbols=col_gene_symbols, 
-                    show=False, **{**kws_hm, "layer": i, "title": title_v}
+                    show=False, **{**kws_violin, "layer": i, "title": title_v}
                     )  # violin plot
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster)
@@ -173,8 +180,11 @@ def plot_gex(adata, col_cell_type=None, title=None,
                         [True, False, COLOR_MAP]):
             if i[0] not in kws_matrix:  # add default arguments
                 kws_matrix.update({i[0]: i[1]})
-        layers = [kws_violin["layer"]] if "layer" in kws_violin else list(
-            [None] + list(adata.layers))  # layer(s) to plot
+        if layer is not None:
+            layers = [layer] if isinstance(layer, str) else layer
+        else:
+            layers = [kws_matrix["layer"]] if "layer" in kws_matrix else list(
+                [None] + list(adata.layers))  # layer(s) to plot
         for i in layers:
             lab = f"matrix{str('_' + str(i) if i else '')}"
             title_m = kws_matrix["title"] if "title" in kws_matrix else \
@@ -188,7 +198,8 @@ def plot_gex(adata, col_cell_type=None, title=None,
                     adata, genes, return_fig=True, 
                     groupby=lab_cluster if lab_cluster in adata.obs else None,
                     gene_symbols=col_gene_symbols, colorbar_title=bar_title, 
-                    **{**kws_hm, "layer": i, "title": title_m}, show=False)
+                    **{**kws_matrix, "layer": i, "title": title_m}, 
+                    show=False)  # matrix plot
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster_mat)
                 figs[lab].show()

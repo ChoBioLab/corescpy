@@ -387,6 +387,22 @@ class Crispr(Omics):
         print("\n\n", self.rna)
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
+            
+    def plot_gex_targets(self, col_condition=None, key_reference=None):
+        """
+        Make violin plots comparing expression of target genes in 
+        perturbation conditions versus a reference condition 
+        (key_control, by default).
+        """
+        if col_condition is None:
+            col_condition = self._columns["col_target_genes"]
+        if key_reference is None:
+            key_reference = self._keys["key_control"]
+        for g in set(self.rna.obs[col_condition].unique()).difference(
+            [key_reference]):
+            ann = self.rna[self.rna.obs[col_condition].isin([
+                g, key_reference])].copy()  # subset ~ NT v. T
+            sc.pl.violin(ann, g, groupby=col_condition)  # plot
     
     def describe(self, group_by=None, plot=False):
         """Describe data."""
