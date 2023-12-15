@@ -185,9 +185,10 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         
     # Remove Filtered-Out Cells
     print(f"\n\n\t*** Removing filtered-out cells...")
+    nno = ann.obs.shape[0]
     ann = ann[~ann.obs[col_guide_rna_new].isnull()]
-    print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
-          f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%).")
+    print(f"Dropped {nno - ann.obs.shape[0]} out of {nno} observations "
+          f"({round(100 * (nno - ann.obs.shape[0]) / nno, 2)}" + "%).")
     
     # Remove Guide RNA Counts from Gene Expression Matrix
     k_i = [key_control]
@@ -378,7 +379,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             ).to_frame("n_non_ctrl"))  # overridden by dominant guide?
     feats_n = feats_n.join(feats_n.groupby(["bc", "g"]).apply(
         lambda x: "retain" if (x.name[1] != key_control) 
-        else ("low_control" if float(x["p"]) <= max_pct_control_drop 
+        else ("low_control" if max_pct_control_drop and float(
+            x["p"]) <= max_pct_control_drop
               else "high_noncontrol" if min_n_target_control_drop and float(
                   x["n_non_ctrl"]) >= min_n_target_control_drop
               else "retain")).to_frame("drop_control"))  # control drop labels
@@ -402,11 +404,13 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         low_umi=feats_n.n < feats_n.n_cell_avg * min_pct_avg_n / 100 
         if min_pct_avg_n is not None else False
         )  # low % of mean UMI count (if filtering based on that)?
-    feats_n = feats_n.join(feats_n.dominant.groupby("bc").apply(
-            lambda x: pd.Series(
-                [True if (x.any()) and (i is False) else False for i in x], 
-                index=x.reset_index("bc", drop=True).index)
-            ).to_frame("drop_nondominant"))  # overridden by dominant guide?
+    if min_pct_dominant is not None:
+        feats_n = feats_n.join(feats_n.dominant.groupby("bc").apply(
+                lambda x: pd.Series([False] if len(x) == 1 else [
+                    True if (x.any()) and (i is False) else False 
+                    for i in x], index=x.reset_index(
+                            "bc", drop=True).index)
+                ).to_frame("drop_nondominant"))  # overridden by dominant?
     # CHECK: 
     # feats_n.loc[feats_n[(feats_n.p < min_pct_dominant) & (
     #     feats_n.drop_nondominant)].reset_index().bc.unique()].groupby(
@@ -415,9 +419,11 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     filt = feats_n.copy()  # start with full feats_n
 
     # Filtering Phase I (If Dominant Guide, Drop Others; Drop Low Controls)
-    filt = filt[filt.drop_control.isin(["retain"])
-                ]  # low control or high non-control = not control-transfected 
-    filt = filt[~filt.drop_nondominant]  # drop if another guide dominates
+    filt = filt[filt.drop_control.isin(
+        ["retain"])]  # low control or high non-control=pseudo-not control
+    # if max_pct_control_drop & min_n_target_control_drop None, all retained
+    if min_pct_dominant is not None:
+        filt = filt[~filt.drop_nondominant]  # drop if another guide dominates
     
     # Filtering Phase II (Filter Low Targeting Guides in Multiply-Transfected)
     filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(

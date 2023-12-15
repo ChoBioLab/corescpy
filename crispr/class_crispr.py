@@ -409,7 +409,7 @@ class Crispr(Omics):
             key_reference = self._keys["key_control"]  # default: control
         if genes is None:  # if subset of genes not specified...
             genes = list(set(self.rna.obs[col_condition].unique(
-                )).intersection(self.rna.var_names))  # ...plot all target genes
+                )).intersection(self.rna.var_names))  # ...plot all targets
         rows, cols = cr.pl.square_grid(len(genes))
         fig, axs = plt.subplots(rows, cols, figsize=figsize)
         for i, g in enumerate(genes):
