@@ -346,10 +346,12 @@ class Omics(object):
                 print("\n<<< UMAP NOT AVAILABLE TO PLOT. RUN `.cluster()`.>>>")
         return figs
     
-    def plot_umap(self, color=None, group=None, **kwargs):
+    def plot_umap(self, color=None, group=None, palette=None, cmap="magma", 
+                  **kwargs):
         """Plot UMAP."""
         if color is None:
             color = self._columns["col_cell_type"]
+        kwargs.update({"palette": "palette", "cmap": cmap})
         if group:
             fig = cr.pl.plot_umap_split(self.rna, group, color=color, **{
                 "frameon": False, **kwargs})

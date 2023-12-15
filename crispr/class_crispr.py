@@ -8,6 +8,7 @@
 import scanpy as sc
 import warnings
 import seaborn as sns
+import matplotlib.pyplot as plt
 import pertpy as pt
 import crispr as cr
 from crispr.class_sc import Omics
@@ -388,21 +389,44 @@ class Crispr(Omics):
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
             
-    def plot_gex_targets(self, col_condition=None, key_reference=None):
+    def plot_gex_targets(self, col_condition=None, key_reference=None,
+                         genes=None, figsize=15, title=None, 
+                         palette=None, wspace=0.5, hspace=0.5, **kwargs):
         """
         Make violin plots comparing expression of target genes in 
         perturbation conditions versus a reference condition 
         (key_control, by default).
         """
+        if isinstance(figsize, (int, float)):  # if only 1 figize #...
+            figsize = (figsize, figsize)  # ...to tuple; equal width/height
+        if "layer" in kwargs:
+            kwargs.update({"use_raw": False})
+        if palette is None:
+            palette = ["r", "b"]
         if col_condition is None:
-            col_condition = self._columns["col_target_genes"]
+            col_condition = self._columns["col_target_genes"]  # target column
         if key_reference is None:
-            key_reference = self._keys["key_control"]
-        for g in set(self.rna.obs[col_condition].unique()).difference(
-            [key_reference]):
+            key_reference = self._keys["key_control"]  # default: control
+        if genes is None:  # if subset of genes not specified...
+            genes = list(set(self.rna.obs[col_condition].unique(
+                )).intersection(self.rna.var_names))  # ...plot all target genes
+        rows, cols = cr.pl.square_grid(len(genes))
+        fig, axs = plt.subplots(rows, cols, figsize=figsize)
+        for i, g in enumerate(genes):
             ann = self.rna[self.rna.obs[col_condition].isin([
                 g, key_reference])].copy()  # subset ~ NT v. T
-            sc.pl.violin(ann, g, groupby=col_condition)  # plot
+            sc.pl.violin(ann, g, groupby=col_condition, show=False,
+                         order=[g, key_reference], 
+                         hue_order=[g, key_reference],
+                         xlabel="", ylabel="", palette=palette,
+                         ax=axs.ravel()[i], **kwargs)  # plot
+            axs.ravel()[i].set_title(g)
+        plt.subplots_adjust(wspace=wspace, hspace=hspace)
+        if title is not None:
+            plt.subplots_adjust(top=0.7)
+            fig.suptitle(title)
+        fig.show()
+        return fig, axs
     
     def describe(self, group_by=None, plot=False):
         """Describe data."""
