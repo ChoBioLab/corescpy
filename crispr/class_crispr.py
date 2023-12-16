@@ -390,7 +390,7 @@ class Crispr(Omics):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
             
     def plot_gex_targets(self, col_condition=None, key_reference=None,
-                         genes=None, figsize=15, title=None, 
+                         genes=None, figsize=15, title=None, subset=None, 
                          palette=None, wspace=0.5, hspace=0.5, **kwargs):
         """
         Make violin plots comparing expression of target genes in 
@@ -412,8 +412,9 @@ class Crispr(Omics):
                 )).intersection(self.rna.var_names))  # ...plot all targets
         rows, cols = cr.pl.square_grid(len(genes))
         fig, axs = plt.subplots(rows, cols, figsize=figsize)
+        adata = self.rna[subset].copy() if subset else self.rna.copy()
         for i, g in enumerate(genes):
-            ann = self.rna[self.rna.obs[col_condition].isin([
+            ann = adata[adata.obs[col_condition].isin([
                 g, key_reference])].copy()  # subset ~ NT v. T
             sc.pl.violin(ann, g, groupby=col_condition, show=False,
                          order=[g, key_reference], 

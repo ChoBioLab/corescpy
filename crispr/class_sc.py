@@ -97,6 +97,7 @@ class Omics(object):
         self._file_path = file_path
         self._layers = {**cr.pp.get_layer_dict(), 
                         "layer_perturbation": "X_pert"}
+        self._integrated = kws_multi is not None
         if kwargs:
             print(f"\nUnused keyword arguments: {kwargs}.\n")
         if kws_multi and col_sample_id is None:
