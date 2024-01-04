@@ -353,7 +353,7 @@ class Omics(object):
         """Plot UMAP."""
         if color is None:
             color = self._columns["col_cell_type"]
-        kwargs.update({"palette": "palette", "cmap": cmap})
+        kwargs.update({"palette": palette, "cmap": cmap})
         if isinstance(color, str):  # only if not plotting multiple genes...
             kwargs.update({"cmap": cmap})  # can define cmap
         if group:

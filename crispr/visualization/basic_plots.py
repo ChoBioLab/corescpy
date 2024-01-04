@@ -88,7 +88,7 @@ def square_grid(num):
 
 
 def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None, 
-              legend_loc="on_data", genes=None, col_gene_symbols=None, 
+              legend_loc="on data", genes=None, col_gene_symbols=None, 
               cell_types_circle=None,  # create plot with cell types circled
               figsize=30,  # scale of shorter axis (long plots proportional)
               **kwargs):
@@ -97,8 +97,7 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
     if "cmap" in kwargs:  # in case use wrong form of argument
         kwargs["color_map"] = kwargs.pop("cmap")
     kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE, 
-              "frameon": False, "legend_loc": "on data", 
-              "vcenter": 0, **kwargs}
+              "frameon": False, "vcenter": 0, **kwargs}
     if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
         print("\n<<< PLOTTING UMAP >>>")
         try:
