@@ -70,7 +70,6 @@ def plot_gex(adata, col_cell_type=None, title=None,
             title_h = kws_heat["title"] if "title" in kws_heat else \
                 title if title else "Gene Expression"
             title_h = f"{title_h} ({i})" if i else title_h
-            print(kws_heat)
             try:
                 sc.tl.dendrogram(adata, col_cell_type)
                 figs[lab] = sc.pl.heatmap(
@@ -115,14 +114,22 @@ def plot_gex(adata, col_cell_type=None, title=None,
                 title if title else "Gene Expression"
             title_v = f"{title_v} ({i})" if i else title_v
             try:
-                figs[lab] = sc.pl.stacked_violin(
+                figs[lab + "_stacked"] = sc.pl.stacked_violin(
                     adata, marker_genes_dict if marker_genes_dict else genes,
                     groupby=lab_cluster if lab_cluster in adata.obs else None, 
                     return_fig=True, gene_symbols=col_gene_symbols, 
                     show=False, **{**kws_violin, "layer": i, "title": title_v}
                     )  # violin plot
+                figs[lab] = sc.pl.violin(
+                    adata, marker_genes_dict if marker_genes_dict else genes,
+                    groupby=lab_cluster if lab_cluster in adata.obs else None, 
+                    return_fig=True, gene_symbols=col_gene_symbols, 
+                    show=False, **{"var_group_rotation": 90, **kws_violin, 
+                                   "layer": i, "title": title_v}
+                    )  # violin plot
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster)
+                figs[lab + "_stacked"].show()
                 figs[lab].show()
             except Exception as err:
                 warnings.warn(f"{err}\n\nCould not plot GEX violins.")

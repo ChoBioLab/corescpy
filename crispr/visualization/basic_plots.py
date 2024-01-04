@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 
 COLOR_PALETTE = "tab20"
-COLOR_MAP = "coolwarm"
+COLOR_MAP = "magma"
 
 
 def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
