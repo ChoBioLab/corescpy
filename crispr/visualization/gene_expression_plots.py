@@ -14,6 +14,7 @@ from matplotlib import colors
 import seaborn as sb
 # import cowplot
 import warnings
+import copy
 import crispr as cr
 import pandas as pd
 import numpy as np
@@ -92,6 +93,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
         if "color_map" in kws_violin:
             kws_violin["cmap"] = kws_violin.pop("color_map")
         kws_violin.update({"cmap": COLOR_MAP, **kws_violin})
+        kws_violin_o = copy.deepcopy(kws_violin)
         if "groupby" in kws_violin or "col_cell_type" in kws_violin:
             lab_cluster = kws_violin.pop(
                 "groupby" if "groupby" in kws_violin else "col_cell_type")
@@ -100,7 +102,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
         if lab_cluster not in adata.obs:
             lab_cluster = None   # None if cluster label N/A in `.obs`
         for i in zip(["dendrogram", "swap_axes", "cmap"], 
-                    [True, False, COLOR_MAP]):
+                     [True, False, COLOR_MAP]):
             if i[0] not in kws_violin:  # add default arguments
                 kws_violin.update({i[0]: i[1]})
         if layer is not None:
@@ -113,24 +115,29 @@ def plot_gex(adata, col_cell_type=None, title=None,
             title_v = kws_violin["title"] if "title" in kws_violin else \
                 title if title else "Gene Expression"
             title_v = f"{title_v} ({i})" if i else title_v
+            # Stacked Violin
             try:
                 figs[lab + "_stacked"] = sc.pl.stacked_violin(
                     adata, marker_genes_dict if marker_genes_dict else genes,
                     groupby=lab_cluster if lab_cluster in adata.obs else None, 
                     return_fig=True, gene_symbols=col_gene_symbols, 
                     show=False, **{**kws_violin, "layer": i, "title": title_v}
-                    )  # violin plot
-                figs[lab] = sc.pl.violin(
-                    adata, marker_genes_dict if marker_genes_dict else genes,
-                    groupby=lab_cluster if lab_cluster in adata.obs else None, 
-                    return_fig=True, gene_symbols=col_gene_symbols, 
-                    show=False, **{"var_group_rotation": 90, **kws_violin, 
-                                   "layer": i, "title": title_v}
-                    )  # violin plot
+                    )  # violin (stacked)
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster)
                 figs[lab + "_stacked"].show()
-                figs[lab].show()
+            except Exception as err:
+                warnings.warn(f"{err}\n\nCould not plot GEX stacked violins.")
+                figs[lab + "_stacked"] = err
+            # Normal Violin (Genes=Panels)
+            try:
+                figs[lab] = sc.pl.violin(
+                    adata, marker_genes_dict if marker_genes_dict else genes,
+                    groupby=lab_cluster if lab_cluster in adata.obs else None, 
+                    show=False, **{"rotation": 90, 
+                                   **kws_violin_o, "layer": i})  # violin
+                # figs[lab].fig.supxlabel("Gene")
+                # figs[lab].fig.supylabel(lab_cluster)
             except Exception as err:
                 warnings.warn(f"{err}\n\nCould not plot GEX violins.")
                 figs[lab] = err
