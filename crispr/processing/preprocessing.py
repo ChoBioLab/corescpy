@@ -120,7 +120,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         if "raw" in dir(adata):
             adata = adata.raw.to_adata()
             adata.raw = None
-            if col_gene_symbols and col_gene_symbols in adata:
+            if col_gene_symbols and col_gene_symbols in adata.obs:
                 adata = adata.set_index(col_gene_symbols)
             adata.var_names = adata.index.values
         else:
