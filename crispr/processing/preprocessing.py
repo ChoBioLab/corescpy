@@ -86,7 +86,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
 
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
-                  kws_process_guide_rna=None, **kwargs):
+                  kws_process_guide_rna=None, raw=False, **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
@@ -116,6 +116,15 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     else:
         print(f"\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
+    if raw is True:
+        if "raw" in dir(adata):
+            adata = adata.raw.to_adata()
+            adata.raw = None
+            if col_gene_symbols and col_gene_symbols in adata:
+                adata = adata.set_index(col_gene_symbols)
+            adata.var_names = adata.index.values
+        else:
+            warn("Unable to set adata to adata.raw (attribute not in adata).")
     
     # Formatting & Initial QC Visualization
     adata.var_names_make_unique()
@@ -123,7 +132,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata.obs_names_make_unique()
     except Exception as err:
         warn(f"{err}\n\n\nCoult not make obs names unique.")
-    cr.tl.print_counts(adata, title="Raw")
+    cr.tl.print_counts(adata, title="Initial")
     if col_gene_symbols not in adata.var.columns:
         # if assay: 
         #     adata[assay] = adata[assay].var.rename_axis(col_gene_symbols) 
@@ -146,10 +155,11 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     
     # Layers & QC
     layers = cr.pp.get_layer_dict()  # standard layer names
-    if assay: 
-        adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
-    else:
-        adata.layers[layers["counts"]] = adata.X.copy()
+    if layers["counts"] not in (adata[assay] if assay else adata).layers:
+        if assay: 
+            adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
+        else:
+            adata.layers[layers["counts"]] = adata.X.copy()
     print("\n\n", adata)
     return adata
     
@@ -396,11 +406,11 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     gex_ctrl = adata[adata.obs[
         col_reference] == key_reference].X.A.copy()  # reference condition
     gex, gex_ctrl = [q.A if "A" in dir(q) else q 
-                        for q in [gex, gex_ctrl]]  # sparse -> dense matrix
+                     for q in [gex, gex_ctrl]]  # sparse -> dense matrix
     mus, sds = np.nanmean(gex_ctrl, axis=0), np.nanstd(
         gex_ctrl, axis=0)  # means & SDs of reference condition genes
-    if retain_zero_variance is True:
-        sds[sds == 0] = 1   # retain zero-variance genes at unit variance
+    if retain_zero_variance is True:  # retain zero-variance genes?
+        sds[sds == 0] = 1   # to retain, set 0 variance to unit variance
     adata.X = (gex - mus) / sds  # z-score gene expression
     return adata
 

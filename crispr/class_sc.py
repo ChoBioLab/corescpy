@@ -24,7 +24,7 @@ class Omics(object):
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(
-        self, file_path, assay=None, assay_protein=None, 
+        self, file_path, assay=None, assay_protein=None, raw=False,
         col_gene_symbols="gene_symbols", col_cell_type="leiden", 
         col_sample_id=None, col_condition=None, col_num_umis=None, 
         key_control=None, key_treatment=None, kws_multi=None, **kwargs):
@@ -130,12 +130,12 @@ class Omics(object):
                     col_condition=col_condition,
                     key_control=key_control, 
                     key_treatment=key_treatment,
-                    col_cell_type=col_cell_type, 
+                    col_cell_type=col_cell_type, raw=raw,
                     col_sample_id=col_sample_id, **kwargs),
                 **kws_multi)  # create integrated object
         else:
             self.adata = cr.pp.create_object(
-                self._file_path, assay=assay, 
+                self._file_path, assay=assay, raw=raw,
                 col_gene_symbols=col_gene_symbols,
                 col_sample_id=col_sample_id, **kwargs)  # make AnnData
         print(self.adata.obs, "\n\n") if assay else None
@@ -147,6 +147,11 @@ class Omics(object):
         self.var = self.rna.var
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
+        if self._columns["col_cell_type"] in self.rna.obs and (
+            not isinstance(self.rna.obs[self._columns["col_cell_type"]], 
+                           pd.Categorical)):
+            self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
+                self._columns["col_cell_type"]].astype("category")  # object -> category
         print("\n\n", self.rna)
         print(self.rna.var.head())
         print(self.rna.obs.head())

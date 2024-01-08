@@ -121,7 +121,8 @@ def plot_gex(adata, col_cell_type=None, title=None,
                     adata, marker_genes_dict if marker_genes_dict else genes,
                     groupby=lab_cluster if lab_cluster in adata.obs else None, 
                     return_fig=True, gene_symbols=col_gene_symbols, 
-                    show=False, **{**kws_violin, "layer": i, "title": title_v}
+                    show=False, **{"use_raw": False, 
+                                   **kws_violin, "layer": i, "title": title_v}
                     )  # violin (stacked)
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster)
@@ -134,7 +135,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
                 figs[lab] = sc.pl.violin(
                     adata, marker_genes_dict if marker_genes_dict else genes,
                     groupby=lab_cluster if lab_cluster in adata.obs else None, 
-                    show=False, **{"rotation": 90, 
+                    show=False, **{"rotation": 90, "use_raw": False, 
                                    **kws_violin_o, "layer": i})  # violin
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster)
