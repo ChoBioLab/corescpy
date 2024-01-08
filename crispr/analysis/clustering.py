@@ -74,12 +74,7 @@ def cluster(adata, layer=None,
     print(f"\n\n<<< EMBEDDING: UMAP{' with PAGA' if paga else ''} >>>")
     if kws_umap:
         print("\nUMAP Keywords:\n\n", kws_umap)
-    if paga is True:
-        sc.tl.paga(ann)
-        sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
-        sc.tl.umap(ann, init_pos="paga", **{"random_state": seed, **kws_umap})
-    else:
-        sc.tl.umap(ann, **{"random_state": seed, **kws_umap})
+    sc.tl.umap(ann, **{"random_state": seed, **kws_umap})
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
     if str(method_cluster).lower() == "leiden":
         sc.tl.leiden(ann, resolution=resolution, 
@@ -89,6 +84,10 @@ def cluster(adata, layer=None,
                       **kws_cluster)  # louvain clustering
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
+    if paga is True:
+        sc.tl.paga(ann)
+        sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
+        sc.tl.umap(ann, init_pos="paga", **{"random_state": seed, **kws_umap})
 
     # Plotting
     print(f"\n\n<<< CREATING UMAP PLOTS >>>")
