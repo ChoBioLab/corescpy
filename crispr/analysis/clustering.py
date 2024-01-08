@@ -23,7 +23,8 @@ def cluster(adata, layer=None,
             method_cluster="leiden", 
             resolution=1,
             kws_pca=None, kws_neighbors=None, 
-            kws_umap=None, kws_cluster=None, **kwargs):
+            kws_umap=None, kws_cluster=None, 
+            seed=1618, **kwargs):
     """
     Perform clustering and visualize results.
     
@@ -42,18 +43,17 @@ def cluster(adata, layer=None,
     
     """
     figs = {}  # for figures
-    # if "col_gene_symbols" in kwargs:
-    #     col_gene_symbols = kwargs.pop("col_gene_symbols")
-    # else:
-    #     col_gene_symbols = None
     ann = adata.copy()
     if layer:
+        print(f"*** Using layer: {layer}.")
         ann.X = adata.layers[layer].copy()  # set layer
     if kwargs:
         print(f"Un-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
             kws_pca, kws_neighbors, kws_umap, kws_cluster]]
+    
+    # Dimensionality Reduction (PCA)
     if kws_pca is not False:  # unless indicated not to run PCA
         if "use_highly_variable" not in kws_pca:  # default = use HVGs
             kws_pca["use_highly_variable"] = True
@@ -65,19 +65,21 @@ def cluster(adata, layer=None,
             warnings.warn("""use_highly_variable set to True, 
                         but 'highly_variable' not found in `adata.var`""")
             kws_pca["use_highly_variable"] = False
-        sc.pp.pca(ann, **kws_pca)  # dimensionality reduction (PCA)
+        sc.pp.pca(ann, **{"random_state": seed, **kws_pca})  # PCA
         print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n"
-            f"{kws_neighbors if kws_neighbors else ''}")
+            f"\n{kws_neighbors if kws_neighbors else ''}")
+        
+    # Neighborhood Graph & UMAP Embedding
     sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
-    print(f"\n\n<<< EMBEDDING: UMAP >>>")
+    print(f"\n\n<<< EMBEDDING: UMAP{' with PAGA' if paga else ''} >>>")
     if kws_umap:
         print("\nUMAP Keywords:\n\n", kws_umap)
     if paga is True:
         sc.tl.paga(ann)
         sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
-        sc.tl.umap(ann, init_pos="paga", **kws_umap)
+        sc.tl.umap(ann, init_pos="paga", **{"random_state": seed, **kws_umap})
     else:
-        sc.tl.umap(ann, **kws_umap)
+        sc.tl.umap(ann, **{"random_state": seed, **kws_umap})
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
     if str(method_cluster).lower() == "leiden":
         sc.tl.leiden(ann, resolution=resolution, 
@@ -87,6 +89,8 @@ def cluster(adata, layer=None,
                       **kws_cluster)  # louvain clustering
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
+
+    # Plotting
     print(f"\n\n<<< CREATING UMAP PLOTS >>>")
     if plot is True:
         try:  # scree-like plot for PCA components
@@ -105,6 +109,8 @@ def cluster(adata, layer=None,
                     [method_cluster] + list(colors))))  # UMAP extra panels
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
+                
+    # CellTypist (Optional)
     if kws_celltypist is not None:
         ann.uns["celltypist"], figs["celltypist"] = perform_celltypist(
             ann, **kws_celltypist)  # celltypist annotations

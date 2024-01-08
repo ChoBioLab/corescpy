@@ -368,10 +368,10 @@ class Omics(object):
             if not isinstance(color, str) and len(color) > 1 and (
                 color[0] in self.rna.var_names):  # multi-feature UMAP
                 fig = cr.pl.plot_umap_multi(self.rna, color, **{
-                    "frameon": False, **kwargs})
+                    "frameon": False, "use_raw": False, **kwargs})
             else:  # normal UMAP embedding (categorical or continous)
                 fig = sc.pl.umap(self.rna, color=color, 
-                                **{"legend_loc": "on data", 
+                                **{"legend_loc": "on data", "use_raw": False,
                                    "legend_fontweight": "medium", **kwargs})
         return fig
     
@@ -379,7 +379,8 @@ class Omics(object):
         """Plot co-expression of a list of genes on a UMAP."""
         adata = sc.tl.score_genes(self.rna, genes, score_name="_".join(genes), 
                                   use_raw=use_raw, copy=True)  # score co-GEX
-        fig = sc.pl.umap(adata, color="_".join(genes), **kwargs)  # plot
+        fig = sc.pl.umap(adata, color="_".join(genes), use_raw=use_raw, 
+                         **kwargs)  # plot
         return fig
     
     def preprocess(self, assay_protein=None, layer_in=None, copy=False, 
@@ -402,9 +403,11 @@ class Omics(object):
         if layer_in is None:
             layer_in = self._layers["counts"]  # raw counts if not specified
         kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
-        if isinstance(kws_scale, str) and kws_scale.lower() == "z":
-            kws_scale = {}
-        if isinstance(kws_scale, dict):  # if z-scoring GEX ~ control
+        kws_scale = {} if isinstance(kws_scale, str) and kws_scale.lower(
+            ) == "z" else {**kws_scale} if isinstance(
+                kws_scale, dict) else kws_scale  # initial kws processing
+        if isinstance(kws_scale, dict) and all([x not in kws_scale for x in [
+            "max_value", "zero_center"]]):  # if z-scoring GEX ~ control
             znorm_default = {
                 "col_reference": self._columns["col_condition"],
                 "key_reference": self._keys["key_control"], 
@@ -432,6 +435,8 @@ class Omics(object):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
+        if "layer" not in kwargs:
+            kwargs.update({"layer": self._layers["scaled"]})
         if self._integrated is True:
             kws_pca = False  # so will use Harmony-adjusted PCA
         if self._columns["col_sample_id"] or self._columns["col_batch"]:
@@ -441,8 +446,6 @@ class Omics(object):
                           self._columns["col_batch"]]:
                     if x:
                         colors += [x]  # add sample & batch UMAP
-        if "layer" not in kwargs:
-            kwargs.update({"layer": self._layers["log1p"]})
         self.info["methods"]["clustering"] = method_cluster
         adata, figs_cl = cr.ax.cluster(
             self.rna.copy() if copy is True else self.rna, 
