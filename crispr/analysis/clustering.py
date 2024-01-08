@@ -45,10 +45,10 @@ def cluster(adata, layer=None,
     figs = {}  # for figures
     ann = adata.copy()
     if layer:
-        print(f"*** Using layer: {layer}.")
+        print(f"\n\n*** Using layer: {layer}.\n\n")
         ann.X = adata.layers[layer].copy()  # set layer
     if kwargs:
-        print(f"Un-used Keyword Arguments: {kwargs}")
+        print(f"\n\nUn-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
             kws_pca, kws_neighbors, kws_umap, kws_cluster]]

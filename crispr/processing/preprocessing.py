@@ -572,53 +572,42 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
         ann = ann[(ann.obs.pct_counts_mt <= max_pct_mt) * (
             ann.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
         print(f"\tNew Count: {ann.n_obs}")
-        print("\n\t*** Filtering genes based on # of genes expressed...")
         cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
             gene_filter_ncounts = [x if x else [None, None] for x in [
                 cell_filter_ngene, cell_filter_ncounts, 
                 gene_filter_ncell, gene_filter_ncounts]]  # -> iterable if None
-        if cell_filter_ngene[0] is not None:
-            sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
-            print(f"\n\tMinimum={cell_filter_ngene[0]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Minimum")
-        if cell_filter_ngene[1] is not None:
-            sc.pp.filter_cells(ann, max_genes=cell_filter_ngene[1])
-            print(f"\n\tMaximum={cell_filter_ngene[1]}\tCount: {ann.n_obs}")
+            
+        # Filter Cells
+        print("\n\t*** Filtering genes based on # of genes expressed...")
+        for i, x in zip(["min_genes", "max_genes"], cell_filter_ngene):
+            if x is not None:
+                sc.pp.filter_cells(ann, **{i: x})
+                print(f"\n\t{i}={x}\tCount: {ann.n_obs}")
+            else:
+                print(f"\n\tNo {i}")
         print("\n\t*** Filtering cells based on # of reads...")
-        if cell_filter_ncounts[0] is not None:
-            sc.pp.filter_cells(ann, min_counts=cell_filter_ncounts[0])
-            print(f"\n\tMinimum={cell_filter_ncounts[0]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Minimum")
-        if cell_filter_ncounts[1] is not None:
-            sc.pp.filter_cells(ann, max_counts=cell_filter_ncounts[1])
-            print(f"\n\tMaximum={cell_filter_ncounts[1]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Maximum")
-        print("\n\t*** Filtering genes based on # of cells in which they "
-              "are expressed...")
-        if gene_filter_ncell[0] is not None:
-            sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
-            print(f"\n\tMinimum={gene_filter_ncell[0]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Minimum")
-        if gene_filter_ncell[1] is not None:
-            sc.pp.filter_genes(ann, max_cells=gene_filter_ncell[1])
-            print(f"\n\tMaximum={gene_filter_ncell[1]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Maximum")
+        for i, x in zip(["min_counts", "max_counts"], cell_filter_ncounts):
+            if x is not None:
+                sc.pp.filter_cells(ann, **{i: x})
+                print(f"\n\t{i}={x}\tCount: {ann.n_obs}")
+            else:
+                print(f"\n\tNo {i}")
+                
+        # Filter Genes
+        print("\n\t*** Filtering genes based on # cells expressing them...")
+        for i, x in zip(["min_cells", "max_cells"], gene_filter_ncell):
+            if x is not None:
+                sc.pp.filter_genes(ann, **{i: x})
+                print(f"\n\t{i}={x}\tCount: {ann.n_obs}")
+            else:
+                print(f"\n\tNo {i}")
         print("\n\t*** Filtering genes based on counts...")
-        if gene_filter_ncounts[0] is not None:
-            sc.pp.filter_genes(ann, min_cells=gene_filter_ncounts[0])
-            print(f"\n\tMinimum={gene_filter_ncounts[0]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Minimum")
-        if gene_filter_ncounts[1] is not None:
-            sc.pp.filter_genes(ann, max_cells=gene_filter_ncounts[1])
-            print(f"\n\tMaximum={gene_filter_ncounts[1]}\tCount: {ann.n_obs}")
-        else:
-            print("\n\tNo Maximum")
+        for i, x in zip(["min_counts", "max_counts"], gene_filter_ncounts):
+            if x is not None:
+                sc.pp.filter_genes(ann, **{i: x})
+                print(f"\n\t{i}={x}\tCount: {ann.n_obs}")
+            else:
+                print(f"\n\tNo {i}")
         print(f"\nPost-Filtering Cell Count: {ann.n_obs}")
     return ann
 
