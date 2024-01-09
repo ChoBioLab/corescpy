@@ -176,3 +176,34 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     #         print(f"{err}\n\nGene expression violin plot failed for {x}!")
     #         figs[f"gex_violin_{x}"] = err
     return figs
+
+
+def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, 
+                      ifn_pathways=True, **kwargs):
+    """Plot results from cr.ax.perform_gsea()."""
+    figs = {}
+    col_condition = gsea_results["col"].iloc[0]
+    score_sort = gsea_results[gsea_results.pval < p_threshold]  # filter by p
+    score_sort = score_sort.loc[score_sort.score.abs().sort_values(
+        ascending=False).index]  # sort by absolute score
+    figs["bar_score"] = sns.catplot(data=score_sort.head(20), 
+                                    x="score", y="source", kind="bar")
+    figs["bar_p"] = sns.catplot(data=gsea_results.head(20), 
+                                x="-log10(pval)", y="source", kind="bar")
+    
+    # Cell-Level
+    if ifn_pathways not in [None, False]:
+        if ifn_pathways is True:  # choose (~ p & score) pathways to plot
+            ifn_pathways = list(score_sort.reset_index().head(7).source)
+        adata.obs[ifn_pathways] = adata.obsm["aucell_estimate"][ifn_pathways]
+        if "ncols" in kwargs:
+            ccc = kwargs["n_cols"]
+        else:
+            ccc = cr.pl.square_grid(int(1 if isinstance(
+                col_condition, str) else 2) + len(ifn_pathways))[1]
+        cond = [col_condition] if isinstance(
+            col_condition, str) else col_condition
+        print(cond + list(ifn_pathways))
+        figs["umap"] = sc.pl.umap(adata, color=cond + list(ifn_pathways),
+                                  ncols=ccc, wspace=0.3)  # plot scores (UMAP)
+    return figs

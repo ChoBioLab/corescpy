@@ -12,6 +12,7 @@ import arviz as az
 import scanpy as sc
 import functools
 import matplotlib.pyplot as plt
+import seaborn
 from seaborn import clustermap
 import warnings
 import decoupler
@@ -24,6 +25,10 @@ import numpy as np
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 layer_perturbation = "X_pert"
+ifn_pathways_default = [
+    "REACTOME_INTERFERON_SIGNALING", 
+    "REACTOME_INTERFERON_ALPHA_BETA_SIGNALING",
+    "REACTOME_INTERFERON_GAMMA_SIGNALING"]
     
     
 def perform_mixscape(
@@ -487,38 +492,35 @@ def compute_distance(adata, col_target_genes="target_genes",
     return distance, data, dff, mat, figs
 
 
-def perform_gsea(adata, key_condition="Perturbed", 
+def perform_gsea(adata, col_condition="leiden", key_condition="0", 
+                 col_label_new="Group", ifn_pathways=True,
+                 p_threshold=0.0001,
+                 kws_pseudobulk=None,
                  filter_by_highly_variable=False, **kwargs):
     """
     Perform gene set enrichment analysis 
     (adapted from SC Best Practices).
     """
-    
-    # Extract DEGs
-    if filter_by_highly_variable is True:
-        t_stats = (
-            # Get dataframe of DE results for condition vs. rest
-            sc.get.rank_genes_groups_df(adata, key_condition, key="t-test")
-            .set_index("names")
-            # Subset to highly variable genes
-            .loc[adata.var["highly_variable"]]
-            # Sort by absolute score
-            .sort_values("scores", key=np.abs, ascending=False)
-            # Format for decoupler
-            [["scores"]]
-            .rename_axis([key_condition], axis=1)
-        )
+    figs, gsea_results_cell = {}, None
+    adata = adata.copy()
+    if kws_pseudobulk is True or (isinstance(kws_pseudobulk, dict) and len(
+        kws_pseudobulk) == 0):  #  set pseudobulk keyword defaults
+        kws_pseudobulk = dict(n_cells=75, n_samples_per_group=3)
+    if isinstance(col_condition, str):
+        adata.obs[col_label_new] = adata.obs[col_condition].astype(str)
     else:
-        t_stats = (
-            # Get dataframe of DE results for condition vs. rest
-            sc.get.rank_genes_groups_df(adata, key_condition, key="t-test")
-            .set_index("names")
-            # Sort by absolute score
-            .sort_values("scores", key=np.abs, ascending=False)
-            # Format for decoupler
-            [["scores"]]
-            .rename_axis([key_condition], axis=1)
-        )
+        adata.obs[col_label_new] = adata.obs[col_condition[0]].astype(
+            "string") + "_" + adata.obs[col_condition[1]]
+    
+    # Rank Genes
+    sc.tl.rank_genes_groups(adata, col_label_new, method="t-test", 
+                            key_added="t-test")
+    t_stats = sc.get.rank_genes_groups_df(
+        adata, key_condition, key="t-test").set_index("names")  # rank genes
+    t_stats = t_stats.sort_values("scores", key=np.abs, ascending=False)[[
+        "scores"]].rename_axis([key_condition], axis=1)  # decoupler format
+    if filter_by_highly_variable is True:
+        t_stats = t_stats.loc[adata.var["highly_variable"]]
     print(t_stats)
     
     # Retrieve Reactome Pathways
@@ -531,16 +533,50 @@ def perform_gsea(adata, key_condition="Perturbed",
     geneset_size = reactome.groupby("geneset").size()
     gsea_genesets = geneset_size.index[(
         geneset_size > 15) & (geneset_size < 500)]
+
+    # Cluster-Level Analysis
     scores, norm, pvals = decoupler.run_gsea(
         t_stats.T, reactome[reactome["geneset"].isin(gsea_genesets)], 
-        source="geneset", target="genesymbol")
+        source="geneset", target="genesymbol")  # run cluster-level GSEA
+    gsea_results = pd.concat({"score": scores.T, "norm": norm.T, "pval": 
+        pvals.T}, axis=1).droplevel(
+            level=1, axis=1).sort_values("pval")  # cell type-level
+    gsea_results = gsea_results.assign(
+        **{"-log10(pval)": lambda x: -np.log10(x["pval"])})
+    gsea_results = gsea_results.assign(
+        col=[col_condition] * gsea_results.shape[0]).assign(
+        key=[key_condition] * gsea_results.shape[0]
+        )  # DO NOT CHANGE THESE NAMES. Plotting fx depends on it
+    print(gsea_results.head(20))
+    score_sort = gsea_results[gsea_results.pval < p_threshold]  # filter by p
+    score_sort = score_sort.loc[score_sort.score.abs().sort_values(
+        ascending=False).index]  # sort by absolute score
+    
+    # Cell-Level
+    if ifn_pathways not in [None, False]:
+        gsea_results_cell = decoupler.run_aucell(
+            adata, reactome, source="geneset", target="genesymbol",
+            use_raw=False)  # run individual cell-level GSEA
+        
+    # Pseudo-Bulk
+    # if kws_pseudobulk:
+    #     pb_data = cr.tl.create_pseudobulk(
+    #         adata, col_condition, layer=cr.pp.get_layer_dict()["counts"],
+    #         **kws_pseudobulk)
+    #     pb_data.layers["counts"] = pb_data.X.copy()
+    #     sc.pp.normalize_total(pb_data)
+    #     sc.pp.log1p(pb_data)
+    #     sc.pp.pca(pb_data)
+    #     sc.pl.pca(pb_data, color=col_condition + ["lib_size"], 
+    #               ncols=1, size=250)
+    #     groups = pb_data.obs.condition.astype(
+    #         "string") + "_" + pb_data.obs.cell_type
+    #     # TODO: R to Python port?
 
-    # Rank Genes by T-Statistics
-    gsea_results = (
-        pd.concat({"score": scores.T, "norm": norm.T, "pval": pvals.T}, 
-                axis=1).droplevel(level=1, axis=1).sort_values("pval"))
-    # fig[] = so.Plot(data=(gsea_results.head(20).assign(
-    #     **{"-log10(pval)": lambda x: -np.log10(x["pval"])})),
-    #                 x="-log10(pval)", y="source").add(so.Bar())
-    return gsea_results
-
+    # Plots & Other Output
+    figs = cr.pl.plot_gsea_results(
+        adata, gsea_results, p_threshold=p_threshold, **kwargs,
+        ifn_pathways=ifn_pathways)
+    res = {"gsea_results": gsea_results, "score_sort": score_sort, 
+           "gsea_results_cell": gsea_results_cell}
+    return adata, res, figs

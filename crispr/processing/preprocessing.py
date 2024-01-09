@@ -300,6 +300,12 @@ def process_data(adata,
             sids = None
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
+    try:
+        figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
+            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
+    except Exception as err:
+        warn(f"{err}\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
+        figs["highly_expressed_genes"] = err
         
     # Set Up Layer & Variables
     if outlier_mads is not None:  # if filtering based on calculating outliers 
@@ -452,12 +458,6 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     figs = {}
     if layer is not None:
         adata.X = adata.layers[layer].copy()
-    try:
-        figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
-            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
-    except Exception as err:
-        warn(f"{err}\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
-        figs["highly_expressed_genes"] = err
     if patterns is None:
         patterns = dict(zip(["mt", "ribo", "hb"], 
                             [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
@@ -484,8 +484,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     if hhh:  # plot by hue variables (e.g., batch, sample)
         for h in hhh:
             if h not in adata.obs and h not in adata.var:
-                warn(f"\n\t{h} not found in adata.obs or adata.var; "
-                    "skipping color-coding")
+                warn(f"\n\t{h} not in adata.obs or .var; skipping color-code")
                 if yes is None:
                     continue  # skip if already did "None" hue
                 yes = None
@@ -497,9 +496,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
                                   show=False, color=h if yes else None)
+                    plt.show()
                 except Exception as err:
                     print(err)
-            plt.show()
             figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
             try:
                 vam = pct_n + ["n_genes_by_counts"] + list([h] if yes else [])
@@ -517,7 +516,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
                 patterns_names, axis=1).stack().to_frame(
                     "Percent Counts"), x="Percent Counts", col="Metric", 
-            kind="kde", cut=0, fill=True)  # KDE of pct_counts
+            kind="kde", fill=True)  # KDE of pct_counts
     except Exception as err:
         figs["pct_counts_kde"] = err
         print(err)
@@ -569,7 +568,7 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
         print(f"\nTotal Cell Count: {ann.n_obs}")
         print("\n\t*** Filtering cells by mitochondrial gene percentage...") 
         print(f"\n\tMinimum={min_pct_mt}\n\tMaximum={max_pct_mt}")
-        ann = ann[(ann.obs.pct_counts_mt <= max_pct_mt) * (
+        ann = ann[(ann.obs.pct_counts_mt < max_pct_mt) * (
             ann.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
         print(f"\tNew Count: {ann.n_obs}")
         cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
@@ -598,17 +597,17 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
         for i, x in zip(["min_cells", "max_cells"], gene_filter_ncell):
             if x is not None:
                 sc.pp.filter_genes(ann, **{i: x})
-                print(f"\n\t{i}={x}\tCount: {ann.n_obs}")
+                print(f"\n\t{i}={x}\tCount: {ann.n_vars}")
             else:
                 print(f"\n\tNo {i}")
         print("\n\t*** Filtering genes based on counts...")
         for i, x in zip(["min_counts", "max_counts"], gene_filter_ncounts):
             if x is not None:
                 sc.pp.filter_genes(ann, **{i: x})
-                print(f"\n\t{i}={x}\tCount: {ann.n_obs}")
+                print(f"\n\t{i}={x}\tCount: {ann.n_vars}")
             else:
                 print(f"\n\tNo {i}")
-        print(f"\nPost-Filtering Cell Count: {ann.n_obs}")
+        print(f"\nPost-Filtering Cell #: {ann.n_obs}, Gene #: {ann.n_vars}\n")
     return ann
 
 

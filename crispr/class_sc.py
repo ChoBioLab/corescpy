@@ -428,15 +428,13 @@ class Omics(object):
             #     self.adata[assay_protein] = ad_p
         return adata, figs
                 
-    def cluster(self, assay=None, method_cluster="leiden", 
+    def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None, 
                 kws_umap=None, kws_cluster=None, kws_celltypist=None, 
                 plot=True, colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
-        if "layer" not in kwargs:
-            kwargs.update({"layer": self._layers["scaled"]})
         if self._integrated is True:
             kws_pca = False  # so will use Harmony-adjusted PCA
         if self._columns["col_sample_id"] or self._columns["col_batch"]:
@@ -447,9 +445,12 @@ class Omics(object):
                     if x:
                         colors += [x]  # add sample & batch UMAP
         self.info["methods"]["clustering"] = method_cluster
+        ann = self.adata.copy()
+        if layer is not None:
+            ann.X = ann.layers[layer if (
+                layer in self._layers) else self._layers[layer]].copy()
         adata, figs_cl = cr.ax.cluster(
-            self.rna.copy() if copy is True else self.rna, 
-            assay=assay, method_cluster=method_cluster,
+            ann, assay=assay, method_cluster=method_cluster,
             **self._columns, **self._keys, resolution=resolution,
             plot=plot, colors=colors, kws_celltypist=kws_celltypist,
             kws_pca=kws_pca, kws_neighbors=kws_neighbors,
@@ -547,3 +548,39 @@ class Omics(object):
         self.results["dialogue"] = pdata, mcps, w_s, ct_subs
         self.figures["dialogue"] = fig
         return fig
+    
+    def run_gsea(self, key_condition, col_condition=None, 
+                 filter_by_highly_variable=True, copy=False, **kwargs):
+        """Perform gene set enrichment analyses & plotting."""
+        if col_condition is None:
+            col_condition = self._columns["col_cell_type"]
+            if self._columns["col_condition"] is not None:
+                col_condition = [col_condition, self._columns[
+                    "col_condition"]]
+        for x in [self._columns, self._keys]:
+            for c in x:  # iterate column/key name attributes
+                if c not in kwargs and c != "col_condition":
+                    kwargs.update({c: x[c]})  # & use object attribute
+        print(col_condition)
+        output = cr.ax.perform_gsea(
+            self.rna, filter_by_highly_variable=filter_by_highly_variable, 
+            col_condition=col_condition, key_condition=key_condition,
+            **kwargs)  # GSEA
+        if copy is False:
+            self.rna = output[0]
+            self.results["gsea"] = output[1]
+            self.figures["gsea"] = output[-1]
+        return output
+    
+    
+    def plot_gsea(self, ifn_pathways=True, p_threshold=0.0001, **kwargs):
+        """
+        Plot stored GSEA results (e.g., with different pathways, 
+        p-value threshold, or other options than
+        you chose when initially running the analysis).
+        """
+        
+        figs = cr.pl.plot_gsea_results(
+            self.adata, self.results["gsea"]["gsea_results"], 
+            p_threshold=p_threshold, 
+            **kwargs, ifn_pathways=ifn_pathways)

@@ -851,19 +851,6 @@ class Crispr(Omics):
                 {f"{distance_type}_{method}": [
                     output[i] for i in range(len(output) - 1)]})
         return output
-    
-    def run_gsea(self, filter_by_highly_variable=False, 
-                 **kwargs):
-        """Perform gene set enrichment analyses & plotting."""
-        for x in [self._columns, self._keys]:
-            for c in x:  # iterate column/key name attributes
-                if c not in kwargs:  # if not passed as argument to method...
-                    kwargs.update({c: x[c]})  # & use object attribute
-        output = cr.ax.perform_gsea(
-            self.adata, filter_by_highly_variable=filter_by_highly_variable, 
-            **kwargs)  # GSEA
-        self.results["gsea"] = output
-        return output
         
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""

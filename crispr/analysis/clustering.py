@@ -132,8 +132,12 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden",
     if plot is True:
         figs["marker_rankings"] = sc.pl.rank_genes_groups(
             adata, n_genes=n_genes, sharey=False)  # plot rankings
+        for x in adata.obs[col_cell_type].unique():
+            figs["marker_expression_violin"] = sc.pl.rank_genes_groups_violin(
+                adata, groups=x, n_genes=n_genes)
+
     ranks = sc.get.rank_genes_groups_df(
-        adata, None, key='rank_genes_groups', pval_cutoff=None, 
+        adata, None, key="rank_genes_groups", pval_cutoff=None, 
         log2fc_min=None, log2fc_max=None, gene_symbols=None)  # rank dataframe
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe

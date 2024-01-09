@@ -85,7 +85,7 @@ def perform_sccoda(
     print(covariate_obs)
     adata = adata.copy()
     adata = adata[~adata.obs[col_condition].isnull()].copy()
-    adata.obs.index.values = [adata.obs.index.values[i] + "_" + str(
+    adata.obs.index = [adata.obs.index.values[i] + "_" + str(
         adata.obs.iloc[i][col_condition]) + "_" + str(adata.obs.iloc[i][
             col_cell_type]) for i in range(adata.obs.shape[0])]
     model = pt.tl.Sccoda()
@@ -101,12 +101,17 @@ def perform_sccoda(
     #     [col_cell_type, col_condition]])
     print(scodata)
     if plot is True:
-        figs["barplot"] = pt.pl.coda.boxplots(
-            scodata, modality_key=mod,
-            feature_name=col_condition,
-            figsize=(12, 5), add_dots=True,
-            args_swarmplot={"palette": ["red"]})
-        plt.show()
+        try:
+            figs["barplot"] = pt.pl.coda.boxplots(
+                scodata, modality_key=mod,
+                feature_name=col_condition,
+                figsize=(12, 5), add_dots=True,
+                args_swarmplot={"palette": ["red"]})
+            plt.show()
+        except Exception as err:
+            print(f"{err}\n\nFailed to plot boxplots. "
+                  "Likely due to known Pertpy/ete3 issue.\n\n")
+            figs["barplot"] = err
     model.prepare(scodata, formula=col_condition,
                   reference_cell_type=reference_cell_type)  # setup
     print(scodata)
