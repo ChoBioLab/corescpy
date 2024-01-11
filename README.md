@@ -16,16 +16,18 @@ Correspondence: elizabeth.aslinger@aya.yale.edu
 with desired environment name):
 `conda create -n crispr python=3.10.4  # create python environment`
 
-3. Clone the repository to your local computer:
+3. Activate the conda environment with `conda activate crispr`.
+
+4. Clone the repository to your local computer:
 `git clone git@github.com:ChoBioLab/crispr.git`,
 `git clone https://github.com/ChoBioLab/crispr.git`, or
 look above for the green "Code" button and press it for instructions.
 
-4. Naviate to the repository directory (replace 
+5. Naviate to the repository directory (replace 
 <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
-5. Install the package with pip. (Ensure you have pip installed.)
+6. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
 
 ## Usage

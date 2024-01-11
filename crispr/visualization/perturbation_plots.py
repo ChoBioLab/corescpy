@@ -3,6 +3,7 @@ import seaborn as sns
 import crispr as cr
 import scanpy as sc
 import pertpy as pt
+import decoupler
 import matplotlib.pyplot as plt
 import warnings
 import functools
@@ -178,8 +179,8 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     return figs
 
 
-def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, 
-                      ifn_pathways=True, **kwargs):
+def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, layer=None,
+                      ifn_pathways=True, figsize=(60, 20), **kwargs):
     """Plot results from cr.ax.perform_gsea()."""
     figs = {}
     col_condition = gsea_results["col"].iloc[0]
@@ -190,6 +191,13 @@ def plot_gsea_results(adata, gsea_results, p_threshold=0.0001,
                                     x="score", y="source", kind="bar")
     figs["bar_p"] = sns.catplot(data=gsea_results.head(20), 
                                 x="-log10(pval)", y="source", kind="bar")
+    # fig, axes = plt.subplots(1, 3, figsize=figsize, 
+    #                          tight_layout=True, sharey=True)
+    # for i, q in enumerate(gsea_results.iloc[:, :3].columns):
+    #     axes[i].set_title(q)
+    #     sns.heatmap(gsea_results, x=q, y="source", 
+    #                 vmin=-1, vmax=1, ax=axes[i],
+    #                 cmap=["coolwarm", "coolwarm", "viridis_r"][i])  # heatmaps
     
     # Cell-Level
     if ifn_pathways not in [None, False]:
@@ -201,9 +209,31 @@ def plot_gsea_results(adata, gsea_results, p_threshold=0.0001,
         else:
             ccc = cr.pl.square_grid(int(1 if isinstance(
                 col_condition, str) else 2) + len(ifn_pathways))[1]
-        cond = [col_condition] if isinstance(
-            col_condition, str) else col_condition
-        print(cond + list(ifn_pathways))
-        figs["umap"] = sc.pl.umap(adata, color=cond + list(ifn_pathways),
-                                  ncols=ccc, wspace=0.3)  # plot scores (UMAP)
+        cond = list([col_condition] if isinstance(
+            col_condition, str) else col_condition) + list(ifn_pathways)
+        figs["umap"] = sc.pl.umap(
+            adata, color=cond, ncols=ccc, layer=layer, **kwargs)  # score UMAP
+    return figs
+
+
+def plot_pathway_interference_results(adata, pathway, col_cell_type=None, 
+                                      obsm_key="mlm_estimate",
+                                      standard_scale="var",
+                                      cmap="coolwarm", vcenter=0):
+    """Plot results from cr.ax.perform_pathway_interference()."""
+    figs = {}
+    if col_cell_type not in acts.obs:
+        warnings.warn(f"{col_cell_type} not in `.obs`. Skipping violin plot.")
+    acts = decoupler.get_acts(adata, obsm_key=obsm_key)
+    if col_cell_type is not None and col_cell_type in acts.obs:
+        figs["umap"] = sc.pl.umap(acts, color=[pathway, col_cell_type], 
+                                  cmap=cmap, vcenter=vcenter)
+        figs["violin"] = sc.pl.violin(acts, keys=[pathway], 
+                                      groupby=col_cell_type, rotation=90)
+        figs["matrix"] = sc.pl.matrixplot(
+            acts, var_names=acts.var_names, groupby=col_cell_type, 
+            dendrogram=True, standard_scale=standard_scale, 
+            colorbar_title="X-Scaled Scores", cmap=cmap)
+    else:
+        figs["umap"] = sc.pl.umap(acts, color=[pathway], cmap=cmap, vcenter=0)
     return figs

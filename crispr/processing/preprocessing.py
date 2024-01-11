@@ -271,22 +271,31 @@ def process_data(adata,
     # Setup Object
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
-    ann.layers[layers["counts"]] = ann.X.copy()  # original counts in layer
+    if layers["counts"] not in ann.layers:
+        if min(ann.X) < 0:  # if any data < 0, can't be gene read counts
+            raise ValueError(f"Must provide counts data in`adata.X`"
+                             "`adata.layers['{layers['counts']}']`.")
+        # warn("\n\nASSUMING COUNTS IN `adata.X`! (No counts layer present.)")
+        ann.layers[layers["counts"]] = ann.X.copy()  # store counts in layer
+    else:
+        ann.X = ann.layers[layers["counts"]]  # use counts layer
     # ann.layers[layers["preprocessing"]] = ann.X.copy() # set original layer
     ann.obs["n_counts"] = ann.X.sum(1)
     ann.obs["log_counts"] = np.log(ann.obs["n_counts"])
     ann.obs["n_genes"] = (ann.X > 0).sum(1)
-    print(ann)
     
     # Initial Information/Arguments
     if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
         col_gene_symbols = None  # ...so functions will refer to index name
     figs = {}
-    max_val = kws_scale.pop("max_value") if "max_value" in kws_scale else None
-    cen = kws_scale.pop("zero_center") if "zero_center" in kws_scale else None
-    if isinstance(kws_scale, dict) and len(
-        kws_scale) == 0:  # if extracted all sc.pp.scale arguments
-        kws_scale = True  # so doesn't think scaling by reference (CRISPR)
+    if isinstance(kws_scale, dict): # if extracted all sc.pp.scale arguments
+        max_val, cen = [kws_scale.pop(x) if x in kws_scale else None 
+                        for x in ["max_value", "zero_center"]]
+        if any((i for i in [max_val, cen])) and len(
+            kws_scale) == 0:  # if extracted all regular-scale keywords
+            kws_scale = True  # so doesn't think scaling by reference (CRISPR)
+    else:
+        max_val, cen = 0, 0
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top") if "n_top" in kwargs else 10

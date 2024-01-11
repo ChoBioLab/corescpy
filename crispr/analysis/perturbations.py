@@ -493,51 +493,84 @@ def compute_distance(adata, col_target_genes="target_genes",
 
 
 def perform_gsea(adata, col_condition="leiden", key_condition="0", 
-                 col_label_new="Group", ifn_pathways=True,
-                 p_threshold=0.0001,
-                 kws_pseudobulk=None,
-                 filter_by_highly_variable=False, **kwargs):
+                 col_label_new=None, ifn_pathways=True,
+                 layer=None, p_threshold=0.0001, use_raw=False,
+                 kws_pseudobulk=None, seed=1618, kws_run_gsea=None, 
+                 filter_by_highly_variable=False, geneset_size_range=None, 
+                 obsm_key="gsea_estimate", **kwargs):
     """
     Perform gene set enrichment analysis 
     (adapted from SC Best Practices).
+    
+    Example
+    -------
+    This way will automatically plot the pathways with the highest 
+    absolute scores (and with p-value below a defined threshold):
+    >>> out = perform_gsea(adata, 
+    >>>                    col_condition=["cell_type", "Inflammation"], 
+    >>>                    key_condition="Epithelial_Inflamed", 
+    >>>                    col_label_new="Group", ifn_pathways=True,
+    >>>                    p_threshold=0.0001,
+    >>>                    filter_by_highly_variable=False)
+    
+    Or define your own pathways to plot:
+    
+    >>> ifn = []
+    >>> out = perform_gsea(adata, 
+    >>>                    col_condition=["cell_type", "Inflammation"], 
+    >>>                    key_condition="Epithelial_Inflamed", 
+    >>>                    col_label_new="Group", ifn_pathways=True,
+    >>>                    p_threshold=0.0001, 
+    >>>                    geneset_size_range=[15, 500],
+    >>>                    filter_by_highly_variable=False)
     """
     figs, gsea_results_cell = {}, None
+    if geneset_size_range is None:  # default gene set size range
+        geneset_size_range = [15, 500]
+    if kws_run_gsea is None:
+        kws_run_gsea = dict(verbose=True)
     adata = adata.copy()
-    if kws_pseudobulk is True or (isinstance(kws_pseudobulk, dict) and len(
-        kws_pseudobulk) == 0):  #  set pseudobulk keyword defaults
-        kws_pseudobulk = dict(n_cells=75, n_samples_per_group=3)
+    if layer:
+        adata.X = adata.layers[layer].copy()
+    # if kws_pseudobulk is True or (isinstance(kws_pseudobulk, dict) and len(
+    #     kws_pseudobulk) == 0):  #  set pseudobulk keyword defaults
+    #     kws_pseudobulk = dict(n_cells=75, n_samples_per_group=3)
     if isinstance(col_condition, str):
-        adata.obs[col_label_new] = adata.obs[col_condition].astype(str)
+        col_label_new = col_condition
     else:
+        if col_label_new is None:
+            col_label_new = "_".join(col_condition)
         adata.obs[col_label_new] = adata.obs[col_condition[0]].astype(
             "string") + "_" + adata.obs[col_condition[1]]
     
     # Rank Genes
     sc.tl.rank_genes_groups(adata, col_label_new, method="t-test", 
-                            key_added="t-test")
+                            key_added="t-test", use_raw=use_raw)
     t_stats = sc.get.rank_genes_groups_df(
         adata, key_condition, key="t-test").set_index("names")  # rank genes
+    print(t_stats)
+    if filter_by_highly_variable is True:  # filter by HVGs?
+        t_stats = t_stats.loc[adata.var["highly_variable"]]
     t_stats = t_stats.sort_values("scores", key=np.abs, ascending=False)[[
         "scores"]].rename_axis([key_condition], axis=1)  # decoupler format
-    if filter_by_highly_variable is True:
-        t_stats = t_stats.loc[adata.var["highly_variable"]]
     print(t_stats)
     
     # Retrieve Reactome Pathways
     msigdb = decoupler.get_resource("MSigDB")
-    reactome = msigdb.query("collection == 'reactome_pathways'")
-    reactome = reactome[~reactome.duplicated((
-        "geneset", "genesymbol"))]  # filter duplicates
+    rxome = msigdb.query("collection == 'reactome_pathways'")
+    rxome = rxome[~rxome.duplicated(("geneset", "genesymbol"))]  # -duplicate
     
     # Filter Gene Sets for Compatibility
-    geneset_size = reactome.groupby("geneset").size()
-    gsea_genesets = geneset_size.index[(
-        geneset_size > 15) & (geneset_size < 500)]
+    geneset_size = rxome.groupby("geneset").size()
+    genesets = geneset_size.index[(geneset_size > geneset_size_range[0]) & (
+        geneset_size < geneset_size_range[1])]  # only gene sets in size range
 
     # Cluster-Level Analysis
     scores, norm, pvals = decoupler.run_gsea(
-        t_stats.T, reactome[reactome["geneset"].isin(gsea_genesets)], 
+        t_stats.T, rxome[rxome["geneset"].isin(genesets)], seed=seed,
+        **kws_run_gsea, use_raw=use_raw,
         source="geneset", target="genesymbol")  # run cluster-level GSEA
+    # adata.obsm[obsm_key] = scores
     gsea_results = pd.concat({"score": scores.T, "norm": norm.T, "pval": 
         pvals.T}, axis=1).droplevel(
             level=1, axis=1).sort_values("pval")  # cell type-level
@@ -555,7 +588,7 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
     # Cell-Level
     if ifn_pathways not in [None, False]:
         gsea_results_cell = decoupler.run_aucell(
-            adata, reactome, source="geneset", target="genesymbol",
+            adata, rxome, source="geneset", target="genesymbol",
             use_raw=False)  # run individual cell-level GSEA
         
     # Pseudo-Bulk
@@ -574,9 +607,77 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
     #     # TODO: R to Python port?
 
     # Plots & Other Output
-    figs = cr.pl.plot_gsea_results(
-        adata, gsea_results, p_threshold=p_threshold, **kwargs,
-        ifn_pathways=ifn_pathways)
+    try:
+        figs = cr.pl.plot_gsea_results(
+            adata, gsea_results, p_threshold=p_threshold, **kwargs,
+            ifn_pathways=ifn_pathways, use_raw=use_raw, layer=layer)
+    except Exception as err:
+        warnings.warn(f"{err}\n\n\nPlotting GSEA results failed.")
+        figs = err
     res = {"gsea_results": gsea_results, "score_sort": score_sort, 
            "gsea_results_cell": gsea_results_cell}
-    return adata, res, figs
+    return adata, res, figs 
+
+
+def perform_pathway_interference(
+    adata, layer=None, n_top=500, organism="human", obsm_key="mlm_estimate", 
+    col_cell_type="louvain", pathways=True, copy=True, **kwargs):
+    """Perform Pathway Interference Analysis."""
+    if copy is True:
+        adata = adata.copy()
+    if layer:
+        adata.X = adata.layers[layer].copy()
+    figs = {}
+    prog = decoupler.get_progeny(organism=organism, top=n_top)
+    decoupler.run_mlm(mat=adata, net=prog, source="source", target="target",
+                      weight="weight", verbose=True)
+    if pathways:
+        if pathways is True:  # plot all available pathways
+            acts = decoupler.get_acts(adata, obsm_key=obsm_key)
+            pathways = list(adata.obsm[obsm_key].columns)
+        for p in pathways:
+            try:
+                figs[p] = cr.pl.plot_pathway_interference_results(
+                    adata, p, col_cell_type=col_cell_type, obsm_key=obsm_key, 
+                    **kwargs)  # plots for pathway
+            except Exception as err:
+                warnings.warn(f"{err}\n\n\nPlotting pathway {p} failed!")
+    print(adata.obsm["mlm_estimate"])
+    return adata, figs
+
+
+def perform_dea(
+    adata, col_cell_type, col_covariates, layer=None, col_sample_id=None, 
+    figsize=(30, 30), uns_key="pca_anova", plot_stat="p_adj"):
+    """
+    Perform functional analysis of pseudobulk data 
+    (created by this method), then differential expression analysis.
+    """
+    adata = adata.copy()
+    if isinstance(col_covariates, str):
+        col_covariates = [col_covariates]
+    if isinstance(figsize, (int, float)):
+        figsize = (figsize, figsize)
+    if layer:
+        adata.X = adata.layers[layer]
+        
+    # Create Pseudo-Bulk Data
+    pdata = cr.tl.create_pseudobulk(adata, col_cell_type, col_sample_id=None, 
+                                    layer=layer, mode="sum", kws_process=True)
+
+    # Calculate Associations
+    decoupler.get_metadata_associations(
+        pdata, obs_keys=[col_cell_type, "psbulk_n_cells", 
+                        "psbulk_counts"] + col_covariates, 
+        obsm_key="X_pca", uns_key=uns_key, inplace=True)
+
+    # Plot
+    fig = plt.figure(figsize=figsize)
+    axs, legend_axes = decoupler.plot_associations(
+        p_pdata, uns_key=uns_key, obsm_key=obsm_key,
+        stat_col=plot_stat, obs_annotation_cols = col_covariates, 
+        titles=['Adjusted p-Values from ANOVA', 'Principle Component Scores'])
+    plt.show()
+    return pdata, fig
+
+    

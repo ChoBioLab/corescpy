@@ -427,6 +427,30 @@ class Omics(object):
             # if assay_protein is not None:  # if includes protein assay
             #     self.adata[assay_protein] = ad_p
         return adata, figs
+    
+    def downsample(self, subset=None, assay=None,
+                   counts_per_cell=None, total_counts=None, 
+                   replace=False, copy=True, seed=1618, **kwargs):
+        """Downsample counts/`.X` (optionally, of a subset)."""
+        adata = self.adata[assay].copy() if assay else self.adata.copy()
+        if subset is not None:
+            adata = adata[subset]
+        adata = sc.pp.downsample_counts(
+            adata, counts_per_cell=counts_per_cell, total_counts=total_counts,
+            random_state=seed, replace=replace, copy=True)
+        if copy is False:
+            if assay:
+                if subset is not None:
+                    self.adata[assay][subset] = adata
+                else:
+                    self.adata[assay] = adata
+            else:
+                if subset is not None:
+                    self.adata[subset] = adata
+                else:
+                    self.adata = adata
+        else:
+            return adata
                 
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None, 
@@ -549,7 +573,7 @@ class Omics(object):
         self.figures["dialogue"] = fig
         return fig
     
-    def run_gsea(self, key_condition, col_condition=None, 
+    def run_gsea(self, key_condition, col_condition=None, layer="log1p",
                  filter_by_highly_variable=True, copy=False, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         if col_condition is None:
@@ -565,7 +589,8 @@ class Omics(object):
         output = cr.ax.perform_gsea(
             self.rna, filter_by_highly_variable=filter_by_highly_variable, 
             col_condition=col_condition, key_condition=key_condition,
-            **kwargs)  # GSEA
+            layer=layer if layer in self.rna.layers else self._layers[layer], 
+            copy=copy, **kwargs)  # GSEA
         if copy is False:
             self.rna = output[0]
             self.results["gsea"] = output[1]
@@ -579,8 +604,30 @@ class Omics(object):
         p-value threshold, or other options than
         you chose when initially running the analysis).
         """
-        
         figs = cr.pl.plot_gsea_results(
-            self.adata, self.results["gsea"]["gsea_results"], 
-            p_threshold=p_threshold, 
-            **kwargs, ifn_pathways=ifn_pathways)
+            self.rna.copy(), self.results["gsea"]["gsea_results"], 
+            p_threshold=p_threshold, **kwargs, ifn_pathways=ifn_pathways)
+        return figs
+    
+    def run_fx_analysis(self, col_covariates=None, layer="counts", 
+                        plot_stat="p_adj", uns_key="pca_anova", 
+                        copy=False, figsize=30, **kwargs):
+        """Perform pseudo-bulk functional analysis."""
+        if col_covariates is None:
+            if self._columns["col_condition"] is None:
+                raise ValueError("Must specify `col_covariates` if "
+                                 "`self._columns['col_condition']` is None.")
+            col_covariates = [self._columns["col_condition"]]
+        cct = kwargs.pop("col_cell_type") if "col_cell_type" in kwargs else \
+            self._columns["col_cell_type"]  # cell type column
+        layer = layer if layer in self.adata.layers else self._layers[layer]
+        out = cr.ax.perform_fx_analysis_pseudobulk(
+            self.rna.copy(), cct, col_covariates, layer=layer, 
+            figsize=figsize, plot_stat=plot_stat, uns_key=uns_key, 
+            col_sample_id=self._columns["col_sample_id"], 
+            **kwargs)  # perform functional analysis of pseudo-bulk data
+        if copy is False:
+            self.rna = out[0]
+            self.results["fx_analysis"] = out[1:-1]
+            self.figures["fx_analysis"] = out[-1]
+        return out

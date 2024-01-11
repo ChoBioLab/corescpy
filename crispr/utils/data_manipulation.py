@@ -1,90 +1,28 @@
-import anndata as ad
+import crispr as cr
+import decoupler as dc
+import scanpy as sc
 import pandas as pd
 import numpy as np
 
-def create_pseudobulk(adata: ad.AnnData,
-    groupby: str | list[str],
-    *,
-    n_samples_per_group: int,
-    n_cells: int,
-    random_state: None | int | np.random.RandomState = None,
-    layer: str = None) -> ad.AnnData:
-    """'
-    From SC Best Practices (Theis Lab).
-    
-    Sum sample of X per condition.
+layers = cr.pp.get_layer_dict()
 
-    Drops conditions which don't have enough samples.
 
-    Parameters
-    ----------
-    adata
-        AnnData to sum expression of
-    groupby
-        Keys in obs to groupby
-    n_samples_per_group
-        Number of samples to take per group
-    n_cells
-        Number of cells to take per sample
-    random_state
-        Random state to use when sampling cells
-    layer
-        Which layer of adata to use
-
-    Returns
-    -------
-    AnnData with same var as original, obs with columns from groupby, and X.
-    """
-    from scipy import sparse
-    from sklearn.utils import check_random_state
-
-    # Checks
-    if isinstance(groupby, str):
-        groupby = [groupby]
-    random_state = check_random_state(random_state)
-
-    indices = []
-    labels = []
-
-    grouped = adata.obs.groupby(groupby)
-    for k, inds in grouped.indices.items():
-        # Check size of group
-        if len(inds) < (n_cells * n_samples_per_group):
-            continue
-
-        # Sample from group
-        condition_inds = random_state.choice(
-            inds, n_cells * n_samples_per_group, replace=False
-        )
-        for i, sample_condition_inds in enumerate(np.split(
-            condition_inds, 3)):
-            if isinstance(k, tuple):
-                labels.append((*k, i))
-            else:  # only grouping by one variable
-                labels.append((k, i))
-            indices.append(sample_condition_inds)
-
-    # obs of output AnnData
-    new_obs = pd.DataFrame.from_records(
-        labels,
-        columns=[*groupby, "sample"],
-        index=["-".join(map(str, l)) for l in labels],
-    )
-    n_out = len(labels)
-
-    # Make indicator matrix
-    indptr = np.arange(0, (n_out + 1) * n_cells, n_cells)
-    indicator = sparse.csr_matrix(
-        (
-            np.ones(n_out * n_cells, dtype=bool),
-            np.concatenate(indices),
-            indptr,
-        ),
-        shape=(len(labels), adata.n_obs),
-    )
-
-    return ad.AnnData(
-        X=indicator @ sc.get._get_obs_rep(adata, layer=layer),
-        obs=new_obs,
-        var=adata.var.copy(),
-    )
+def create_pseudobulk(adata, col_cell_type, col_sample_id=None, 
+                      layer=layers["counts"], mode="sum", 
+                      kws_process=True, **kwargs):
+    """Get pseudo-bulk of scRNA-seq data."""
+    if kws_process is True:
+        kws_process = dict(target_sum=1e6, max_value=10, n_comps=10)
+    if layer and layer not in adata.layers:
+        raise ValueError(f"{layer} not in adata.layers. Set layer argument to"
+                         " None or the name of the layer with count data.")
+    pdata = dc.get_pseudobulk(
+        adata, sample_col=col_sample_id, groups_col=col_cell_type, 
+        layer=layer, mode=mode, **kwargs)
+    pdata.layers["counts"] = pdata.X.copy()
+    if kws_process is True or isinstance(kws_process, dict):
+        sc.pp.normalize_total(pdata, target_sum=kws_process["target_sum"])
+        sc.pp.log1p(pdata)
+        sc.pp.scale(pdata, max_value=kws_process["max_value"])
+        sc.tl.pca(pdata, n_comps=kws_process["n_comps"])
+    return pdata

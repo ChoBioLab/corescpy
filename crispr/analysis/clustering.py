@@ -66,8 +66,8 @@ def cluster(adata, layer=None,
                         but 'highly_variable' not found in `adata.var`""")
             kws_pca["use_highly_variable"] = False
         sc.pp.pca(ann, **{"random_state": seed, **kws_pca})  # PCA
-        print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n"
-            f"\n{kws_neighbors if kws_neighbors else ''}")
+        print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>" + str(
+            f"\n{kws_neighbors}" if kws_neighbors else ""))
         
     # Neighborhood Graph & UMAP Embedding
     sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
