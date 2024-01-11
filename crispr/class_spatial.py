@@ -330,27 +330,3 @@ class Spatial(Omics):
         sq.gr.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
         fig = sq.pl.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
         return fig
-    
-    def calculate_receptor_ligand(self, key_source=None, key_targets=None, 
-                                  col_cell_type=None, n_perms=10, 
-                                  pvalue_threshold=0.05, 
-                                  remove_nonsig=True, alpha=None, copy=False, 
-                                  kws_plot=None, **kwargs):
-        """Calculate receptor-ligand interactions."""
-        if alpha is None:
-            alpha = pvalue_threshold
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
-        adata = self.rna.copy() if copy else self.rna
-        res = sq.gr.ligrec(
-            adata, n_perms=n_perms, cluster_key=col_cell_type,
-            transmitter_params={"categories": "ligand"}, 
-            receiver_params={"categories": "receptor"},
-            interactions_params={'resources': 'CellPhoneDB'}, 
-            copy=True, **kwargs)
-        fig = sq.pl.ligrec(res, alpha=alpha, 
-                           source_groups=key_source, target_groups=key_targets,
-                           remove_nonsig_interactions=remove_nonsig,
-                           pvalue_threshold=pvalue_threshold, 
-                           **{**dict(kws_plot if kws_plot else {})})  # plot 
-        return res, fig

@@ -492,12 +492,14 @@ def compute_distance(adata, col_target_genes="target_genes",
     return distance, data, dff, mat, figs
 
 
-def perform_gsea(adata, col_condition="leiden", key_condition="0", 
+def perform_gsea(adata, adata_sc=None, 
+                 col_cell_type=None, col_sample_id=None,
+                 col_condition="leiden", key_condition="0", 
                  col_label_new=None, ifn_pathways=True,
                  layer=None, p_threshold=0.0001, use_raw=False,
                  kws_pseudobulk=None, seed=1618, kws_run_gsea=None, 
                  filter_by_highly_variable=False, geneset_size_range=None, 
-                 obsm_key="gsea_estimate", **kwargs):
+                 obsm_key="gsea_estimate", pseudobulk=True, **kwargs):
     """
     Perform gene set enrichment analysis 
     (adapted from SC Best Practices).
@@ -506,7 +508,7 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
     -------
     This way will automatically plot the pathways with the highest 
     absolute scores (and with p-value below a defined threshold):
-    >>> out = perform_gsea(adata, 
+    >>> out = perform_gsea(pdata, adata_sc=None,  # will not do AUCell
     >>>                    col_condition=["cell_type", "Inflammation"], 
     >>>                    key_condition="Epithelial_Inflamed", 
     >>>                    col_label_new="Group", ifn_pathways=True,
@@ -516,7 +518,8 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
     Or define your own pathways to plot:
     
     >>> ifn = []
-    >>> out = perform_gsea(adata, 
+    >>> out = perform_gsea(None,  # so will create pseudobulk from sc 
+    >>>                    adata_sc=adata_sc,  # will run AUCell
     >>>                    col_condition=["cell_type", "Inflammation"], 
     >>>                    key_condition="Epithelial_Inflamed", 
     >>>                    col_label_new="Group", ifn_pathways=True,
@@ -525,13 +528,16 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
     >>>                    filter_by_highly_variable=False)
     """
     figs, gsea_results_cell = {}, None
+    if adata_sc is not None and pdata is None:  # if needed, create pseudobulk
+        pdata = cr.tl.create_pseudobulk(
+            adata_sc.copy(), col_cell_type, col_sample_id=col_sample_id, 
+            layer=layer, mode="sum", kws_process=True)  # pseudobulk from SC
     if geneset_size_range is None:  # default gene set size range
         geneset_size_range = [15, 500]
     if kws_run_gsea is None:
         kws_run_gsea = dict(verbose=True)
-    adata = adata.copy()
     if layer:
-        adata.X = adata.layers[layer].copy()
+        pdata.X = pdata.layers[layer].copy()
     # if kws_pseudobulk is True or (isinstance(kws_pseudobulk, dict) and len(
     #     kws_pseudobulk) == 0):  #  set pseudobulk keyword defaults
     #     kws_pseudobulk = dict(n_cells=75, n_samples_per_group=3)
@@ -540,17 +546,17 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
     else:
         if col_label_new is None:
             col_label_new = "_".join(col_condition)
-        adata.obs[col_label_new] = adata.obs[col_condition[0]].astype(
-            "string") + "_" + adata.obs[col_condition[1]]
+        pdata.obs[col_label_new] = pdata.obs[col_condition[0]].astype(
+            "string") + "_" + pdata.obs[col_condition[1]]
     
     # Rank Genes
-    sc.tl.rank_genes_groups(adata, col_label_new, method="t-test", 
+    sc.tl.rank_genes_groups(pdata, col_label_new, method="t-test", 
                             key_added="t-test", use_raw=use_raw)
     t_stats = sc.get.rank_genes_groups_df(
-        adata, key_condition, key="t-test").set_index("names")  # rank genes
+        pdata, key_condition, key="t-test").set_index("names")  # rank genes
     print(t_stats)
     if filter_by_highly_variable is True:  # filter by HVGs?
-        t_stats = t_stats.loc[adata.var["highly_variable"]]
+        t_stats = t_stats.loc[pdata.var["highly_variable"]]
     t_stats = t_stats.sort_values("scores", key=np.abs, ascending=False)[[
         "scores"]].rename_axis([key_condition], axis=1)  # decoupler format
     print(t_stats)
@@ -570,7 +576,7 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
         t_stats.T, rxome[rxome["geneset"].isin(genesets)], seed=seed,
         **kws_run_gsea, use_raw=use_raw,
         source="geneset", target="genesymbol")  # run cluster-level GSEA
-    # adata.obsm[obsm_key] = scores
+    # pdata.obsm[obsm_key] = scores
     gsea_results = pd.concat({"score": scores.T, "norm": norm.T, "pval": 
         pvals.T}, axis=1).droplevel(
             level=1, axis=1).sort_values("pval")  # cell type-level
@@ -586,9 +592,10 @@ def perform_gsea(adata, col_condition="leiden", key_condition="0",
         ascending=False).index]  # sort by absolute score
     
     # Cell-Level
-    if ifn_pathways not in [None, False]:
+    if adata_sc is not None:
+        adata_sc = adata_sc.copy()
         gsea_results_cell = decoupler.run_aucell(
-            adata, rxome, source="geneset", target="genesymbol",
+            adata_sc, rxome, source="geneset", target="genesymbol",
             use_raw=False)  # run individual cell-level GSEA
         
     # Pseudo-Bulk

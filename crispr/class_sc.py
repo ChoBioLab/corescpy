@@ -595,25 +595,33 @@ class Omics(object):
         return fig
     
     def run_gsea(self, key_condition, col_condition=None, layer="log1p",
-                 filter_by_highly_variable=True, copy=False, **kwargs):
+                 filter_by_highly_variable=True, copy=False, 
+                 pseudobulk=True, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         if col_condition is None:
             col_condition = self._columns["col_cell_type"]
             if self._columns["col_condition"] is not None:
                 col_condition = [col_condition, self._columns[
                     "col_condition"]]
+        col_sample_id = kwargs.pop("col_sample_id") if (
+            col_sample_id in kwargs) else self._columns["col_sample_id"]
         for x in [self._columns, self._keys]:
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs and c != "col_condition":
                     kwargs.update({c: x[c]})  # & use object attribute
-        print(col_condition)
         output = cr.ax.perform_gsea(
-            self.rna, filter_by_highly_variable=filter_by_highly_variable, 
+            self.pdata.copy() if pseudobulk is True else self.rna.copy(), 
+            adata_sc=self.rna.copy(), 
+            filter_by_highly_variable=filter_by_highly_variable, 
             col_condition=col_condition, key_condition=key_condition,
+            col_sample_id=col_sample_id,
             layer=layer if layer in self.rna.layers else self._layers[layer], 
-            copy=copy, **kwargs)  # GSEA
+            copy=copy, pseudobulk=pseudobulk, **kwargs)  # GSEA
         if copy is False:
-            self.rna = output[0]
+            if pseudobulk is True:
+                self.pdata = output[0]
+            else:
+                self.adata = output[0]
             self.results["gsea"] = output[1]
             self.figures["gsea"] = output[-1]
         return output
@@ -652,3 +660,27 @@ class Omics(object):
             self.results["fx_analysis"] = out[1:-1]
             self.figures["fx_analysis"] = out[-1]
         return out
+    
+    def calculate_receptor_ligand(self, key_source=None, key_targets=None, 
+                                  col_cell_type=None, n_perms=10, 
+                                  pvalue_threshold=0.05, 
+                                  remove_nonsig=True, alpha=None, copy=False, 
+                                  kws_plot=None, **kwargs):
+        """Calculate receptor-ligand interactions."""
+        if alpha is None:
+            alpha = pvalue_threshold
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        adata = self.rna.copy() if copy else self.rna
+        res = sq.gr.ligrec(
+            adata, n_perms=n_perms, cluster_key=col_cell_type,
+            transmitter_params={"categories": "ligand"}, 
+            receiver_params={"categories": "receptor"},
+            interactions_params={'resources': 'CellPhoneDB'}, 
+            copy=True, **kwargs)
+        fig = sq.pl.ligrec(res, alpha=alpha, 
+                           source_groups=key_source, target_groups=key_targets,
+                           remove_nonsig_interactions=remove_nonsig,
+                           pvalue_threshold=pvalue_threshold, 
+                           **{**dict(kws_plot if kws_plot else {})})  # plot 
+        return res, fig
