@@ -9,6 +9,8 @@ import scanpy as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pertpy as pt
+import squidpy as sq
+import liana
 # import copy
 import muon
 import crispr as cr
@@ -661,26 +663,70 @@ class Omics(object):
             self.figures["fx_analysis"] = out[-1]
         return out
     
-    def calculate_receptor_ligand(self, key_source=None, key_targets=None, 
+    def calculate_receptor_ligand(self, method="liana", subset=None,
+                                  col_condition=None, layer="log1p",
+                                  key_source=None, key_targets=None, 
                                   col_cell_type=None, n_perms=10, 
-                                  pvalue_threshold=0.05, 
-                                  remove_nonsig=True, alpha=None, copy=False, 
+                                  pvalue_threshold=0.05, figsize=None,
+                                  remove_nonsig=True, alpha=None,
                                   kws_plot=None, **kwargs):
         """Calculate receptor-ligand interactions."""
         if alpha is None:
             alpha = pvalue_threshold
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        adata = self.rna.copy() if copy else self.rna
-        res = sq.gr.ligrec(
-            adata, n_perms=n_perms, cluster_key=col_cell_type,
-            transmitter_params={"categories": "ligand"}, 
-            receiver_params={"categories": "receptor"},
-            interactions_params={'resources': 'CellPhoneDB'}, 
-            copy=True, **kwargs)
-        fig = sq.pl.ligrec(res, alpha=alpha, 
-                           source_groups=key_source, target_groups=key_targets,
-                           remove_nonsig_interactions=remove_nonsig,
-                           pvalue_threshold=pvalue_threshold, 
-                           **{**dict(kws_plot if kws_plot else {})})  # plot 
-        return res, fig
+        ann = (self.rna[subset] if subset is not None else self.rna).copy()
+        if layer is not None:
+            ann.X = ann.layer[layer].copy() if (
+                layer in ann.layer) else ann.layer[ann._layers[layer]]
+        if method == "squidpy":
+            res = sq.gr.ligrec(
+                ann, n_perms=n_perms, cluster_key=col_cell_type,
+                transmitter_params={"categories": "ligand"}, 
+                receiver_params={"categories": "receptor"},
+                interactions_params={'resources': 'CellPhoneDB'}, 
+                copy=True, kws_plot=None, **kwargs)
+            fig = sq.pl.ligrec(res, alpha=alpha, 
+                               source_groups=key_source, 
+                               target_groups=key_targets,
+                               remove_nonsig_interactions=remove_nonsig,
+                               pvalue_threshold=pvalue_threshold, 
+                            **{**dict(kws_plot if kws_plot else {})})  # plot 
+        else:
+            kwargs = {**dict(use_raw=False, return_all_lrs=True, 
+                             verbose=True, key_added="liana_res"), **kwargs}
+            liana.method.cellphonedb(ann, groupby=col_cell_type, **kwargs)
+            kws = dict(
+                filterby="cellphone_pvals", filter_lambda=lambda x: x <= 0.01,
+                orderby="lr_means", orderby_ascending=False, 
+                top_n=20, size_range=(1, 6))
+            if kws_plot:
+                kws.update(kws_plot)
+            if figsize is None:
+                figsize = (len(key_source) * 2 if key_source else 18, 
+                           len(key_targets) * 2 if key_targets else 10)
+                figsize = (figsize[0] * figsize[1], kws["top_n"] / 4)
+            fig = liana.pl.dotplot(
+                adata=ann, colour="lr_means",
+                size="cellphone_pvals", inverse_size=True,
+                source_labels=key_source, target_labels=key_targets,
+                figure_size=figsize, return_fig=True, **kws)
+            res = ann.uns[kwargs["key_added"]]
+            if col_condition is not None:
+                fig.labels.title = "Overall"
+                fig.draw()
+                fig, res = {"overall": fig}, {"overall": res}
+                for c in ann.obs[self._columns["col_condition"]].unique():
+                    anc = ann[ann.obs[self._columns["col_condition"]] == c]
+                    liana.method.cellphonedb(
+                        anc, groupby=col_cell_type, **kwargs)
+                    fig[c] = liana.pl.dotplot(
+                        adata=anc, colour="lr_means",
+                        size="cellphone_pvals", inverse_size=True,
+                        source_labels=key_source, target_labels=key_targets,
+                        figure_size=figsize, return_fig=True, **kws)
+                    fig[c].labels.title = str(
+                        f"{self._columns['col_condition']} = {x}")
+                    fig[c].draw()
+                    res[c] = anc.uns[kwargs["key_added"]]
+        return ann, res, fig

@@ -25,6 +25,7 @@ dependencies = [
     "pertpy",
     "harmonypy",
     "squidpy",
+    "liana",
     "arviz",
     "celltypist",
     "numpy >= 1.24.4",
