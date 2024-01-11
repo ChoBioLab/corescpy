@@ -92,6 +92,7 @@ class Omics(object):
                 the UMI counts. Defaults to None
         """
         print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
+        self.pdata = None  # for pseudobulk data if ever created
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
@@ -451,6 +452,26 @@ class Omics(object):
                     self.adata = adata
         else:
             return adata
+    
+    def bulk(self, mode="sum", subset=None, col_cell_type=None, 
+             col_sample_id=None, layer="counts", copy=True, **kwargs):
+        """Create pseudo-bulk data."""
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if col_sample_id is None:
+            col_sample_id = self._columns["col_sample_id"]
+        if col_sample_id is False:  # False = don't account for sample ID
+            col_sample_id = None  # b/c if argued None, will use self._columns
+        kws_def = dict(col_sample_id=self._columns["col_sample_id"], 
+                       mode="sum", kws_process=True)  # default arguments
+        adata = self.rna.copy()
+        if subset:
+            adata = adata[subset]
+        pdata = cr.tl.create_pseudobulk(
+            adata, col_cell_type, col_sample_id=col_sample_id,
+            mode=mode, layer=layer, **kwargs)
+        if copy is False:
+            self.pdata = pdata
                 
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None, 

@@ -26,3 +26,64 @@ def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
         sc.pp.scale(pdata, max_value=kws_process["max_value"])
         sc.tl.pca(pdata, n_comps=kws_process["n_comps"])
     return pdata
+
+
+rfx_convert = r"""
+require(Seurat)
+require(zellkonverter)
+
+extract_layers <- function(seu, assay = NULL, layers = NULL) {
+    layers_x <- list()
+    for (x in assay) {
+        lays <- ifelse(is.null(layers), slotNames(seu@assays[[x]]), intersect(
+            layers, slotNames(seu@assays[[x]])))  # all possible layers
+        lays <- sapply(lays, function(
+            u) ifelse(dim(seu@assays[[x]][u])[1] > 0, u, NA))  # non-empty
+        lays <- lays[!is.na(lays)]  # names of *available* layers
+        if (length(lays) == 0) next  # skip if no available layers
+        layers_x[[x]] <- lapply(lays, function(i) seu@assays[[x]][i])  # .Xs
+    }
+    return(layers_x)
+}
+
+convert <- function(file, file_new = NULL, assay = NULL, overwrite = FALSE,
+                    write_metadata = FALSE, layers = NULL) {
+    if (is.null(file_new)) {
+        file_new <- gsub(".RDS", "_converted.h5ad", file)
+        if (file.exists(file_new) && !overwrite) {
+            stop(paste0("Out file ", file_new, " exists; overwrite=F."))
+        } else {
+            cat(paste0("Output path not provided; setting as ", file_new))
+        }
+    }
+    cat(paste0("\n\n<<< READING DATA >>>\n", file))
+    seu <- readRDS(file)  # read RDS into Seurat object
+    print(str(seu, 3))  # print object structure (3 levels deep)
+    if (is.null(assay)) {
+        assay <- names(seu@assays)  # all assays if not set
+    }
+    cat("\n\n<<< CONVERTING DATA TO SINGLE CELL OBJECT >>>")
+    sce <- Seurat::as.SingleCellExperiment(seu, assay = assay)  # convert
+    print(sce)
+    if (!identical(file_new, FALSE)) {  # if "file_new" is False; don't write
+        cat(paste0("\n\n<<< READING DATA >>>\n", file_new))
+        zellkonverter::writeH5AD(sce, file_new)  # write .h5ad
+    }
+    layers_x <- extract_layers(seu, assays, layers)
+    if (write_metadata) {  # write metadata about object for later checks
+        print("WRITING METADATA NOT YET SUPPORTED")
+        file_meta <- gsub(".RDS", "_converted_metadata.csv", file)
+        clusters <- ifelse("active.ident" %in% slotNames(seu), 
+                           as.data.frame(seu@active.ident), NULL)
+        meta <- list(assays=names(seu@assays), uns=names(seu@reductions),
+                     var_names=rownames(seu@assays[[names(seu@assays)[1]]]),
+                     X=layers_x, clusters=clusters, obs=seu@meta.data)
+        if (file.exists(file_meta) && !overwrite) {
+            stop(paste0("Metadata file ", file_meta, 
+                        "exists and overwrite is not allowed."))
+        }
+        # write.csv(meta, file = file_meta, row.names = FALSE)
+    }
+    return(list(seu, sce, meta))
+}
+"""
