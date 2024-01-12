@@ -361,21 +361,20 @@ class Omics(object):
         """Plot UMAP."""
         if color is None:
             color = self._columns["col_cell_type"]
-        kwargs.update({"palette": palette, "cmap": cmap})
+        kws = {"frameon": False, "palette": palette, 
+               "use_raw": False,  **kwargs}
         if isinstance(color, str):  # only if not plotting multiple genes...
-            kwargs.update({"cmap": cmap})  # can define cmap
+            kws.update({"cmap": cmap})  # can define cmap
         if group:
-            fig = cr.pl.plot_umap_split(self.rna, group, color=color, **{
-                "frameon": False, **kwargs})
+            fig = cr.pl.plot_umap_split(self.rna, group, color=color, **kws)
         else:
             if not isinstance(color, str) and len(color) > 1 and (
                 color[0] in self.rna.var_names):  # multi-feature UMAP
                 fig = cr.pl.plot_umap_multi(self.rna, color, **{
-                    "frameon": False, "use_raw": False, **kwargs})
+                    "frameon": False, "use_raw": False, **kws})
             else:  # normal UMAP embedding (categorical or continous)
-                fig = sc.pl.umap(self.rna, color=color, 
-                                **{"legend_loc": "on data", "use_raw": False,
-                                   "legend_fontweight": "medium", **kwargs})
+                fig = sc.pl.umap(self.rna, color=color, **{
+                    "legend_loc": "on data", **kws})
         return fig
     
     def plot_coex(self, genes, use_raw=False, **kwargs):
@@ -557,11 +556,11 @@ class Omics(object):
         output = cr.ax.analyze_composition(
             self.adata, col_condition,  col_cell_type, 
             assay=assay, layer=layer, reference_cell_type=reference_cell_type, 
-            analysis_type=analysis_type, 
+            analysis_type=analysis_type, plot=plot, out_file=None, 
             generate_sample_level=generate_sample_level,
             col_list_lineage_tree=col_list_lineage_tree,  # only for TASCCoda
-            covariates=covariates, est_fdr=est_fdr, plot=plot, out_file=None, 
-            copy=copy, key_reference_cell_type="automatic", **kwargs)
+            covariates=covariates, est_fdr=est_fdr, copy=copy, 
+            key_reference_cell_type="automatic", **kwargs)
         if copy is False:
             self.results["composition"] = output
         return output
@@ -589,7 +588,7 @@ class Omics(object):
             ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
         if col_confounder:  # correct for a confounding variable?
             res, p_new = d_l.multilevel_modeling(
-                ct_subs=ct_subs, mcp_scores=mcps, ws_dict=w_s,
+                ct_subs=ct_subs, mcp_scores=mcps, ws_dict=w_s, 
                 confounder=col_confounder)
             self.results[f"dialogue_confounder_{col_confounder}"] = res, p_new
         self.results["dialogue"] = pdata, mcps, w_s, ct_subs
@@ -613,10 +612,9 @@ class Omics(object):
                     kwargs.update({c: x[c]})  # & use object attribute
         output = cr.ax.perform_gsea(
             self.pdata.copy() if pseudobulk is True else self.rna.copy(), 
-            adata_sc=self.rna.copy(), 
+            adata_sc=self.rna.copy(), col_sample_id=col_sample_id,
             filter_by_highly_variable=filter_by_highly_variable, 
             col_condition=col_condition, key_condition=key_condition,
-            col_sample_id=col_sample_id,
             layer=layer if layer in self.rna.layers else self._layers[layer], 
             copy=copy, pseudobulk=pseudobulk, **kwargs)  # GSEA
         if copy is False:
@@ -663,70 +661,25 @@ class Omics(object):
             self.figures["fx_analysis"] = out[-1]
         return out
     
-    def calculate_receptor_ligand(self, method="liana", subset=None,
-                                  col_condition=None, layer="log1p",
-                                  key_source=None, key_targets=None, 
-                                  col_cell_type=None, n_perms=10, 
-                                  pvalue_threshold=0.05, figsize=None,
-                                  remove_nonsig=True, alpha=None,
-                                  kws_plot=None, **kwargs):
+    def calculate_receptor_ligand(
+        self, method="liana", subset=None, layer="log1p", top_n=20,
+        col_cell_type=None, col_condition=None, cmap="magma", kws_plot=None, 
+        key_sources=None, key_targets=None, resource="CellPhoneDB", 
+        n_perms=10, p_threshold=0.01, remove_ns=True, figsize=None, **kwargs):
         """Calculate receptor-ligand interactions."""
-        if alpha is None:
-            alpha = pvalue_threshold
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        ann = (self.rna[subset] if subset is not None else self.rna).copy()
-        if layer is not None:
-            ann.X = ann.layer[layer].copy() if (
-                layer in ann.layer) else ann.layer[ann._layers[layer]]
-        if method == "squidpy":
-            res = sq.gr.ligrec(
-                ann, n_perms=n_perms, cluster_key=col_cell_type,
-                transmitter_params={"categories": "ligand"}, 
-                receiver_params={"categories": "receptor"},
-                interactions_params={'resources': 'CellPhoneDB'}, 
-                copy=True, kws_plot=None, **kwargs)
-            fig = sq.pl.ligrec(res, alpha=alpha, 
-                               source_groups=key_source, 
-                               target_groups=key_targets,
-                               remove_nonsig_interactions=remove_nonsig,
-                               pvalue_threshold=pvalue_threshold, 
-                            **{**dict(kws_plot if kws_plot else {})})  # plot 
-        else:
-            kwargs = {**dict(use_raw=False, return_all_lrs=True, 
-                             verbose=True, key_added="liana_res"), **kwargs}
-            liana.method.cellphonedb(ann, groupby=col_cell_type, **kwargs)
-            kws = dict(
-                filterby="cellphone_pvals", filter_lambda=lambda x: x <= 0.01,
-                orderby="lr_means", orderby_ascending=False, 
-                top_n=20, size_range=(1, 6))
-            if kws_plot:
-                kws.update(kws_plot)
-            if figsize is None:
-                figsize = (len(key_source) * 2 if key_source else 18, 
-                           len(key_targets) * 2 if key_targets else 10)
-                figsize = (figsize[0] * figsize[1], kws["top_n"] / 4)
-            fig = liana.pl.dotplot(
-                adata=ann, colour="lr_means",
-                size="cellphone_pvals", inverse_size=True,
-                source_labels=key_source, target_labels=key_targets,
-                figure_size=figsize, return_fig=True, **kws)
-            res = ann.uns[kwargs["key_added"]]
-            if col_condition is not None:
-                fig.labels.title = "Overall"
-                fig.draw()
-                fig, res = {"overall": fig}, {"overall": res}
-                for c in ann.obs[self._columns["col_condition"]].unique():
-                    anc = ann[ann.obs[self._columns["col_condition"]] == c]
-                    liana.method.cellphonedb(
-                        anc, groupby=col_cell_type, **kwargs)
-                    fig[c] = liana.pl.dotplot(
-                        adata=anc, colour="lr_means",
-                        size="cellphone_pvals", inverse_size=True,
-                        source_labels=key_source, target_labels=key_targets,
-                        figure_size=figsize, return_fig=True, **kws)
-                    fig[c].labels.title = str(
-                        f"{self._columns['col_condition']} = {x}")
-                    fig[c].draw()
-                    res[c] = anc.uns[kwargs["key_added"]]
-        return ann, res, fig
+        if col_condition is True:
+            col_condition = self._columns["col_condition"]
+        if layer and layer not in self.adata.layers:
+            layer = self.adata._layers[layer]
+        adata = (self.rna[subset] if subset is not None else self.rna).copy()
+        res, fig = cr.ax.analyze_receptor_ligand(
+            adata, method=method, col_condition=col_condition, layer=layer,
+            key_sources=key_sources, key_targets=key_targets, copy=False, 
+            col_cell_type=col_cell_type, top_n=top_n, 
+            p_threshold=p_threshold, figsize=figsize, remove_ns=remove_ns, 
+            cmap=cmap, kws_plot=kws_plot, resource=resource, **kwargs)
+        self.results["receptor_ligand"] = res
+        self.figures["receptor_ligand"] = fig
+        return adata, res, fig
