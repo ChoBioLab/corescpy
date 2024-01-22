@@ -282,11 +282,10 @@ class Omics(object):
             "legend_loc": "on data", "legend_fontweight": "medium", **kwargs})
         return fig
             
-    def plot(self, kind="all", genes=None, genes_highlight=None, subset=None,
+    def plot(self, genes, kind="all", genes_highlight=None, subset=None,
              group=None, layer=None, kws_qc=False, marker_genes_dict=None, 
              kws_umap=None, kws_heat=None, kws_violin=None, kws_dot=None, 
-             kws_matrix=None, cell_types_circle=None, 
-             col_condition=None, **kwargs):
+             kws_matrix=None, cell_types_circle=None, **kwargs):
         """Create a variety of plots."""
         figs = {}
         if group is None:  # if unspecified grouping variable...
@@ -323,9 +322,10 @@ class Omics(object):
         if isinstance(kind, str) and (kind != "all"):  # if only 1 plot type
             kws_violin, kws_heat, kws_matrix, kws_dot = [
                 kwargs if kind in x[0] and x[1] is None else x[1] 
-                for x in zip(["violin", ["heat", "hm"], "matrix", "dot", ], [
+                for x in zip(["violin", ["heat", "hm"], "matrix", "dot"], [
                     kws_violin, kws_heat, kws_matrix, kws_dot])
                 ]  # can specify plot arguments via overall keyword arguments
+        print(kws_violin, kws_heat, kws_matrix, kws_dot)
         figs["gex"] = cr.pl.plot_gex(
             adata, col_cell_type=group, genes=genes, kind=kind, layer=layer, 
             col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict,
