@@ -295,3 +295,46 @@ def plot_umap_split(adata, split_by, color="leiden",
                        ax=axs[i], show=False, **{"title": cat, **kwargs})
     plt.tight_layout()
     return fig, axs
+
+
+def plot_cat_split(adata, col_condition, col_cell_type="leiden", genes=None, 
+                   columns=3, use_raw=False, layer=None, 
+                   col_gene_symbols=None, **kwargs):
+    """
+    Create violin plots.
+    
+    Plots are split by `col_condition`, 
+    with rows for each `col_cell_type`. If `column` is a number, the 
+    facets of the plot will wrap according to that number; 
+    if it's a column name, the columns will represent groups within 
+    that column (i.e., a third condition). If it's None, it will try to
+    make a square-ish grid.
+    Part of code (getting obs_df) was adapated from a comment in
+    https://github.com/scverse/scanpy/issues/1448.
+    """
+    kwargs = {"margin_titles": True, "kind": "violin", 
+              "aspect": 1.5, **kwargs}  # add custom defaults if unspecified
+    if genes is None:
+        genes = list(adata.var_names)
+    col_gene_symbols = col_gene_symbols if (
+        col_gene_symbols not in adata.var.index.names) else None
+    if columns is None:  # square if no column variable or specified col_wrap
+        columns = cr.pl.square_grid(len(adata.obs[col_cell_type].unique()))[1]
+    if kwargs["kind"] == "violin" and "split" not in kwargs:
+        kwargs.update({"split": True})  # split violin plot if doing violin
+    cats = [col_condition, col_cell_type, columns] if isinstance(
+        columns, str) else [col_condition, col_cell_type]  # metadata columns
+    dff = sc.get.obs_df(adata, genes + cats, use_raw=use_raw, layer=layer,
+                        gene_symbols=col_gene_symbols)  # GEX + metadata as df
+    dff = dff.set_index(cats).stack().reset_index()
+    dff.columns = cats + ["Gene", "Expression"]
+    fig = sb.catplot(
+        data=dff, x="Gene", y="Expression", hue=col_condition, 
+        row=col_cell_type if isinstance(columns, str) else None, 
+        col_wrap=columns if isinstance(columns, int) else None, 
+        col=columns if isinstance(columns, str) else col_cell_type, **kwargs)
+    labs = dict(row_template="{row_name}", col_template="{col_name}")
+    fig.set_titles(**labs)  # titles just "label," not "group column = label"
+    fig.tight_layout()
+    fig.fig.show()
+    return fig

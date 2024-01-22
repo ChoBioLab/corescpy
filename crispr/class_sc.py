@@ -283,23 +283,22 @@ class Omics(object):
         return fig
             
     def plot(self, kind="all", genes=None, genes_highlight=None, subset=None,
-             col_cell_type=None, layer=None, marker_genes_dict=None,
-             kws_qc=False, kws_umap=None, kws_heat=None, kws_violin=None, 
-             kws_dot=None, kws_matrix=None, cell_types_circle=None, **kwargs):
+             group=None, layer=None, kws_qc=False, marker_genes_dict=None, 
+             kws_umap=None, kws_heat=None, kws_violin=None, kws_dot=None, 
+             kws_matrix=None, cell_types_circle=None, 
+             col_condition=None, **kwargs):
         """Create a variety of plots."""
         figs = {}
         if group is None:  # if unspecified grouping variable...
             group = self._columns["col_cell_type"]  # default cell type column
         if kind == "all":
             kind = ["all", "umap"]
-        if "umap" in kind:
-            kind.remove("umap")
-            umap = True
-        else:
-            umap = False
+        umap = "umap" in kind or (isinstance(str, kind) and kind == "all")
+        if "umap" in kind:  # remove "umap" from "kind" since stored in `umap`
+            kind = list(set(kind).difference(set(["umap"])))
         if len(kind) == 1:
-            kind = kind[0]
-        adata = self.rna[subset].copy() if subset else self.rna.copy()
+            kind = kind[0]  # in case "kind" is length 1 after removing umap
+        adata = (self.rna if subset is None else self.rna[subset]).copy()
         if kws_umap is None:
             kws_umap = {}
         if "legend_loc" not in kws_umap:
@@ -324,7 +323,7 @@ class Omics(object):
         if isinstance(kind, str) and (kind != "all"):  # if only 1 plot type
             kws_violin, kws_heat, kws_matrix, kws_dot = [
                 kwargs if kind in x[0] and x[1] is None else x[1] 
-                for x in zip(["violin", ["heat", "hm"], "matrix", "dot"], [
+                for x in zip(["violin", ["heat", "hm"], "matrix", "dot", ], [
                     kws_violin, kws_heat, kws_matrix, kws_dot])
                 ]  # can specify plot arguments via overall keyword arguments
         figs["gex"] = cr.pl.plot_gex(
@@ -355,6 +354,26 @@ class Omics(object):
             fig = cr.pl.plot_umap_multi(self.rna, color, **kws)  # multi-gene
         else:  # ...or single UMAP embedding (categorical or continous)
             fig = sc.pl.umap(self.rna, color=color, **kws)  # UMAP
+        return fig
+    
+    def plot_compare(self, genes, col_condition=None, col_cell_type=None, 
+                     layer=None, subset=None, **kwargs):
+        """
+        Plot gene expression across cell types and 
+        condition(s) (string for 1 condition or list for 2, or None
+        to default to `self._columns["col_condition"]`).
+        """
+        ann = (self.rna if subset is None else self.rna[subset]).copy()
+        if layer:
+            ann.X = (ann.layers[layer] if layer in ann.layers else ann.layers[
+                self._layers[layer]]).copy()
+        con, cct = [x[1] if x[1] else self._columns[x[0]] 
+                    for x in zip(["col_condition", "col_cell_type"], [
+                        col_condition, col_cell_type])]  # specs v. default
+        con, col = [con, None] if isinstance(con, str) else con  # 1 or 2?
+        fig = cr.pl.plot_cat_split(
+            ann, con, col_cell_type=cct, genes=genes, 
+            **{"columns": col, **kwargs})  # plot by groups
         return fig
     
     def plot_coex(self, genes, use_raw=False, **kwargs):
