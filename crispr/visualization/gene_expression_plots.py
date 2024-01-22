@@ -298,7 +298,7 @@ def plot_umap_split(adata, split_by, color="leiden",
 
 
 def plot_cat_split(adata, col_condition, col_cell_type="leiden", genes=None, 
-                   columns=3, use_raw=False, layer=None, 
+                   columns=3, use_raw=False, layer=None, long_labels=False,
                    col_gene_symbols=None, **kwargs):
     """
     Create violin plots.
@@ -333,8 +333,9 @@ def plot_cat_split(adata, col_condition, col_cell_type="leiden", genes=None,
         row=col_cell_type if isinstance(columns, str) else None, 
         col_wrap=columns if isinstance(columns, int) else None, 
         col=columns if isinstance(columns, str) else col_cell_type, **kwargs)
-    labs = dict(row_template="{row_name}", col_template="{col_name}")
-    fig.set_titles(**labs)  # titles just "label," not "group column = label"
+    if long_labels is False:
+        labs = dict(row_template="{row_name}", col_template="{col_name}")
+        fig.set_titles(**labs)  # titles = "label," not "group column = label"
     fig.tight_layout()
     fig.fig.show()
     return fig

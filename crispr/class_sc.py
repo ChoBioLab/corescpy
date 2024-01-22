@@ -293,7 +293,7 @@ class Omics(object):
             group = self._columns["col_cell_type"]  # default cell type column
         if kind == "all":
             kind = ["all", "umap"]
-        umap = "umap" in kind or (isinstance(str, kind) and kind == "all")
+        umap = "umap" in kind or (isinstance(kind, str) and kind == "all")
         if "umap" in kind:  # remove "umap" from "kind" since stored in `umap`
             kind = list(set(kind).difference(set(["umap"])))
         if len(kind) == 1:
