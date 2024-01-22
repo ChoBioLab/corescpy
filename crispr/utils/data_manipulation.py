@@ -28,6 +28,21 @@ def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
     return pdata
 
 
+def create_condition_combo(adata, col_condition, col_label_new=None, sep="_"):
+    """Create a column representing combination of multiple columns."""
+    if col_label_new is None:
+        col_label_new = "_".join(col_condition)
+    if isinstance(adata, pd.DataFrame):  # if adata is dataframe
+        adata[col_label_new] = adata[col_condition[0]]  # start w/ 1st
+        for x in col_condition[1:]:  # loop to add "_{condition value}"...
+            adata[col_label_new] = adata[col_label_new].astype(
+                "string") + sep + adata[x]  # ...to make full combination
+    else:  # if adata is an AnnData object
+        adata.obs = create_condition_combo(adata.obs, col_condition, 
+                                           col_label_new=col_label_new)
+    return adata
+
+
 rfx_convert = r"""
 require(Seurat)
 require(zellkonverter)

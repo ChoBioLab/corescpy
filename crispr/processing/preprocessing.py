@@ -96,7 +96,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
     # Load Object (or Copy if Already AnnData or MuData)
-    _ = kwargs.pop("col_sample_id") if "col_sample_id" in kwargs else None
+    _ = kwargs.pop("col_sample_id", None)
     if isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
         print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
@@ -289,7 +289,7 @@ def process_data(adata,
         col_gene_symbols = None  # ...so functions will refer to index name
     figs = {}
     if isinstance(kws_scale, dict): # if extracted all sc.pp.scale arguments
-        max_val, cen = [kws_scale.pop(x) if x in kws_scale else None 
+        max_val, cen = [kws_scale.pop(x, None) 
                         for x in ["max_value", "zero_center"]]
         if any((i for i in [max_val, cen])) and len(
             kws_scale) == 0:  # if extracted all regular-scale keywords
@@ -298,7 +298,7 @@ def process_data(adata,
         max_val, cen = 0, 0
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
-    n_top = kwargs.pop("n_top") if "n_top" in kwargs else 10
+    n_top = kwargs.pop("n_top", 10)
     if "col_batch" in kwargs or "col_sample_id" in kwargs:
         sids = []
         for x in ["col_batch", "col_sample_id"]:

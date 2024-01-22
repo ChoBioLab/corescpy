@@ -332,9 +332,8 @@ def perform_augur(adata, assay=None, layer=None,
             figs["perturbation_effect_by_cell_type"] = pt.pl.ag.lollipop(
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?
-            kws_umap = kwargs.pop("kws_umap") if "kws_umap" in kwargs else {}
-            kws_neighbors = kwargs.pop(
-                "kws_neighbors") if "kws_neighbors" in kwargs else {}
+            kws_umap = kwargs.pop("kws_umap", {})
+            kws_neighbors = kwargs.pop(x, {})
             try:
                 # def_pal = {col_perturbed: dict(zip(
                 #     [key_control, key_treatment], ["black", "red"]))}
@@ -492,7 +491,7 @@ def compute_distance(adata, col_target_genes="target_genes",
     return distance, data, dff, mat, figs
 
 
-def perform_gsea(adata, adata_sc=None, 
+def perform_gsea(pdata, adata_sc=None, 
                  col_cell_type=None, col_sample_id=None,
                  col_condition="leiden", key_condition="0", 
                  col_label_new=None, ifn_pathways=True,
@@ -531,23 +530,21 @@ def perform_gsea(adata, adata_sc=None,
     if adata_sc is not None and pdata is None:  # if needed, create pseudobulk
         pdata = cr.tl.create_pseudobulk(
             adata_sc.copy(), col_cell_type, col_sample_id=col_sample_id, 
-            layer=layer, mode="sum", kws_process=True)  # pseudobulk from SC
+            layer="counts", mode="sum", kws_process=True)  # pseudobulk
     if geneset_size_range is None:  # default gene set size range
         geneset_size_range = [15, 500]
     if kws_run_gsea is None:
         kws_run_gsea = dict(verbose=True)
-    if layer:
-        pdata.X = pdata.layers[layer].copy()
-    # if kws_pseudobulk is True or (isinstance(kws_pseudobulk, dict) and len(
-    #     kws_pseudobulk) == 0):  #  set pseudobulk keyword defaults
-    #     kws_pseudobulk = dict(n_cells=75, n_samples_per_group=3)
+    if layer and adata_sc:
+        adata_sc.X = adata_sc.layers[layer].copy()
     if isinstance(col_condition, str):
         col_label_new = col_condition
-    else:
+    else:  # if multi-condition, create column representing combination
         if col_label_new is None:
-            col_label_new = "_".join(col_condition)
-        pdata.obs[col_label_new] = pdata.obs[col_condition[0]].astype(
-            "string") + "_" + pdata.obs[col_condition[1]]
+            col_label_new = "_".join(col_condition)  # condition combo label
+        pdata, adata_sc = [cr.tl.create_condition_combo(
+            x.obs, col_condition, col_label_new) if x else None for x in [
+                pdata, adata_sc]]  # create combination label (e.g., c1_c2)
     
     # Rank Genes
     sc.tl.rank_genes_groups(pdata, col_label_new, method="t-test", 
@@ -594,36 +591,24 @@ def perform_gsea(adata, adata_sc=None,
     # Cell-Level
     if adata_sc is not None:
         adata_sc = adata_sc.copy()
+        sc.tl.rank_genes_groups(adata_sc, col_label_new, method="t-test", 
+                                key_added="t-test", use_raw=use_raw)
         gsea_results_cell = decoupler.run_aucell(
             adata_sc, rxome, source="geneset", target="genesymbol",
             use_raw=False)  # run individual cell-level GSEA
-        
-    # Pseudo-Bulk
-    # if kws_pseudobulk:
-    #     pb_data = cr.tl.create_pseudobulk(
-    #         adata, col_condition, layer=cr.pp.get_layer_dict()["counts"],
-    #         **kws_pseudobulk)
-    #     pb_data.layers["counts"] = pb_data.X.copy()
-    #     sc.pp.normalize_total(pb_data)
-    #     sc.pp.log1p(pb_data)
-    #     sc.pp.pca(pb_data)
-    #     sc.pl.pca(pb_data, color=col_condition + ["lib_size"], 
-    #               ncols=1, size=250)
-    #     groups = pb_data.obs.condition.astype(
-    #         "string") + "_" + pb_data.obs.cell_type
-    #     # TODO: R to Python port?
 
     # Plots & Other Output
     try:
         figs = cr.pl.plot_gsea_results(
-            adata, gsea_results, p_threshold=p_threshold, **kwargs,
-            ifn_pathways=ifn_pathways, use_raw=use_raw, layer=layer)
+            adata_sc if adata_sc else pdata, gsea_results, 
+            p_threshold=p_threshold, **kwargs, ifn_pathways=ifn_pathways, 
+            use_raw=use_raw, layer=layer)  # plot GSEA results
     except Exception as err:
         warnings.warn(f"{err}\n\n\nPlotting GSEA results failed.")
         figs = err
     res = {"gsea_results": gsea_results, "score_sort": score_sort, 
            "gsea_results_cell": gsea_results_cell}
-    return adata, res, figs 
+    return pdata, adata_sc, res, figs
 
 
 def perform_pathway_interference(
@@ -681,10 +666,8 @@ def perform_dea(
     # Plot
     fig = plt.figure(figsize=figsize)
     axs, legend_axes = decoupler.plot_associations(
-        p_pdata, uns_key=uns_key, obsm_key=obsm_key,
+        pdata, uns_key=uns_key, obsm_key=obsm_key,
         stat_col=plot_stat, obs_annotation_cols = col_covariates, 
-        titles=['Adjusted p-Values from ANOVA', 'Principle Component Scores'])
+        titles=["Adjusted p-Values from ANOVA", "Principle Component Scores"])
     plt.show()
     return pdata, fig
-
-    

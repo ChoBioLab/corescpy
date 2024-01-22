@@ -631,8 +631,6 @@ class Crispr(Omics):
                     kwargs.update({c: x[c]})  # & use object attribute
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        if "col_cell_type" in kwargs:
-            _ = kwargs.pop("col_cell_type")
         if col_split_by is not False:  # unless explicitly forbid split_by
             col_split_by = self._columns["col_sample_id"]
         if layer is None or layer not in self.rna.layers:

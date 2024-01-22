@@ -226,6 +226,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
 
 def plot_umap_multi(adata, genes, title=None, **kwargs):
     """Plot multiple continuous features (e.g, genes) on same UMAP."""
+    _ = kwargs.pop("cmap")  # can't specify cmap for this function
     fxs = [plt.cm.Reds, plt.cm.Blues, plt.cm.Greens, 
            plt.cm.Purples, plt.cm.Oranges, plt.cm.Greys]
     if len(genes) > len(fxs):
