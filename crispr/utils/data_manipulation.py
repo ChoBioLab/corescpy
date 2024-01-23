@@ -19,11 +19,13 @@ def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
     pdata = dc.get_pseudobulk(
         adata, sample_col=col_sample_id, groups_col=col_cell_type, 
         layer=layer, mode=mode, **kwargs)
-    pdata.layers["counts"] = pdata.X.copy()
+    pdata.layers[layers["counts"]] = pdata.X.copy()
     if kws_process is True or isinstance(kws_process, dict):
         sc.pp.normalize_total(pdata, target_sum=kws_process["target_sum"])
         sc.pp.log1p(pdata)
+        pdata.layers[layers["log1p"]] = pdata.X.copy()
         sc.pp.scale(pdata, max_value=kws_process["max_value"])
+        pdata.layers[layers["scaled"]] = pdata.X.copy()
         sc.tl.pca(pdata, n_comps=kws_process["n_comps"])
     return pdata
 

@@ -8,4 +8,6 @@ from .perturbations import (perform_mixscape,
                             )
 from .clustering import cluster, find_marker_genes, perform_celltypist
 from .composition import analyze_composition
-from .communication import analyze_receptor_ligand, analyze_causal_network
+from .communication import (analyze_receptor_ligand, 
+                            analyze_causal_network,
+                            calculate_dea_deseq2)

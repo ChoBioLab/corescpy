@@ -30,7 +30,8 @@ class Omics(object):
     def __init__(
         self, file_path, assay=None, assay_protein=None, raw=False,
         col_gene_symbols="gene_symbols", col_cell_type="leiden", 
-        col_sample_id=None, col_condition=None, col_num_umis=None, 
+        col_sample_id=None, col_subject=None, 
+        col_condition=None, col_num_umis=None, 
         key_control=None, key_treatment=None, kws_multi=None, **kwargs):
         """
         Initialize Omics class object.
@@ -118,7 +119,8 @@ class Omics(object):
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
             col_gene_symbols=col_gene_symbols, col_cell_type=col_cell_type, 
-            col_sample_id=col_sample_id, col_batch=col_sample_id, 
+            col_sample_id=col_sample_id, col_batch=col_sample_id,
+            col_subject=col_subject,  # e.g., patient ID rather than sample
             col_condition=col_condition, col_num_umis=col_num_umis)
         self._keys = dict(key_control=key_control, 
                           key_treatment=key_treatment)
@@ -659,19 +661,23 @@ class Omics(object):
     
     def calculate_receptor_ligand(
         self, method="liana", subset=None, layer="log1p", top_n=20,
-        col_cell_type=None, col_condition=None, cmap="magma", kws_plot=None, 
-        key_sources=None, key_targets=None, resource="CellPhoneDB", 
+        col_cell_type=None, col_condition=None, col_subject=True,
+        cmap="magma", kws_plot=None, key_sources=None, key_targets=None, 
+        resource="CellPhoneDB", 
         n_perms=10, p_threshold=0.01, remove_ns=True, figsize=None, **kwargs):
         """Calculate receptor-ligand interactions."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
+        if col_subject is True:
+            col_subject = self._columns["col_cell_type"]
         if col_condition is True:
             col_condition = self._columns["col_condition"]
         if layer and layer not in self.adata.layers:
             layer = self.adata._layers[layer]
         adata = (self.rna[subset] if subset is not None else self.rna).copy()
         res, fig = cr.ax.analyze_receptor_ligand(
-            adata, method=method, col_condition=col_condition, layer=layer,
+            adata, method=method, col_condition=col_condition, 
+            col_subject=col_subject, layer=layer,
             key_sources=key_sources, key_targets=key_targets, copy=False, 
             col_cell_type=col_cell_type, top_n=top_n, remove_ns=remove_ns,
             cmap=cmap, p_threshold=p_threshold, figsize=figsize, 
@@ -686,10 +692,11 @@ class Omics(object):
                              title=None, out_dir=None, **kwargs):
         """Plot previously-run receptorout_dir-ligand analyses."""
         subset = self.results["receptor_ligand_info"]["subset"]
-        if isinstance(self.results["receptor_ligand"], dict):
+        res = self.results["receptor_ligand"]["liana_res"]
+        if isinstance(res, dict):
             figs = {}
             ccc = self.results["receptor_ligand_info"]["col_condition"]
-            for c in self.results["receptor_ligand"]:
+            for c in res:
                 if c.lower() == "all":
                     continue
                 # res = (self.rna if c.lower() == "overall" else self.rna[
@@ -697,10 +704,9 @@ class Omics(object):
                 # if subset:
                 #     res = res[subset]
                 figs[c] = cr.pl.plot_receptor_ligand(
-                    liana_res=self.results["receptor_ligand"][c],
+                    liana_res=res[c], title=f"{title} ({c})", **kwargs,
                     # adata=res,
-                    key_sources=key_sources, key_targets=key_targets, 
-                    title=f"{title} ({c})", **kwargs)
+                    key_sources=key_sources, key_targets=key_targets)
                 if out_dir:
                     for r in figs[c]:
                         figs[c][r].save(os.path.join(
@@ -709,7 +715,7 @@ class Omics(object):
         else:
             # res = (self.rna if subset is None else self.rna[subset]).copy()
             figs = cr.pl.plot_receptor_ligand(
-                liana_res=self.results["receptor_ligand"], 
+                liana_res=res, 
                 # adata=res,
                 title=title,
                 key_sources=key_sources, key_targets=key_targets, **kwargs)
