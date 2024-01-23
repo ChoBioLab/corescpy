@@ -12,7 +12,7 @@ import pertpy as pt
 import squidpy as sq
 import liana
 import os
-# import copy
+from copy import deepcopy
 import muon
 import anndata
 import crispr as cr
@@ -403,11 +403,11 @@ class Omics(object):
         """
         if assay_protein is None:
             assay_protein = self._assay_protein
-        layer_in = layer_in if layer_in in adata.layers else self._layers[
+        layer = layer_in if layer_in in self.adata.layers else self._layers[
             layer_in]  # detect layer; raw counts if not specified
         kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
         kws_scale = {} if isinstance(kws_scale, str) and kws_scale.lower(
-            ) == "z" else copy.deepcopy(kws_scale)  # scale kws processing
+            ) == "z" else deepcopy(kws_scale)  # scale kws processing
         if isinstance(kws_scale, dict) and all([x not in kws_scale for x in [
             "max_value", "zero_center"]]):  # if z-scoring GEX ~ control
             znorm_default = {
@@ -418,7 +418,7 @@ class Omics(object):
         self.info["methods"]["scale"] = kws_scale
         kws.update(dict(kws_scale=kws_scale))
         adata = self.rna.copy()
-        adata.X = adata.layers[layer_in]  # use specified layer
+        adata.X = adata.layers[layer]  # use specified layer
         adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
         # if assay_protein is not None:  # if includes protein assay
         #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)

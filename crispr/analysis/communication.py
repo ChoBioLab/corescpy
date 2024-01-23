@@ -6,11 +6,14 @@ from pydeseq2.dds import DeseqDataSet
 from pydeseq2.ds import DeseqStats
 import scanpy as sc
 import omnipath
+import corneto
 import traceback
 import warnings
 import crispr as cr
 import pandas as pd
 import numpy as np
+
+layers = cr.pp.get_layer_dict()
 
 
 def analyze_receptor_ligand(
@@ -54,12 +57,12 @@ def analyze_receptor_ligand(
         kws = {**dict(
             cmap=cmap, p_threshold=p_threshold, top_n=top_n, figsize=figsize,
             key_sources=key_sources, key_targets=key_targets), **kws_plot}
-        res["liana_res"] = adata.uns[kwargs["key_added"]]
+        res = {"liana_res": adata.uns[kwargs["key_added"]]}
         if col_condition is not None:
             # Differential Expression Analysis
             pdata = cr.tl.create_pseudobulk(
-                adata, col_cell_type, col_sample_id=col_sample_id,
-                mode="sum", **kwargs)  # create pseudo-bulk data
+                adata, col_cell_type, col_sample_id=col_sample_id, 
+                layer=layers["counts"], mode="sum")  # pseudo-bulk data
             res["dea_results"] = cr.ax.calculate_dea_deseq2(
                 pdata, col_cell_type, col_condition, 
                 key_control, key_treatment, col_subject=col_subject,
@@ -69,11 +72,10 @@ def analyze_receptor_ligand(
                         ].copy()  # subset to treatment group
             res["lr_res"] = liana.mu.df_to_lr(
                 atx, dea_df=res["dea_results"], resource_name="consensus", 
-                expr_prop=min_prop, groupby=col_cell_type, 
+                expr_prop=min_prop, groupby=col_cell_type, verbose=True, 
                 stat_keys=["stat", "pvalue", "padj"], use_raw=False, 
-                complex_col="stat", verbose=True, return_all_lrs=False
-                ).sort_values("interaction_stat", ascending=False
-                              )  # integrate statistics from DEA
+                complex_col="stat", return_all_lrs=False).sort_values(
+                    "interaction_stat", ascending=False)  # merge DEA results
         try:
             fig = cr.pl.plot_receptor_ligand(
                 adata=adata, lr_res=res["lr_res"], **kws)  # plot
@@ -85,8 +87,9 @@ def analyze_receptor_ligand(
     return res, fig
     
 
-def calculate_dea_deseq2(pdata, col_cell_type, col_condition, 
-                         key_control, key_treatment, col_subject=None,
+def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
+                         key_control, key_treatment, layer=layers["counts"], 
+                         col_subject=None,
                          min_prop=0, min_count=0, min_total_count=0, 
                          col_gene_symbols=None, quiet=True):
     """Calculate DEA based on Liana tutorial usage of DESeq2."""
@@ -96,12 +99,12 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
     facs = col_condition if not col_subject else [col_condition, col_subject]
     for cell_group in pdata.obs[col_cell_type].unique():
         psub = pdata[pdata.obs[col_cell_type] == cell_group].copy()  # subset
-        if psub.obs.shape[0] == 1 or any((x not in psub.obs[
+        if psub.obs.shape[0] < 4 or any((x not in psub.obs[
             col_condition].dropna() for x in [key_control, key_treatment])):
             dea_results[cell_group] = None
             warnings.warn("Skipping DEA calculations for {cell_group}: "
                           "doesn't have all levels of {col_condition}.")
-            next  # skip if doesn't contain both levels of contrast
+            continue  # skip if doesn't contain both levels of contrast
 
         # Filter Genes by edgeR-like Thresholds
         genes = dc.filter_by_expr(
@@ -113,9 +116,10 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
             dea_results[cell_group] = None
             warnings.warn("Skipping DEA calculations for {cell_group}: "
                           "doesn't have all levels of {col_condition}.")
-            next  # skip if doesn't contain both levels of contrast
+            continue  # skip if doesn't contain both levels of contrast
 
         # Build DESeq2 object
+        psub.X = psub.layers[layers["counts"]].copy()
         dds = DeseqDataSet(
             adata=psub, design_factors=facs, quiet=quiet,
             ref_level=[col_condition, key_control], refit_cooks=True)
@@ -138,7 +142,7 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
 def analyze_causal_network(adata, col_condition, key_control, key_treatment,
                            col_cell_type, key_source, key_target, 
                            dea_results=None, col_sample_id=None,
-                           layer="log1p", expr_prop=0.1, 
+                           layer="log1p", expr_prop=0.1, min_n_ulm=5,
                            col_gene_symbols=None,
                            node_cutoff=0.1, max_penalty=1, min_penalty=0.01,
                            edge_penalty=0.01, max_seconds=60*3, 
@@ -149,7 +153,7 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
     figs = {}
     if layer is not None:
         adata.X = adata.layers[layer].copy()
-    uf col_gene_symbols is None:
+    if col_gene_symbols is None:
         col_gene_symbols = adata.var.index.names[0]
     
     # Pseudo-Bulk -> DEA
@@ -191,7 +195,8 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
         index=col_cell_type, columns=col_gene_symbols, 
         values="stat").fillna(0)  # long to wide data format
     net = dc.get_collectri()  # get TF regulons
-    ests, pvals = dc.run_ulm(mat=dea_wide, net=net)  # enrichment analysis
+    ests, pvals = dc.run_ulm(mat=dea_wide, net=net,
+                             min_n=min_n_ulm)  # enrichment analysis
     tfs = ests.copy().loc[key_target].to_dict()  # target TFs
     scores_out = {k: v for i, (k, v) in enumerate(tfs.items()) if i < top_n}
 
@@ -206,7 +211,7 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
     scores_in = {k: v for i, (k, v) in enumerate(lr_n.items()) if i < top_n}
     
     # Prior Knowledge Network
-    prior_graph = liana.mu.build_prior_network(
+    prior_graph = liana.mt.build_prior_network(
         input_pkn, scores_in, scores_out, verbose=True)
     
     # Node Weights = GEX Proportions w/i Target Cell Type
@@ -217,9 +222,10 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
     node_weights = node_weights["props"].to_dict()
     
     # Find Causal Network
-    df_res, problem = liana.mu.find_causalnet(
+    df_res, problem = liana.mt.find_causalnet(
         prior_graph, scores_in, scores_out, node_weights,
         node_cutoff=node_cutoff,  # max_penalty to any node < this of cells
         max_penalty=max_penalty, min_penalty=min_penalty, solver=solver,
         max_seconds=max_seconds, edge_penalty=edge_penalty, verbose=verbose)
-    return df_res, problem
+    fig = corneto.methods.carnival.visualize_network(df_res)
+    return df_res, problem, fig
