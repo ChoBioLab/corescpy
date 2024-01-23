@@ -100,8 +100,8 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
     # Run DEA for Each Cell Type
     for cell_group in pdata.obs[col_cell_type].unique():
         psub = pdata[pdata.obs[col_cell_type] == cell_group].copy()  # subset
-        if psub.obs.shape[0] < 4 or any((x not in psub.obs[
-            col_condition].dropna() for x in [key_control, key_treatment])):
+        if psub.obs.shape[0] < 4 or any((x not in list(psub.obs[
+            col_condition].dropna()) for x in [key_control, key_treatment])):
             dea_results[cell_group] = None  # store results as None
             warnings.warn("Skipping DEA calculations for {cell_group}: "
                           "doesn't have all levels of {col_condition}.")
