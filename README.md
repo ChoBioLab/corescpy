@@ -98,7 +98,27 @@ Certain arguments used throughout the `crispr` package (including outside the `c
     - a path to a 10x directory (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz),
     - a path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible), 
     - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon, or by using `crispr.pp.create_object(file_path)`), or
-    - a dictionary containing keyword arguments to pass to  `crispr.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); see function documentation), or
+    - a dictionary containing keyword arguments to pass to  `crispr.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); press the arrow to expand details here),
+
+<details><summary>Click to expand details</summary>
+
+```
+crd = "<YOUR DIRECTORY HERE>"
+# e.g., "/home/asline01/projects/crispr/examples/data/crispr-screening/HH03"
+
+subd = "<YOUR SUB-DIRECTORY WITH THE .mtx, barcodes, features files HERE>"
+# e.g., "filtered_feature_bc_matrix"
+
+proto = "<YOUR PROTOSPACER .csv HERE; file should be under `crdir` directory>" 
+# e.g., "crispr_analysis/protospacer_calls_per_cell.csv"
+
+file_path = dict(directory=crd, subdirectory_mtx=subd, file_protospacer=proto)
+```
+If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_matrix" and "crispr_analysis/protospacer_calls_per_cell.csv" are contained in the directory defined in `file_path["directory"]`), you should be able to specify just `file_path=dict(directory=<YOUR DIRECTORY HERE>)` (e.g., `file_path=dict(directory="/home/projects/crispr-screening/crispr-screening/analysis/cellranger/cr_count_2023-05-15_1837/HH02/outs")`).
+
+</details>
+
+   or
     - to concatenate multiple datasets, a dictionary (keyed by your desired subject/sample names to be used in `col_sample_id`) consisting of whatever objects you would pass to `create_object()`'s `file` argument for the individual objects. You must also specify `col_sample` (a tuple as described in the documentation below). The other arguments passed to the `crispr.pp.create_object()` function (e.g., `col_gene_symbols`) can be specified as normal if they are common across samples; otherwise, specify them as lists in the same order as the `file` dictionary. 
 
 <!-- break -->
