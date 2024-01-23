@@ -1,10 +1,10 @@
-import crispr as cr
+from crispr.processing import get_layer_dict
 import decoupler as dc
 import scanpy as sc
 import pandas as pd
 import numpy as np
 
-layers = cr.pp.get_layer_dict()
+layers = get_layer_dict()
 
 
 def create_pseudobulk(adata, col_cell_type, col_sample_id=None, 

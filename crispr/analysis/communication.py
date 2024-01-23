@@ -6,9 +6,11 @@ from pydeseq2.dds import DeseqDataSet
 from pydeseq2.ds import DeseqStats
 import scanpy as sc
 import omnipath
-# import corneto
+import corneto
 import traceback
 import warnings
+from crispr.visualization import plot_receptor_ligand
+from crispr.utils import create_pseudobulk
 import pandas as pd
 import numpy as np
 
@@ -58,10 +60,10 @@ def analyze_receptor_ligand(
         res = {"liana_res": adata.uns[kwargs["key_added"]]}
         if col_condition is not None:
             # Differential Expression Analysis
-            pdata = cr.tl.create_pseudobulk(
+            pdata = create_pseudobulk(
                 adata, col_cell_type, col_sample_id=col_sample_id, 
                 layer=layer_counts, mode="sum")  # pseudo-bulk data
-            res["dea_results"] = cr.ax.calculate_dea_deseq2(
+            res["dea_results"] = calculate_dea_deseq2(
                 pdata, col_cell_type, col_condition, 
                 key_control, key_treatment, col_subject=col_subject,
                 min_prop=min_prop, min_count=min_count, layer=layer_counts,
@@ -75,7 +77,7 @@ def analyze_receptor_ligand(
                 complex_col="stat", return_all_lrs=False).sort_values(
                     "interaction_stat", ascending=False)  # merge DEA results
         try:
-            fig = cr.pl.plot_receptor_ligand(
+            fig = plot_receptor_ligand(
                 adata=adata, lr_res=res["lr_res"], **kws)  # plot
         except Exception as err:
             print(traceback.format_exc())
@@ -94,11 +96,13 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
     if col_gene_symbols is None:  # if gene name column unspecified...
         col_gene_symbols = pdata.var.index.names[0]  # ...index=gene names
     facs = col_condition if not col_subject else [col_condition, col_subject]
+    
+    # Run DEA for Each Cell Type
     for cell_group in pdata.obs[col_cell_type].unique():
         psub = pdata[pdata.obs[col_cell_type] == cell_group].copy()  # subset
         if psub.obs.shape[0] < 4 or any((x not in psub.obs[
             col_condition].dropna() for x in [key_control, key_treatment])):
-            dea_results[cell_group] = None
+            dea_results[cell_group] = None  # store results as None
             warnings.warn("Skipping DEA calculations for {cell_group}: "
                           "doesn't have all levels of {col_condition}.")
             continue  # skip if doesn't contain both levels of contrast
@@ -108,15 +112,15 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
             psub, group=col_condition, min_count=min_count, min_prop=min_prop,
             min_total_count=min_total_count)  # filter ~ counts, reads
         psub = psub[:, genes].copy()  # subset by filtered genes
-        if psub.obs.shape[0] == 1 or any((x not in psub.obs[
-            col_condition].dropna() for x in [key_control, key_treatment])):
+        if psub.obs.shape[0] < 3 or any((x not in list(psub.obs[
+            col_condition].dropna()) for x in [key_control, key_treatment])):
             dea_results[cell_group] = None
             warnings.warn("Skipping DEA calculations for {cell_group}: "
                           "doesn't have all levels of {col_condition}.")
             continue  # skip if doesn't contain both levels of contrast
 
         # Build DESeq2 object
-        psub.X = psub.layers[layers["counts"]].copy()
+        psub.X = psub.layers[layer].copy()
         dds = DeseqDataSet(
             adata=psub, design_factors=facs, quiet=quiet,
             ref_level=[col_condition, key_control], refit_cooks=True)
@@ -139,8 +143,8 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
 def analyze_causal_network(adata, col_condition, key_control, key_treatment,
                            col_cell_type, key_source, key_target, 
                            dea_results=None, col_sample_id=None,
-                           layer="log1p", expr_prop=0.1, min_n_ulm=5,
-                           col_gene_symbols=None,
+                           layer="log1p", layer_counts="counts",
+                           expr_prop=0.1, min_n_ulm=5, col_gene_symbols=None,
                            node_cutoff=0.1, max_penalty=1, min_penalty=0.01,
                            edge_penalty=0.01, max_seconds=60*3, 
                            solver="scipy", top_n=10, verbose=False):
@@ -157,7 +161,7 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
     if dea_results is None:
         pdata = dc.get_pseudobulk(
             adata, sample_col=col_sample_id, groups_col=col_cell_type,
-            mode="sum", layer=cr.pp.get_layer_dict()["counts"])  # pseudobulk
+            mode="sum", layer=layer_counts)  # pseudobulk
         dea_results = calculate_dea_deseq2(
             pdata, col_cell_type, col_condition, key_control, key_treatment,
             min_count=5, min_total_count=10, quiet=True)  # DEA results
