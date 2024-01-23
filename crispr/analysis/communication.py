@@ -21,6 +21,10 @@ def analyze_receptor_ligand(
         kws_plot = {}
     if layer is not None:
         adata.X = adata.layers[layer].copy()
+    if any((any(adata.obs[col_condition] == x) for x in ["Overall", "all"])):
+        raise ValueError("'Overall' and 'all' are reserved by this function "
+                         f"but exist in `.obs['{col_condition}']. "
+                         "Please rename those entries.")
         
     # Squidpy Method
     if method == "squidpy":

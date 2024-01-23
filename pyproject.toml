@@ -25,7 +25,7 @@ dependencies = [
     "pertpy",
     "harmonypy",
     "squidpy",
-    "liana",
+    "liana >= 1.0.4",
     "corneto",
     "cvxpy",
     "cylp",

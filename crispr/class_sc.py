@@ -443,8 +443,9 @@ class Omics(object):
     def bulk(self, mode="sum", subset=None, col_cell_type=None, 
              col_sample_id=None, layer="counts", copy=True, **kwargs):
         """Create pseudo-bulk data (col_sample_id=False to ignore)."""
-        col_cell_type, col_sample_id = [x if x else self._columns[x] for x \
-                                        in ["col_cell_type", "col_sample_id"]]
+        col_cell_type, col_sample_id = [x[1] if x[1] else self._columns[
+            x[0]] for x in zip(["col_cell_type", "col_sample_id"], 
+                               [col_cell_type, col_sample_id])]
         if col_sample_id is False:  # False = don't account for sample ID
             col_sample_id = None  # b/c if use None argument -> use ._columns
         kws_def = dict(col_sample_id=self._columns["col_sample_id"],
@@ -677,16 +678,27 @@ class Omics(object):
             kws_plot=kws_plot, resource=resource, **kwargs)  # analyze
         self.results["receptor_ligand"] = res
         self.figures["receptor_ligand"] = fig
+        self.results["receptor_ligand_info"] = {
+            "subset": subset, "col_condition": col_condition}
         return adata, res, fig
     
     def plot_receptor_ligand(self, key_sources=None, key_targets=None,
                              title=None, out_dir=None, **kwargs):
         """Plot previously-run receptorout_dir-ligand analyses."""
+        subset = self.results["receptor_ligand_info"]["subset"]
         if isinstance(self.results["receptor_ligand"], dict):
             figs = {}
+            ccc = self.results["receptor_ligand_info"]["col_condition"]
             for c in self.results["receptor_ligand"]:
+                if c.lower() == "all":
+                    continue
+                # res = (self.rna if c.lower() == "overall" else self.rna[
+                #     self.rna[ccc] == c]).copy()
+                # if subset:
+                #     res = res[subset]
                 figs[c] = cr.pl.plot_receptor_ligand(
                     liana_res=self.results["receptor_ligand"][c],
+                    # adata=res,
                     key_sources=key_sources, key_targets=key_targets, 
                     title=f"{title} ({c})", **kwargs)
                 if out_dir:
@@ -694,10 +706,12 @@ class Omics(object):
                         figs[c][r].save(os.path.join(
                             out_dir, f"receptor_ligand_{c}_{r}.png"), 
                                         limitsize=False)
-                    
         else:
+            # res = (self.rna if subset is None else self.rna[subset]).copy()
             figs = cr.pl.plot_receptor_ligand(
-                liana_res=self.results["receptor_ligand"], title=title,
+                liana_res=self.results["receptor_ligand"], 
+                # adata=res,
+                title=title,
                 key_sources=key_sources, key_targets=key_targets, **kwargs)
             if out_dir:
                 for r in figs:
