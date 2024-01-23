@@ -676,8 +676,8 @@ class Omics(object):
             layer = self.adata._layers[layer]
         adata = (self.rna[subset] if subset is not None else self.rna).copy()
         res, fig = cr.ax.analyze_receptor_ligand(
-            adata, method=method, col_condition=col_condition, 
-            col_subject=col_subject, layer=layer,
+            adata, col_condition=col_condition, col_subject=col_subject, 
+            method=method, layer=layer, layer_counts=self._layers["counts"],
             key_sources=key_sources, key_targets=key_targets, copy=False, 
             col_cell_type=col_cell_type, top_n=top_n, remove_ns=remove_ns,
             cmap=cmap, p_threshold=p_threshold, figsize=figsize, 

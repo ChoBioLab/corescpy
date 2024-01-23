@@ -6,14 +6,11 @@ from pydeseq2.dds import DeseqDataSet
 from pydeseq2.ds import DeseqStats
 import scanpy as sc
 import omnipath
-import corneto
+# import corneto
 import traceback
 import warnings
-import crispr as cr
 import pandas as pd
 import numpy as np
-
-layers = cr.pp.get_layer_dict()
 
 
 def analyze_receptor_ligand(
@@ -21,7 +18,8 @@ def analyze_receptor_ligand(
     key_control=None, key_treatment=None,
     col_sample_id=None, col_subject=None, 
     min_prop=0, min_count=0, min_total_count=0,
-    layer="log1p", key_sources=None, key_targets=None, col_cell_type=None, 
+    layer="log1p", layer_counts="counts",
+    key_sources=None, key_targets=None, col_cell_type=None, 
     n_perms=10, p_threshold=0.05, figsize=None, remove_ns=True, top_n=20,
     cmap="magma", kws_plot=None, resource="CellPhoneDB", copy=True, **kwargs):
     """Perform receptor-ligand analysis."""
@@ -62,12 +60,12 @@ def analyze_receptor_ligand(
             # Differential Expression Analysis
             pdata = cr.tl.create_pseudobulk(
                 adata, col_cell_type, col_sample_id=col_sample_id, 
-                layer=layers["counts"], mode="sum")  # pseudo-bulk data
+                layer=layer_counts, mode="sum")  # pseudo-bulk data
             res["dea_results"] = cr.ax.calculate_dea_deseq2(
                 pdata, col_cell_type, col_condition, 
                 key_control, key_treatment, col_subject=col_subject,
-                min_prop=min_prop, min_count=min_count, 
-                min_total_count=min_total_count, quiet=True)  # perform DEA
+                min_prop=min_prop, min_count=min_count, layer=layer_counts,
+                min_total_count=min_total_count)  # perform DEA
             atx = adata[adata.obs[col_condition] == key_treatment
                         ].copy()  # subset to treatment group
             res["lr_res"] = liana.mu.df_to_lr(
@@ -88,12 +86,11 @@ def analyze_receptor_ligand(
     
 
 def calculate_dea_deseq2(pdata, col_cell_type, col_condition,
-                         key_control, key_treatment, layer=layers["counts"], 
-                         col_subject=None,
-                         min_prop=0, min_count=0, min_total_count=0, 
-                         col_gene_symbols=None, quiet=True):
+                         key_control, key_treatment, layer="counts", 
+                         col_subject=None, min_prop=0, min_count=0, 
+                         min_total_count=0, col_gene_symbols=None):
     """Calculate DEA based on Liana tutorial usage of DESeq2."""
-    dea_results = {}
+    dea_results, quiet = {}, True
     if col_gene_symbols is None:  # if gene name column unspecified...
         col_gene_symbols = pdata.var.index.names[0]  # ...index=gene names
     facs = col_condition if not col_subject else [col_condition, col_subject]
