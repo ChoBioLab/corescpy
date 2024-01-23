@@ -27,6 +27,7 @@ dependencies = [
     "squidpy",
     "liana >= 1.0.4",
     "corneto",
+    "graphviz",
     "cvxpy",
     "cylp",
     "pydeseq2",

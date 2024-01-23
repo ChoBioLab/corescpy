@@ -228,4 +228,5 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
         max_penalty=max_penalty, min_penalty=min_penalty, solver=solver,
         max_seconds=max_seconds, edge_penalty=edge_penalty, verbose=verbose)
     fig = corneto.methods.carnival.visualize_network(df_res)
+    fig.view()
     return df_res, problem, fig
