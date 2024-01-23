@@ -336,9 +336,11 @@ class Crispr(Omics):
                 self.rna.obs["feature_split"].iloc[0])
         else:
             self.info["guide_rna"]["feature_split"] = None
-        print(self.adata, "\n\n") if assay else None
         
         # Check Arguments & Data
+        if any((x in self.rna.obs for x in [
+            col_guide_rna, col_perturbed, col_condition])) is False:
+            self.rna.obs.loc[:, col_condition] = self.rna.obs[col_guide_rna]
         if any((x in self.rna.obs for x in [
             col_guide_rna, col_perturbed, col_condition])):
             if col_perturbed in self.rna.obs and (
@@ -357,9 +359,8 @@ class Crispr(Omics):
                              "col_guide_rna must be in `.obs`.")
         print(self.adata.obs, "\n\n") if assay else None
 
-        # Binary Perturbation Column
-        if (col_perturbed not in 
-            self.rna.obs):  # if col_perturbed doesn't exist yet...
+        # Create Binary Perturbation Column (if not yet existent)
+        if col_perturbed not in self.rna.obs:
             self.rna.obs = self.rna.obs.join(
                 self.rna.obs[col_condition].apply(
                     lambda x: x if pd.isnull(x) else key_control if (

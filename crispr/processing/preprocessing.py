@@ -12,6 +12,7 @@ import scanpy as sc
 import pertpy as pt
 import muon
 from  warnings import warn
+import traceback
 import seaborn
 import matplotlib.pyplot as plt 
 # import anndata
@@ -135,7 +136,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     try: 
         adata.obs_names_make_unique()
     except Exception as err:
-        warn(f"{err}\n\n\nCoult not make obs names unique.")
+        print(traceback.format_exc())
+        warn("\n\n\nCould not make obs names unique.")
     cr.tl.print_counts(adata, title="Initial")
     
     # Gene Symbols -> Index of .var
@@ -313,7 +315,8 @@ def process_data(adata,
         figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
             adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
     except Exception as err:
-        warn(f"{err}\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
+        print(traceback.format_exc())
+        warn(f"\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
         figs["highly_expressed_genes"] = err
         
     # Set Up Layer & Variables
@@ -482,6 +485,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             if len(gvars) > 0:
                 adata.var[k] = gvars
         except Exception as err:
+            print(traceback.format_exc())
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     qc_vars = list(set(patterns.keys()).intersection(
         adata.var.keys()))  # available QC metrics 
@@ -507,7 +511,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                                   show=False, color=h if yes else None)
                     plt.show()
                 except Exception as err:
-                    print(err)
+                    print(traceback.format_exc())
             figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
             try:
                 vam = pct_n + ["n_genes_by_counts"] + list([h] if yes else [])
@@ -518,7 +522,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                     diag_kws=dict(fill=True, cut=0))  # pairplot
             except Exception as err:
                 fff = err
-                print(err)
+                print(traceback.format_exc())
             figs[f"pairplot_by_{h}" if yes else "pairpolot"] = fff
     try:
         figs["pct_counts_kde"] = seaborn.displot(
@@ -527,6 +531,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                     "Percent Counts"), x="Percent Counts", col="Metric", 
             kind="kde", fill=True)  # KDE of pct_counts
     except Exception as err:
+        print(traceback.format_exc())
         figs["pct_counts_kde"] = err
         print(err)
     try:
@@ -534,6 +539,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             adata, ["n_genes_by_counts", "total_counts"] + pct_n,
             jitter=0.4, multi_panel=True)  # violin of counts, genes
     except Exception as err:
+        print(traceback.format_exc())
         figs["qc_metrics_violin"] = err
         print(err)
     try:
@@ -541,6 +547,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             data=adata.obs, x="log1p_total_counts", 
             y="log1p_n_genes_by_counts", kind="hex")  # jointplot
     except Exception as err:
+        print(traceback.format_exc())
         figs["qc_log"] = err
         print(err)
     print(adata.var.describe())

@@ -663,8 +663,8 @@ class Omics(object):
         self, method="liana", subset=None, layer="log1p", top_n=20,
         col_cell_type=None, col_condition=None, col_subject=True,
         cmap="magma", kws_plot=None, key_sources=None, key_targets=None, 
-        resource="CellPhoneDB", 
-        n_perms=10, p_threshold=0.01, remove_ns=True, figsize=None, **kwargs):
+        resource="CellPhoneDB", n_perms=10, p_threshold=0.01, remove_ns=True, 
+        figsize=None, **kwargs):
         """Calculate receptor-ligand interactions."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
