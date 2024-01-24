@@ -333,7 +333,7 @@ def perform_augur(adata, assay=None, layer=None,
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?
             kws_umap = kwargs.pop("kws_umap", {})
-            kws_neighbors = kwargs.pop(x, {})
+            kws_neighbors = kwargs.pop("kws_neighbors", {})
             try:
                 # def_pal = {col_perturbed: dict(zip(
                 #     [key_control, key_treatment], ["black", "red"]))}

@@ -5,6 +5,7 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
                          key_added="liana_res", p_threshold=0.01, 
                          key_sources=None, key_targets=None, figsize=None,
                          lr_res=None,  # DEA results
+                         dot_size="cellphone_pvals",
                          cmap="magma", **kwargs):
     """Plot Liana receptor-ligand analyses (and, optionally, DEA)."""
     if figsize is None:  # auto-calculate figure size if not provided
@@ -20,23 +21,23 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
                target_labels=ktt, top_n=top_n, figure_size=figsize)  # kws
     kws.update(kwargs)  # update with any non-overlapping user kws
     fig = {}
-    fig["dot"] = liana.pl.dotplot(
-        liana_res=liana_res, colour="interaction_stat", 
-        orderby_ascending=False, size_range=size_range, 
-        order_by_absolute=True, inverse_size=True, orderby="lr_means", 
-        size="cellphone_pvals", **kws)  # dot plot
-    if lr_res:
+    if adata is not None:
+        fig["dea_dot"] = liana.pl.dotplot(
+            adata=adata, colour="lr_means",  # color by interaction strength
+            orderby_ascending=False, size_range=size_range, inverse_size=True, 
+            orderby="lr_means", size=dot_size, **kws)  # dot plot
+    if lr_res is not None:
+        # fig["dea_dot"] = liana.pl.dotplot(
+        #     liana_res=lr_res, colour="interaction_stat", top_n=top_n,
+        #     size="interaction_props", inverse_size=True, 
+        #     orderby_absolute=True, orderby="interaction_stat", 
+        #     orderby_ascending=False, size_range=size_range)  # dot
         fig["dea_tile"] = liana.pl.tileplot(
             liana_res=lr_res, fill="expr", label="padj", 
             label_fun = lambda x: "*" if x < 0.05 else np.nan, 
             orderby="interaction_stat", orderby_ascending=False,
-            orderby_absolute=False, top_n=top_n,
+            orderby_absolute=False, **kws,
             source_title="Ligand", target_title="Receptor")  # tile plot
-        fig["dea_dot"] = liana.pl.dotplot(
-            liana_res=lr_res, colour="interaction_stat",
-            size="ligand_pvalue", inverse_size=True, 
-            orderby="interaction_stat", orderby_ascending=False,
-            orderby_absolute=True, top_n=10, size_range=(0.5, 4))
     if title:
         for q in fig:
             fig[q].labels.title = title

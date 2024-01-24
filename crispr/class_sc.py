@@ -12,6 +12,7 @@ import pertpy as pt
 import squidpy as sq
 import liana
 import os
+import functools
 from copy import deepcopy
 import muon
 import anndata
@@ -30,8 +31,7 @@ class Omics(object):
     def __init__(
         self, file_path, assay=None, assay_protein=None, raw=False,
         col_gene_symbols="gene_symbols", col_cell_type="leiden", 
-        col_sample_id=None, col_subject=None, 
-        col_condition=None, col_num_umis=None, 
+        col_sample_id=None, col_subject=None, col_condition=None, 
         key_control=None, key_treatment=None, kws_multi=None, **kwargs):
         """
         Initialize Omics class object.
@@ -93,10 +93,11 @@ class Omics(object):
                 `col_sample_id` as a tuple, with the second element 
                 containing a dictionary of keyword arguments to pass to
                 `AnnData.concatenate()` or None (to use defaults). 
-            col_num_umis (str, optional): Name of column in `.obs` with 
-                the UMI counts. Defaults to None
         """
-        print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
+        print("\n\n<<< INITIALIZING OMICS CLASS OBJECT >>>\n")
+        col_num_umis = kwargs["kws_process_guide_rna"][
+            "col_num_umis"] if "kws_process_guide_rna" in kwargs else kwargs[
+                "col_num_umis"] if "col_num_umis" in kwargs else None
         self.pdata = None  # for pseudobulk data if ever created
         self._assay = assay
         self._assay_protein = assay_protein
@@ -105,7 +106,7 @@ class Omics(object):
                         "layer_perturbation": "X_pert"}
         self._integrated = kws_multi is not None
         if kwargs:
-            print(f"\nUnused keyword arguments: {kwargs}.\n")
+            print(f"Unused keyword arguments: {kwargs}.\n")
         if kws_multi and col_sample_id is None:
             col_sample_id = "unique.idents"
         
@@ -122,8 +123,7 @@ class Omics(object):
             col_sample_id=col_sample_id, col_batch=col_sample_id,
             col_subject=col_subject,  # e.g., patient ID rather than sample
             col_condition=col_condition, col_num_umis=col_num_umis)
-        self._keys = dict(key_control=key_control, 
-                          key_treatment=key_treatment)
+        self._keys = dict(key_control=key_control, key_treatment=key_treatment)
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
         
@@ -240,7 +240,7 @@ class Omics(object):
         print(self.rna.obs.head(), "\n\n")
         print(self.adata, "\n\n")
         for q in [self._columns, self._keys]:
-            cr.tl.print_pretty_dictionary(q)
+            cr.tl.print_pretty_dictionary()
     
     def describe(self, group_by=None, plot=False):
         """Describe data."""
@@ -248,8 +248,7 @@ class Omics(object):
         gbp = [self._columns["col_cell_type"]]
         if group_by:
             gbp += [group_by]
-        print("\n\n\n", self.adata.obs.describe().round(2),
-              "\n\n\n")
+        print("\n\n\n", self.adata.obs.describe().round(2), "\n\n\n")
         print(f"\n\n{'=' * 80}\nDESCRIPTIVES\n{'=' * 80}\n\n")
         print(self.adata.obs.describe())
         for g in gbp:
@@ -284,12 +283,15 @@ class Omics(object):
             "legend_loc": "on data", "legend_fontweight": "medium", **kwargs})
         return fig
             
-    def plot(self, genes, kind="all", genes_highlight=None, subset=None,
+    def plot(self, genes=None, kind="all", genes_highlight=None, subset=None,
              group=None, layer=None, kws_qc=False, marker_genes_dict=None, 
              kws_umap=None, kws_heat=None, kws_violin=None, kws_dot=None, 
              kws_matrix=None, cell_types_circle=None, **kwargs):
         """Create a variety of plots."""
         figs = {}
+        if genes is None and marker_genes_dict:  # marker_genes_dict -> genes
+            genes = pd.unique(functools.reduce(lambda i, j: i + j, [
+                marker_genes_dict[k] for k in marker_genes_dict]))
         if group is None:  # if unspecified grouping variable...
             group = self._columns["col_cell_type"]  # default cell type column
         if kind == "all":
@@ -338,9 +340,11 @@ class Omics(object):
         if umap is True:
             if "X_umap" in self.rna.obsm or group in self.rna.obs.columns:
                 print("\n<<< PLOTTING UMAP >>>")
+                if "col_cell_type" not in kws_umap:
+                    kws_umap.update({"col_cell_type": group})
                 figs["umap"] = cr.pl.plot_umap(
-                    adata, col_cell_type=group, genes=genes, **kws_umap, 
-                    col_gene_symbols=cgs, cell_types_circle=cell_types_circle)
+                    adata, genes=genes, **kws_umap, col_gene_symbols=cgs, 
+                    cell_types_circle=cell_types_circle)  # plot UMAP
             else:
                 print("\n<<< UMAP NOT AVAILABLE. RUN `.cluster()`.>>>")
         return figs
@@ -604,7 +608,7 @@ class Omics(object):
                 if not isinstance(pseudobulk, dict):
                     pseudobulk = {}
                 data = self.bulk(**pseudobulk)  # ...create pseudobulk
-                if copy is None:
+                if copy is False:
                     self.pdata = data  # store pseudobulk data in `self.pdata`
             else:  # otherwise, use existing pseudobulk data in `self.pdata`
                 data = self.pdata.copy()
@@ -620,7 +624,7 @@ class Omics(object):
             if pseudobulk is True:
                 self.pdata = output[0]
             else:
-                self.adata = output[0]
+                self.rna = output[0]
             self.results["gsea"] = output[1]
             self.figures["gsea"] = output[-1]
         return output
@@ -660,28 +664,34 @@ class Omics(object):
         return out
     
     def calculate_receptor_ligand(
-        self, method="liana", subset=None, layer="log1p", top_n=20,
-        col_cell_type=None, col_condition=None, col_subject=True,
-        cmap="magma", kws_plot=None, key_sources=None, key_targets=None, 
-        resource="CellPhoneDB", n_perms=10, p_threshold=0.01, remove_ns=True, 
-        figsize=None, **kwargs):
+        self, method="liana", subset=None, layer="log1p", col_cell_type=None, 
+        col_condition=None, col_subject=True, col_sample_id=None,
+        key_sources=None, key_targets=None, resource="CellPhoneDB",  
+        top_n=20, min_prop=0, min_count=0, min_total_count=0, 
+        remove_ns=True, p_threshold=0.01, n_jobs=None,
+        cmap="magma", kws_plot=None, n_perms=10, figsize=None, **kwargs):
         """Calculate receptor-ligand interactions."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        if col_subject is True:
-            col_subject = self._columns["col_cell_type"]
-        if col_condition is True:
-            col_condition = self._columns["col_condition"]
+        col_kws = dict(zip(["col_subject", "col_sample_id", "col_condition"], 
+                           [col_subject, col_sample_id, col_condition]))
+        col_subject, col_sample_id, col_condition = [
+            None if col_kws[x] is False else self._columns[x] if col_kws[
+                x] in [None, True] else col_kws[x] for x in col_kws
+            ]  # ignore ID/condition if argue False; else use default if need
         if layer and layer not in self.adata.layers:
             layer = self.adata._layers[layer]
         adata = (self.rna[subset] if subset is not None else self.rna).copy()
         res, fig = cr.ax.analyze_receptor_ligand(
             adata, col_condition=col_condition, col_subject=col_subject, 
+            col_sample_id=col_sample_id, resource=resource, n_jobs=n_jobs,
             method=method, layer=layer, layer_counts=self._layers["counts"],
             key_sources=key_sources, key_targets=key_targets, copy=False, 
             col_cell_type=col_cell_type, top_n=top_n, remove_ns=remove_ns,
             cmap=cmap, p_threshold=p_threshold, figsize=figsize, 
-            kws_plot=kws_plot, resource=resource, **kwargs)  # analyze
+            min_prop=min_prop, min_total_count=min_total_count, 
+            min_count=min_count, n_perms=n_perms, kws_plot=kws_plot, 
+            **kwargs)  # run receptor-ligand (& optionally, DEA) analysis
         self.results["receptor_ligand"] = res
         self.figures["receptor_ligand"] = fig
         self.results["receptor_ligand_info"] = {

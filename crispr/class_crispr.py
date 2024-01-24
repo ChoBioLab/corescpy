@@ -292,14 +292,13 @@ class Crispr(Omics):
                         problems occur if set to False and if 
                         multiply-transfected cells remain in data. 
         """
-        print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
         self._layers = {**cr.pp.get_layer_dict(), 
                         "mixscape": layer_perturbation}
         if kwargs:
-            print(f"\nUnused keyword arguments: {kwargs}.\n")
+            print(f"Unused keyword arguments: {kwargs}.\n")
         
         # Create Attributes to Store Results/Figures
         self.figures = {"main": {}}
@@ -313,11 +312,10 @@ class Crispr(Omics):
             self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
             col_sample_id=col_sample_id, col_condition=col_condition,
             key_control=key_control, key_treatment=key_treatment,
-            kws_process_guide_rna={
-                "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis, 
-                "key_control": key_control, 
-                "col_guide_rna_new": col_condition, 
-                **kws_process_guide_rna} if kws_process_guide_rna else None, 
+            kws_process_guide_rna=cr.tl.merge(
+                {"col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
+                 "key_control": key_control, 
+                 "col_guide_rna_new": col_condition}, kws_process_guide_rna), 
             kws_multi=kws_multi)  # make AnnData
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
         if kws_process_guide_rna and "guide_split" in kws_process_guide_rna:
@@ -338,9 +336,6 @@ class Crispr(Omics):
             self.info["guide_rna"]["feature_split"] = None
         
         # Check Arguments & Data
-        if any((x in self.rna.obs for x in [
-            col_guide_rna, col_perturbed, col_condition])) is False:
-            self.rna.obs.loc[:, col_condition] = self.rna.obs[col_guide_rna]
         if any((x in self.rna.obs for x in [
             col_guide_rna, col_perturbed, col_condition])):
             if col_perturbed in self.rna.obs and (
@@ -630,8 +625,6 @@ class Crispr(Omics):
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
         if col_split_by is not False:  # unless explicitly forbid split_by
             col_split_by = self._columns["col_sample_id"]
         if layer is None or layer not in self.rna.layers:
@@ -643,7 +636,6 @@ class Crispr(Omics):
         figs_mix, adata_pert = cr.ax.perform_mixscape(
             self.adata.copy() if copy is True else self.adata, 
             assay=assay, assay_protein=assay_protein,
-            col_cell_type=col_cell_type,
             target_gene_idents=target_gene_idents,
             min_de_genes=min_de_genes, col_split_by=col_split_by, plot=plot, 
             guide_split=self.info["guide_rna"]["guide_split"], 

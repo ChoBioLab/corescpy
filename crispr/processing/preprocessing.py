@@ -100,27 +100,27 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     _ = kwargs.pop("col_sample_id", None)
     if isinstance(file, (str, os.PathLike)) and os.path.splitext(
         file)[1] == ".h5mu":  # MuData
-        print(f"\n<<< LOADING FILE {file} with muon.read() >>>")
+        print(f"\n\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
     elif isinstance(file, dict):  # metadata in protospacer files
-        print(f"\n<<< LOADING PROTOSPACER METADATA >>>")
+        print(f"\n\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = cr.pp.combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, 
             **kwargs)  # + metadata from protospacer
     elif not isinstance(file, (str, os.PathLike)):  # if already AnnData
-        print(f"\n<<< LOADING OBJECT >>>")
+        print(f"\n\n<<< LOADING OBJECT >>>")
         adata = file.copy()
     elif os.path.isdir(file):  # if directory, assume 10x format
-        print(f"\n<<< LOADING 10X FILE {file} >>>")
+        print(f"\n\n<<< LOADING 10X FILE {file} >>>")
         adata = sc.read_10x_mtx(
             file, var_names=col_gene_symbols, cache=True, **kwargs)
     elif os.path.splitext(file)[1] == ".h5":  # .h5 file
-        print(f"\n<<< LOADING 10X .h5 FILE {file} >>>")
+        print(f"\n\n<<< LOADING 10X .h5 FILE {file} >>>")
         print(f"H5 File Format ({file})\n\n")
         # cr.tl.explore_h5_file(file, "\n\n\n")
         adata = sc.read_10x_h5(file, **kwargs)
     else:
-        print(f"\n<<< LOADING FILE {file} with sc.read() >>>")
+        print(f"\n\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
     
     # Use Raw Data (Optional)

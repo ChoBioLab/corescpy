@@ -15,7 +15,7 @@ authors = [
 maintainers = [
     {name = "Elizabeth Aslinger", email = "elizabeth.aslinger@aya.yale.edu"},
 ]
-# urls.Documentation = "https://github.com/easlinger/crispr/README.md"
+urls.Documentation = "https://github.com/easlinger/crispr/README.md"
 urls.Source = "https://github.com/easlinger/crispr"
 urls.Home-page = "https://github.com/easlinger/crispr"
 dependencies = [
@@ -30,7 +30,7 @@ dependencies = [
     "graphviz",
     "cvxpy",
     "cylp",
-    "pydeseq2",
+    # "pydeseq2,
     "arviz",
     "celltypist",
     "numpy >= 1.24.4",
@@ -90,6 +90,9 @@ test = [
     "pytest",
     "pytest-cov",
 ]
+
+[tool.dependencies]
+pydeseq2 = {path = "../pydeseq2"}
 
 [tool.hatch.version]
 source = "vcs"
