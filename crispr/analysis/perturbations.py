@@ -14,8 +14,12 @@ import functools
 import matplotlib.pyplot as plt
 import seaborn
 from seaborn import clustermap
-import warnings
+from warnings import warn
 import decoupler
+from pydeseq2.dds import DeseqDataSet
+from pydeseq2.ds import DeseqStats
+import traceback
+import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram
 import os
 import crispr as cr
@@ -189,8 +193,7 @@ def perform_mixscape(
                 n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
                 pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
     except Exception as error:
-        warnings.warn(
-            f"{error}\n\nCouldn't perform perturbation-specific clustering!")
+        warn(f"{error}\n\nCouldn't perform perturbation-specific clustering!")
         figs["lda"] = error
     if assay_protein:
         adata[assay_protein].obs[:, "mixscape_class_global"] = adata_pert[
@@ -350,8 +353,7 @@ def perform_augur(adata, assay=None, layer=None,
                 )  # scores super-imposed on UMAP
             except Exception as err:
                 figs["perturbation_effect_umap"] = err
-                warnings.warn(
-                    f"{err}\n\nCould not plot perturbation effects on UMAP!")
+                warn(f"{err}\n\nCould not plot perturbation effects on UMAP!")
             figs["important_features"] = pt.pl.ag.important_features(
                 results)  # most important genes for prioritization
             figs["perturbation_scores"] = {}
@@ -463,10 +465,8 @@ def compute_distance(adata, col_target_genes="target_genes",
         if highlight_real_range is True:
             vmin = np.min(np.ravel(data.values)[np.ravel(data.values) != 0])
             if "vmin" in kws_plot:
-                warnings.warn(
-                    f"""
-                    vmin already set in kwargs plot: {kws_plot['vmin']}\n
-                    Setting to {vmin} as highlight_real_range is True.""")
+                warn(f"vmin already set in kwargs plot: {kws_plot['vmin']}\n"
+                     f" Setting to {vmin} as highlight_real_range is True.")
             kws_plot.update(dict(vmin=vmin))
         if "figsize" not in kws_plot:
             kws_plot["figsize"] = (20, 20)
@@ -604,7 +604,7 @@ def perform_gsea(pdata, adata_sc=None,
             p_threshold=p_threshold, **kwargs, ifn_pathways=ifn_pathways, 
             use_raw=use_raw, layer=layer)  # plot GSEA results
     except Exception as err:
-        warnings.warn(f"{err}\n\n\nPlotting GSEA results failed.")
+        warn(f"{err}\n\n\nPlotting GSEA results failed.")
         figs = err
     res = {"gsea_results": gsea_results, "score_sort": score_sort, 
            "gsea_results_cell": gsea_results_cell}
@@ -633,14 +633,14 @@ def perform_pathway_interference(
                     adata, p, col_cell_type=col_cell_type, obsm_key=obsm_key, 
                     **kwargs)  # plots for pathway
             except Exception as err:
-                warnings.warn(f"{err}\n\n\nPlotting pathway {p} failed!")
+                warn(f"{err}\n\n\nPlotting pathway {p} failed!")
     print(adata.obsm["mlm_estimate"])
     return adata, figs
 
 
 def perform_dea(
     adata, col_cell_type, col_covariates, layer=None, col_sample_id=None, 
-    figsize=(30, 30), uns_key="pca_anova", plot_stat="p_adj"):
+    figsize=30, uns_key="pca_anova", obsm_key="X_pca", plot_stat="p_adj"):
     """
     Perform functional analysis of pseudobulk data 
     (created by this method), then differential expression analysis.
@@ -661,7 +661,7 @@ def perform_dea(
     decoupler.get_metadata_associations(
         pdata, obs_keys=[col_cell_type, "psbulk_n_cells", 
                         "psbulk_counts"] + col_covariates, 
-        obsm_key="X_pca", uns_key=uns_key, inplace=True)
+        obsm_key=obsm_key, uns_key=uns_key, inplace=True)
 
     # Plot
     fig = plt.figure(figsize=figsize)
@@ -671,3 +671,90 @@ def perform_dea(
         titles=["Adjusted p-Values from ANOVA", "Principle Component Scores"])
     plt.show()
     return pdata, fig
+    
+
+def calculate_dea_deseq2(
+    pdata, col_cell_type, col_condition, key_control, key_treatment, top_n=20,
+    n_jobs=4, layer_counts="counts", col_subject=None, col_gene_symbols=None, 
+    min_prop=0, min_count=0, min_total_count=0, 
+    shrink_lfc=True, p_threshold=0.05, **kwargs):
+    """
+    Calculate DEA based on Liana tutorial usage of DESeq2.
+    
+    Extra keyword arguments are passed to DeseqDataset, except for
+    "alt_hypothesis" and "lfc_null," which are passed to DeseqStats.
+    """
+    dea, quiet, figsize = {}, True, kwargs.pop("figsize", (20, 20))
+    lfc_null = kwargs.pop("lfc_null", 0.0)  # DESeqStats argument
+    alt_hypothesis = kwargs.pop("alt_hypothesis", None)  # DESeqStats argument
+    filt_c, filt_i = [kwargs.pop(x, True) for x in [
+        "cooks_filter", "independent_filter"]]  # DESeqStats filter arguments
+    if col_gene_symbols is None:  # if gene name column unspecified...
+        col_gene_symbols = pdata.var.index.names[0]  # ...index=gene names
+    facs = col_condition if not col_subject else [col_condition, col_subject]
+    pdata = pdata[~pdata.obs[col_condition].isna()].copy()  # no condition NAs 
+    cts = pdata.obs.groupby(col_cell_type).apply(
+            lambda x: np.nan if any((sum(x[col_condition] == k) < 2 for k in [
+                key_treatment, key_control])) else False).dropna(
+                    ).index.values.tolist()  # types w/ enough N/condition
+    
+    # Run DEA for Each Cell Type
+    for t in cts:  # iterate cell types from above: w/ both conditions & n > 3
+        
+        # Set Up Pseudo-Bulk Data
+        psub = pdata[pdata.obs[col_cell_type] == t].copy()  # subset c type t
+        # genes = decoupler.filter_by_expr(  # edgeR-based filtering function
+        #     psub, group=col_condition, min_count=min_count, min_prop=min_prop,
+        #     min_total_count=min_total_count)  # genes with enough counts/reads
+        # psub = psub[:, genes].copy()  # filter data ~ those genes
+        
+        # Skip Cell Type if Not Enough Data or Doesn't Contain Both Conditions
+        if any(psub[psub.obs[col_condition].isin([key_control, key_treatment])
+                    ].obs.value_counts() < 2):
+            dea[t] = None
+            warn(f"Skipping {t} DEA: levels missing in {col_condition}")
+            continue  # skip if doesn't contain both conditions or n < 4
+        
+        # Perform DESeq2
+        psub.X = psub.layers[layer_counts].copy()  # counts layer
+        # dds = DeseqDataSet(
+        #     adata=psub, design_factors=facs, quiet=quiet, n_cpus=n_jobs,
+        #     ref_level=[col_condition, key_control], **kwargs)  # DESeq adata
+        print(psub)
+        dds = DeseqDataSet(
+            adata=psub, design_factors=facs, quiet=quiet,
+            ref_level=[col_condition, key_control], **kwargs)  # DESeq adata
+        dds.deseq2()  # estimate dispersion & logfold change
+        dea[t] = DeseqStats(dds, alpha=p_threshold, contrast=[
+            col_condition, key_treatment, key_control], quiet=quiet, 
+                            cooks_filter=filt_c, independent_filter=filt_i)
+        dea[t].quiet = quiet
+        dea[t].summary()  # print Wald test summary
+        if shrink_lfc is True:
+            dea[t].lfc_shrink(
+                coeff=f"{col_condition}_{key_treatment}_vs_{key_control}")
+    if len(dea) == 0:  # if no cell types had enough data
+        warn("DESeq2 FAILED: No cell types passed filtering conditions.")
+        return None, None, None
+    else:  # concatenate results dfs for all cell types
+        dea_df = [None if dea[t] is None else dea[t].results_df for t in dea]
+        dea_df = pd.concat(dea_df, names=[col_cell_type, col_gene_symbols], 
+                           keys=dea.keys())  # concatenate list of dfs
+        dea_df = dea_df.reset_index().set_index(col_gene_symbols)  # ix = gene
+    try:  # try to plot
+        p_dims = cr.pl.square_grid(len(dea))
+        fig, axs = plt.subplots(p_dims[0], p_dims[1], figsize=figsize)
+        for i, x in enumerate(dea):
+            try:
+                decoupler.plot_volcano_df(
+                    dea[x].results_df, x="log2FoldChange", y="padj",
+                    sign_thr=0.05, top=top_n, lFCs_thr=0.5, sign_limit=None, 
+                    lFCs_limit=None, dpi=200, ax=axs.ravel()[i])  # plot
+                axs.ravel()[i].set_title(x)
+            except Exception:
+                print(traceback.format_exc(), f"\n\nDEA volcano failed ({x})")
+        fig.tight_layout()
+    except Exception:
+        fig = None
+        print(traceback.format_exc(), f"\n\nDEA volcano plotting failed!")
+    return dea, dea_df, fig

@@ -5,6 +5,7 @@ from .perturbations import (perform_mixscape,
                             compute_distance,
                             perform_gsea, perform_pathway_interference,
                             # perform_fx_analysis_pseudobulk
+                            perform_dea, calculate_dea_deseq2
                             )
 from .clustering import cluster, find_marker_genes, perform_celltypist
 from .composition import analyze_composition

@@ -670,7 +670,7 @@ class Omics(object):
         top_n=20, min_prop=0, min_count=0, min_total_count=0, 
         remove_ns=True, p_threshold=0.01, n_jobs=None,
         cmap="magma", kws_plot=None, n_perms=10, figsize=None, **kwargs):
-        """Calculate receptor-ligand interactions."""
+        """Find receptor-ligand interactions (&, optionally DEA)."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         col_kws = dict(zip(["col_subject", "col_sample_id", "col_condition"], 
