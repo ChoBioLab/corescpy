@@ -335,8 +335,9 @@ class Spatial(Omics):
         # sq.pl.spatial_scatter(adata, color=col_cell_type, figsize=figsize, 
         #                       shape=shape, library_id=library_id, 
         #                       **kws_plot)  # cell type/clusters plot
+        ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
         sq.pl.spatial_scatter(adata, color=genes + [col_cell_type], 
-                              figsize=figsize, shape=shape, 
+                              figsize=figsize, shape=shape, ncols=ncols,
                               library_id=library_id, **kws_plot)  # cell type
         # sc.pl.spatial(adata, color=genes, library_id=library_id, 
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot

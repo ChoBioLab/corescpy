@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 import pertpy as pt
 import squidpy as sq
 import liana
+import decoupler
 import os
+import traceback
 from warnings import warn
 import functools
 from copy import deepcopy
@@ -19,6 +21,7 @@ import muon
 import anndata
 import crispr as cr
 import pandas as pd
+import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -694,6 +697,8 @@ class Omics(object):
             kws_deseq2 = kwargs.pop("kws_deseq2", None)
             if kws_deseq2 is None:
                 kws_deseq2 = {}
+            figsz_de = kws_deseq2.pop("figsize", np.max(
+                figsize) if figsize else None)  # figure size for DEA volcano
             key_control, key_treatment = [
                 kwargs[x] if x in kwargs else self._keys[x] 
                 for x in ["key_control", "key_treatment"]]  # condition labels
@@ -706,10 +711,10 @@ class Omics(object):
             cgs = pseudo.var.index.names[0]  # gene symbols column/index name
             res_dea = cr.ax.calculate_dea_deseq2(
                 pseudo, col_cell_type, col_condition, key_control, 
-                key_treatment, top_n=top_n, 
+                key_treatment, top_n=top_n, figsize=figsz_de,
                 layer_counts=self._layers["counts"], 
                 col_subject=col_subject, min_prop=min_prop, 
-                min_count=min_count, col_gene_symbols=cgs,
+                min_count=min_count, col_gene_symbols=cgs, 
                 min_total_count=min_total_count, **kws_deseq2)  # run DEA
         else:
             res_dea = None, None, None
@@ -746,17 +751,40 @@ class Omics(object):
             self.results["receptor_ligand"] = res
             self.figures["receptor_ligand"] = figs
             self.results["receptor_ligand_info"] = {
-                "subset": subset, "col_condition": col_condition}
+                "subset": subset, "col_condition": col_condition,
+                "col_cell_type": col_cell_type}
         return adata, res, figs
     
     def plot_receptor_ligand(self, key_sources=None, key_targets=None,
-                             title=None, out_dir=None, **kwargs):
+                             title=None, out_dir=None, top_n=20,
+                             figsize_dea=None, **kwargs):
         """Plot previously-run receptorout_dir-ligand analyses."""
         subset = self.results["receptor_ligand_info"]["subset"]
+        cct = self.results["receptor_ligand_info"]["col_cell_type"]
         res = self.results["receptor_ligand"].copy()
+        if figsize_dea is None:
+            figsize_dea = (20, 20)
+        kws_dea = dict(sign_thr=0.05, lFCs_thr=0.5, 
+                       sign_limit=None,  lFCs_limit=None, dpi=200)
+        for x in kws_dea:
+            kws_dea[x] = kwargs.pop(x, kws_dea[x])
         figs = cr.pl.plot_receptor_ligand(
-            adata=self.adata.copy(),
-            liana_res=res["liana_res"], lr_dea_res=res["lr_dea_res"], 
-            key_sources=key_sources, key_targets=key_targets, **kwargs)
+            adata=self.adata.copy(), lr_dea_res=res["lr_dea_res"], 
+            top_n=top_n, key_sources=key_sources, key_targets=key_targets,
+            **kwargs)  # tile & dot plots
+        if res["dea_df"] is not None:
+            dea = res["dea_df"].reset_index()
+            p_dims = cr.pl.square_grid(len(dea))
+            fig, axs = plt.subplots(p_dims[0], p_dims[1], figsize=figsize_dea)
+            for i, x in enumerate(dea[cct].unique()):
+                try:
+                    decoupler.plot_volcano_df(
+                        dea[dea[cct] == x], x="log2FoldChange", y="padj",
+                        **kws_dea, ax=axs.ravel()[i])  # plot
+                    axs.ravel()[i].set_title(x)
+                except Exception:
+                    print(traceback.format_exc())
+            fig.tight_layout()
+            figs["dea"] = fig
         return figs
             

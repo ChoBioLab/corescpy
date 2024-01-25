@@ -732,6 +732,8 @@ def calculate_dea_deseq2(
         if shrink_lfc is True:
             dea[t].lfc_shrink(
                 coeff=f"{col_condition}_{key_treatment}_vs_{key_control}")
+    
+    # Construct Unified Results DataFrame & Plot
     dea_df = [None if dea[t] is None else dea[t].results_df for t in dea]
     if all((x is None for x in dea_df)):  # if no cell types had enough data
         warn("DESeq2 FAILED: No cell types passed filtering conditions.")
