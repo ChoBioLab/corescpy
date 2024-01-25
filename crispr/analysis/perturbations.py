@@ -720,7 +720,6 @@ def calculate_dea_deseq2(
         # dds = DeseqDataSet(
         #     adata=psub, design_factors=facs, quiet=quiet, n_cpus=n_jobs,
         #     ref_level=[col_condition, key_control], **kwargs)  # DESeq adata
-        print(psub)
         dds = DeseqDataSet(
             adata=psub, design_factors=facs, quiet=quiet,
             ref_level=[col_condition, key_control], **kwargs)  # DESeq adata
@@ -733,13 +732,13 @@ def calculate_dea_deseq2(
         if shrink_lfc is True:
             dea[t].lfc_shrink(
                 coeff=f"{col_condition}_{key_treatment}_vs_{key_control}")
-    if len(dea) == 0:  # if no cell types had enough data
+    dea_df = [None if dea[t] is None else dea[t].results_df for t in dea]
+    if all((x is None for x in dea_df)):  # if no cell types had enough data
         warn("DESeq2 FAILED: No cell types passed filtering conditions.")
         return None, None, None
-    else:  # concatenate results dfs for all cell types
-        dea_df = [None if dea[t] is None else dea[t].results_df for t in dea]
-        dea_df = pd.concat(dea_df, names=[col_cell_type, col_gene_symbols], 
-                           keys=dea.keys())  # concatenate list of dfs
+    else:  # concatenate results dfs list for all cell types -> dataframe
+        dea_df = pd.concat(dea_df, names=[
+            col_cell_type, col_gene_symbols], keys=dea.keys())  # concatenate
         dea_df = dea_df.reset_index().set_index(col_gene_symbols)  # ix = gene
     try:  # try to plot
         p_dims = cr.pl.square_grid(len(dea))

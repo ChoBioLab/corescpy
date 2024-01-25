@@ -18,18 +18,19 @@ import numpy as np
 
 
 def analyze_receptor_ligand(
-    adata, method="liana", n_jobs=4, seed=1618, col_condition=None, 
+    adata, method="liana", n_jobs=4, seed=1618, 
+    col_condition=None, dea_df=None,
     col_cell_type=None, col_sample_id=None, col_subject=None, 
     key_control=None, key_treatment=None, key_sources=None, key_targets=None, 
     layer="log1p", layer_counts="counts", min_prop=0, min_count=0, 
     min_total_count=0, kws_deseq2=None, n_perms=10, p_threshold=0.05, 
     figsize=None, remove_ns=True, top_n=20, cmap="magma", kws_plot=None, 
-    resource="CellPhoneDB", copy=True, **kwargs):
+    resource="CellPhoneDB", copy=True, plot=True, **kwargs):
     """Perform receptor-ligand analysis."""
     if copy is True:
         adata = adata.copy()
-    figs, res = {}, {"squidpy": None,"liana_res": None, "lr_dea_res": None, 
-                     "dea_results": None, "dea_df": None}  # to hold output
+    res_keys = ["squidpy", "liana_res", "lr_dea_res", "dea_results", "dea_df"]
+    figs, res = {}, dict(zip(res_keys, [None] * len(res_keys)))  # for output
     kws_plot = {} if kws_plot is None else {**kws_plot}
     cgs = kwargs.pop("col_gene_symbols", adata.var.index.names[0])
     kws_deseq2 = merge({"n_jobs": n_jobs, "refit_cooks": True, 
@@ -46,9 +47,8 @@ def analyze_receptor_ligand(
             interactions_params={"resources": resource}, **kwargs)
         figs["squidpy"] = sq.pl.ligrec(
             res, alpha=p_threshold, source_groups=key_sources, **kws_plot,
-            target_groups=key_targets, remove_nonsig_interactions=remove_ns,
-            # pvalue_threshold=p_threshold, 
-            **kws_plot)  # plot
+            target_groups=key_targets,  # pvalue_threshold=p_threshold
+            remove_nonsig_interactions=remove_ns, **kws_plot)  # plot
         
     # Liana Method
     else:
@@ -61,26 +61,13 @@ def analyze_receptor_ligand(
         kws = {**dict(
             cmap=cmap, p_threshold=p_threshold, top_n=top_n, figsize=figsize,
             key_sources=key_sources, key_targets=key_targets), **kws_plot}
-        
-    # Differential Expression Analysis (DEA)
-    if col_condition is not None:
-        pdata = create_pseudobulk(
-            adata.copy(), col_cell_type, col_sample_id=col_sample_id, 
-            layer=layer_counts, mode="sum", kws_process=True)  # bulk
-        cgs = pdata.var.index.names[0]  # gene symbols column/index name
-        res["dea_results"], res["dea_df"], figs["dea"] = calculate_dea_deseq2(
-            pdata, col_cell_type, col_condition, key_control, 
-            key_treatment, top_n=top_n, layer_counts=layer_counts, 
-            col_subject=col_subject, min_prop=min_prop, 
-            min_count=min_count, col_gene_symbols=cgs,
-            min_total_count=min_total_count, **kws_deseq2)  # run DEA
     
     # DEA + Liana
-    if res["dea_df"] is not None and method.lower() == "liana":
+    if dea_df is not None and method.lower() == "liana":
         try:  # merge DEA results & scRNA treatment group data
             res["lr_dea_res"] = liana.mu.df_to_lr(
                 adata[adata.obs[col_condition] == key_treatment].copy(),  # tx
-                res["dea_df"], col_cell_type, stat_keys=[
+                dea_df, col_cell_type, stat_keys=[
                     "stat", "pvalue", "padj"], use_raw=False, layer=layer, 
                 verbose=True, complex_col="stat", expr_prop=min_prop, 
                 return_all_lrs=True, resource_name="consensus").sort_values(
@@ -89,13 +76,14 @@ def analyze_receptor_ligand(
             print(traceback.format_exc(), "Liana + DEA failed!\n\n",)
     
     # Plotting
-    try:
-        figs["lr"] = plot_receptor_ligand(
-            adata=adata, lr_dea_res=res["lr_dea_res"], **kws)  # plots
-    except Exception as err:
-        print(traceback.format_exc(), "\n\nLigand-receptor plotting failed!")
-        figs["lr"] = err
-    return res, figs
+    if plot is True:
+        try:
+            figs["lr"] = plot_receptor_ligand(
+                adata=adata, lr_dea_res=res["lr_dea_res"], **kws)  # plots
+        except Exception as err:
+            print(traceback.format_exc(), "\n\nLigand-receptor plotting failed!")
+            figs["lr"] = err
+    return res, adata, figs
 
 
 def analyze_causal_network(

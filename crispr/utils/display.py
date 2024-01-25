@@ -87,8 +87,7 @@ def print_pretty_dictionary(dct, show=True, numpy_alias="np"):
         #                     int(isinstance(dct[i], str))]) 
         #      for i in dct])
         text = "\n".join(
-            [f"{i}={make_printable_object(dct[i])}"
-             for i in dct])
+            [f"{i}={make_printable_object(dct[i])}" for i in dct])
         print(text)
     else:
         return text

@@ -6,14 +6,11 @@ import pandas as pd
 import numpy as np
 
 
-def process_guide_rna(adata, col_guide_rna="guide_id", 
-                      col_guide_rna_new="condition", 
-                      col_num_umis="UMI count",
-                      key_control="NT", 
-                      conserve_memory=False,
-                      remove_multi_transfected=False,
-                      remove_from_gex=False,
-                      **kws_process_guide_rna):
+def process_guide_rna(
+    adata, col_guide_rna="guide_id", col_guide_rna_new="condition", 
+    col_num_umis="UMI count", key_control="NT", conserve_memory=False,
+    remove_multi_transfected=False, remove_from_gex=False, 
+    **kws_process_guide_rna):
     """
     Process and filter guide RNAs, (optionally) remove cells considered 
     multiply-transfected (after filtering criteria applied), and remove
@@ -197,12 +194,12 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
             x if kws_pga["feature_split"] in x else np.nan 
             for x in ann.obs[col_guide_rna].unique()]).dropna())
     if remove_from_gex is True:
-        ann = remove_guide_counts_from_gex(ann, col_guide_rna + "_original", 
-                                           key_ignore=k_i)
+        ann = remove_guide_counts_from_gex(
+            ann, col_guide_rna + "_original", key_ignore=k_i)
     ann.uns["grna_keywords"], ann.uns["grna_feats_n"] = kws_pga, feats_n
     ann.uns["grna_info"], ann.uns["grna_info_all"] = tg_info, tg_info_all
-    ann.obs = ann.obs.assign(guide_split=kws_pga["guide_split"]
-                             )  # make sure guide split in `.obs`
+    ann.obs = ann.obs.assign(
+        guide_split=kws_pga["guide_split"])  # make sure guide split in `.obs`
     return ann
 
 
@@ -221,10 +218,9 @@ def remove_guide_counts_from_gex(adata, col_target_genes, key_ignore=None):
     return adata
 
 
-def detect_guide_targets(col_guide_rna_series,
-                         feature_split="|", guide_split="-",
-                         key_control_patterns=None,
-                         key_control="Control", **kwargs):
+def detect_guide_targets(
+    col_guide_rna_series, feature_split="|", guide_split="-",
+    key_control_patterns=None, key_control="Control", **kwargs):
     """Detect guide gene targets (see `filter_by_guide_counts`)."""
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
@@ -243,7 +239,7 @@ def detect_guide_targets(col_guide_rna_series,
             warn(f"Dropping rows with NaNs in `col_guide_rna`.")
         targets = targets.dropna()
     if feature_split is not None or guide_split is not None:
-        targets, nums = [targets.apply(
+        targets, nums = [targets.apply(  # each entry -> list of target genes
             lambda x: [re.sub(p, ["", r"\1"][j], str(i)) if re.search(
                 p, str(i)) else [i, ""][j] for i in list(
                     x.split(feature_split) if feature_split  # if multi
@@ -253,35 +249,27 @@ def detect_guide_targets(col_guide_rna_series,
                 )  # ^ no suffixes: split x or [x] (j=0), "" for suffix (j=1)
             ) for j, p in enumerate(list(
                 [f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$']
-            if guide_split else [None, ""]))
-                            ]  # each entry -> list of target genes
+            if guide_split else [None, ""]))]
     if key_control_patterns:  # if need to search for control key patterns
         targets = targets.apply(
             lambda x: [i if i == key_control else key_control if any(
                     (k in i for k in key_control_patterns)) else i 
                 for i in x])  # find control keys among targets
-    # targets = targets.apply(
-    #     lambda x: [[x[0]] if len(x) == 2 and x[1] == "" else x
-    #     for i in x])  # in case all single-transfected
     grnas = targets.to_frame("t").join(nums.to_frame("n")).apply(
         lambda x: [i + str(guide_split if guide_split else "") + "_".join(
-            np.array(x["n"])[np.where(np.array(x["t"]) == i)[0]]) 
-                   for i in pd.unique(x["t"])],  # sum gRNA counts/gene target 
+            np.array(x["n"])[np.where(np.array(x["t"]) == i)[0]]
+            ) for i in pd.unique(x["t"])],  # sum gRNA counts per gene target 
         axis=1).apply(lambda x: feature_split.join(x)).to_frame(
             "ID")  # e.g., STAT1-1|STAT1-2|NT-1-2 => STAT1-1_2 counts
     # DO NOT change the name of grnas["ID"]
     return targets, grnas
 
 
-def filter_by_guide_counts(adata, col_guide_rna, col_num_umis, 
-                           max_pct_control_drop=75,
-                           min_n_target_control_drop=100,
-                           min_pct_avg_n=40,
-                           min_pct_dominant=80,
-                           drop_multi_control=False,
-                           feature_split="|", guide_split="-",
-                           key_control_patterns=None,
-                           key_control="Control", **kwargs):
+def filter_by_guide_counts(
+    adata, col_guide_rna, col_num_umis, max_pct_control_drop=75,
+    min_n_target_control_drop=100, min_pct_avg_n=40, min_pct_dominant=80,
+    drop_multi_control=False, feature_split="|", guide_split="-",
+    key_control_patterns=None, key_control="Control", **kwargs):
     """
     Filter processed guide RNA names (wraps `detect_guide_targets`).
 
@@ -320,13 +308,13 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             grs = "==="
             bad_symb = np.array(ann.var_names)[np.where(split_char)[0]]
             if grs in guide_split:
-                raise ValueError(f"{grs} is a reserved name and cannot be "
-                                 "contained within `guide_split`.")
-            warn(f"`guide_split` ({guide_split}) found in at least "
-                 f"one gene name ({', '.join(bad_symb)}). Using {grs}. "
-                 "as temporary substitute. Will attempt to replace later, "
-                 "but note that there are risks in having a `guide_split` "
-                 "as a character also found in gene names.")
+                raise ValueError(
+                    f"`guide_split` can't contain reserved name {grs}.")
+            warn(
+                f"`guide_split` ({guide_split}) found in at least one gene "
+                f"name ({', '.join(bad_symb)}). Using {grs}. as temporary "
+                "substitute. Will try to replace later, but note risks of "
+                "`guide_split` being a character also found in gene names.")
             guides = guides.apply(lambda x: re.sub(bad_symb[np.where(
                 [i in str(x) for i in bad_symb])[0][0]], re.sub(
                 guide_split, grs, bad_symb[np.where(
@@ -357,10 +345,11 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     tg_info = ann.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
     if tg_info[col_guide_rna].isnull().any() and (~any(
         [pd.isnull(x) for x in key_control_patterns])):
-        warn(f"NaNs present in guide RNA column ({col_guide_rna}). "
-             f"Dropping {tg_info[col_guide_rna].isnull().sum()} "
-             f"out of {tg_info.shape[0]} rows.")
-        tg_info = tg_info[~tg_info[col_guide_rna].isnull()]
+        ndrop = tg_info[col_guide_rna].isnull().sum()  # number dropped
+        warn(
+            f"NaNs present in guide RNA column ({col_guide_rna}). "
+            f"Dropping {ndrop} out of {tg_info.shape[0]} rows.")
+        tg_info = tg_info[~tg_info[col_guide_rna].isnull()]  # drop NaNs
 
     # Sum Up gRNA UMIs
     cols = [col_guide_rna + "_list", col_num_umis + "_list"]
@@ -380,15 +369,15 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     feats_n = feats_n.join(feats_n.groupby(["bc", "g"]).apply(
         lambda x: "retain" if (x.name[1] != key_control) 
         else ("low_control" if max_pct_control_drop and float(
-            x["p"]) <= max_pct_control_drop
-              else "high_noncontrol" if min_n_target_control_drop and float(
-                  x["n_non_ctrl"]) >= min_n_target_control_drop
-              else "retain")).to_frame("drop_control"))  # control drop labels
+            x["p"]) <= max_pct_control_drop else "high_noncontrol" if (
+                min_n_target_control_drop and float(x[
+                    "n_non_ctrl"]) >= min_n_target_control_drop) else "retain"
+            )).to_frame("drop_control"))  # control drop labels
     feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame(
         "n_cell_avg"))  # average UMI count within-cell
     feats_n = feats_n.reset_index("g")
-    feats_n = feats_n.assign(control=feats_n.g == key_control
-                             )  # control guide dummy-coded column
+    feats_n = feats_n.assign(
+        control=feats_n.g == key_control)  # control guide dummy-coded column
     feats_n = feats_n.assign(target=feats_n.g != key_control).set_index(
         "g", append=True)  # target guide dummy-coded column
     if min_pct_dominant is not None:
@@ -461,9 +450,9 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                 str(i) for i in x))  # join processed names by `feature_split`
         
     # DON'T CHANGE THESE!
-    rnd = {"g": "Gene", "t": "Total Guides in Cell", 
-           "p": "Percent of Cell Guides", "n": "Number in Cell"}
-    # Crispr.get_guide_counts() depends on the names in "rnd"
+    rnd = dict(
+        g="Gene", t="Total Guides in Cell", p="Percent of Cell Guides", 
+        n="Number in Cell") # get_guide_counts() depends on `rnd` keys
     
     feats_n = feats_n.reset_index().rename(rnd, axis=1).set_index(
         [feats_n.index.names[0], rnd["g"]])

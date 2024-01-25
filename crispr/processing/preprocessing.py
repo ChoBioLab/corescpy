@@ -173,22 +173,12 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     return adata
     
     
-def process_data(adata, 
-                 col_gene_symbols=None,
-                 col_cell_type=None,
-                 # remove_doublets=True,
-                 outlier_mads=None,
-                 cell_filter_pmt=None,
-                 cell_filter_ncounts=None, 
-                 cell_filter_ngene=None,
-                 gene_filter_ncell=None,
-                 gene_filter_ncounts=None,
-                 remove_malat1=False,
-                 target_sum=1e4,
-                 kws_hvg=True,
-                 kws_scale=None,
-                 regress_out=regress_out_vars, 
-                 **kwargs):
+def process_data(
+    adata, col_gene_symbols=None, col_cell_type=None,
+    outlier_mads=None, cell_filter_pmt=None, cell_filter_ncounts=None, 
+    cell_filter_ngene=None, gene_filter_ncell=None, gene_filter_ncounts=None,
+    remove_malat1=False, target_sum=1e4, kws_hvg=True, kws_scale=None,
+    regress_out=regress_out_vars, **kwargs):
     """
     Perform various data processing steps.
 
@@ -275,8 +265,8 @@ def process_data(adata,
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
     if layers["counts"] not in ann.layers:
         if min(ann.X) < 0:  # if any data < 0, can't be gene read counts
-            raise ValueError(f"Must provide counts data in`adata.X`"
-                             "`adata.layers['{layers['counts']}']`.")
+            raise ValueError(
+                f"Must have counts in `adata.layers['{layers['counts']}']`.")
         # warn("\n\nASSUMING COUNTS IN `adata.X`! (No counts layer present.)")
         ann.layers[layers["counts"]] = ann.X.copy()  # store counts in layer
     else:
@@ -345,12 +335,12 @@ def process_data(adata,
     
     # Further Filtering
     print("\n<<< FURTHER CELL & GENE FILTERING >>>")
-    ann = cr.pp.filter_qc(ann, outlier_mads=outlier_mads,
-                          cell_filter_pmt=cell_filter_pmt,
-                          cell_filter_ncounts=cell_filter_ncounts,
-                          cell_filter_ngene=cell_filter_ngene, 
-                          gene_filter_ncell=gene_filter_ncell, 
-                          gene_filter_ncounts=gene_filter_ncounts)
+    ann = cr.pp.filter_qc(
+        ann, outlier_mads=outlier_mads, cell_filter_pmt=cell_filter_pmt,
+        cell_filter_ncounts=cell_filter_ncounts,
+        cell_filter_ngene=cell_filter_ngene, 
+        gene_filter_ncell=gene_filter_ncell, 
+        gene_filter_ncounts=gene_filter_ncounts)  # filter based on QC metrics
     if remove_malat1 is True:  # remove MALAT1 genes (often technical issue)?
         ann = ann[:, ~ann.var_names.str.startswith('MALAT1')]  # remove MALAT1
     cr.tl.print_counts(ann, title="Post-Filter", group_by=col_cell_type)
@@ -366,6 +356,7 @@ def process_data(adata,
     if target_sum is not None:  # total-count normalization INPLACE
         print("\n\t*** Total-count normalizing...")
         sc.pp.normalize_total(ann, target_sum=target_sum, copy=False)
+    print(ann)
     print(f"\n\t*** Log-normalizing => `.X` & {layers['log1p']} layer...")
     sc.pp.log1p(ann)  # log-transformed; INPLACE
     ann.layers[layers["log1p"]] = ann.X.copy()  # also keep in layer
@@ -433,10 +424,9 @@ def check_normalization(adata, n_genes=1000):
     return (adata.X[:1000].min() >= 0) or (adata.X[:n_genes].max() <= 9.22)
 
 
-def z_normalize_by_reference(adata, col_reference="Perturbation", 
-                             key_reference="Control", 
-                             retain_zero_variance=True, 
-                             layer=None, **kwargs):
+def z_normalize_by_reference(
+    adata, col_reference="Perturbation", key_reference="Control", 
+    retain_zero_variance=True, layer=None, **kwargs):
     """
     Mean-center & standardize by reference condition 
     (within-batch option).
@@ -464,7 +454,7 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     return adata
 
 
-def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
+def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True, 
                hue=None, patterns=None, layer=None):
     """Calculate & plot quality control metrics."""
     figs = {}
@@ -554,9 +544,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     return figs
 
 
-def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None, 
-              cell_filter_ncounts=None, cell_filter_ngene=None, 
-              gene_filter_ncell=None, gene_filter_ncounts=None):
+def filter_qc(
+    adata, outlier_mads=None, cell_filter_pmt=None, cell_filter_ncounts=None, 
+    cell_filter_ngene=None, gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
     if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
@@ -640,16 +630,15 @@ def remove_batch_effects(adata, col_cell_type="leiden",
         sc.pl.umap(train, color=[col_batch, col_cell_type], 
                    wspace=.5, frameon=False)
     print(f"\n<<< PREPARING DATA >>>") 
-    pt.tl.SCGEN.setup_anndata(train, batch_key="batch", 
-                              labels_key="cell_type")  # prepare AnnData
+    pt.tl.SCGEN.setup_anndata(
+        train, batch_key="batch", labels_key="cell_type")  # prepare AnnData
     model = pt.tl.SCGEN(train)
     print(f"\n<<< TRAINING >>>") 
     model.train(**kws_train)  # training
     print(f"\n<<< CORRECTING FOR BATCH EFFECTS >>>") 
-    corrected_adata = model.batch_removal()  # batch correction
+    corr = model.batch_removal()  # batch-corrected adata
     if plot is True:
-        sc.pp.neighbors(corrected_adata)
-        sc.tl.umap(corrected_adata)
-        sc.pl.umap(corrected_adata, color=[col_batch, col_cell_type], 
-                   wspace=0.4, frameon=False)
-    return corrected_adata
+        sc.pp.neighbors(corr)
+        sc.tl.umap(corr)
+        sc.pl.umap(corr, color=[col_batch, col_cell_type], wspace=0.4)
+    return corr

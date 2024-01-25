@@ -12,6 +12,7 @@ import pertpy as pt
 import squidpy as sq
 import liana
 import os
+from warnings import warn
 import functools
 from copy import deepcopy
 import muon
@@ -113,9 +114,9 @@ class Omics(object):
         # Create Attributes to Store Results/Figures
         self.figures = {"main": {}}
         self.results = {"main": {}}
-        self.info = {"descriptives": {}, 
-                     "guide_rna": {},
-                     "methods": {}}  # extra info to store post-use of methods
+        self.info = {
+            "descriptives": {}, "guide_rna": {},
+            "methods": {}}  # extra info to store post-use of methods
         
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
@@ -154,9 +155,8 @@ class Omics(object):
         self.var = self.rna.var
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
-        if self._columns["col_cell_type"] in self.rna.obs and (
-            not isinstance(self.rna.obs[self._columns["col_cell_type"]], 
-                           pd.Categorical)):
+        if self._columns["col_cell_type"] in self.rna.obs and (not isinstance(
+            self.rna.obs[self._columns["col_cell_type"]], pd.Categorical)):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
                 self._columns["col_cell_type"]].astype("category")  # object -> category
         print("\n\n", self.rna)
@@ -268,8 +268,6 @@ class Omics(object):
                     figs["n_cells"][g] = sns.catplot(
                         data=desc["n_cells"][g].to_frame("N").reset_index(), 
                         y="N", kind="bar", x=g, hue=g)  # bar plot of cell #s
-        # except Exception as err:
-        #     warnings.warn(f"{err}\n\n\nCould not describe cell counts.")
         self.info["descriptives"].update(desc)
         return figs
 
@@ -283,10 +281,11 @@ class Omics(object):
             "legend_loc": "on data", "legend_fontweight": "medium", **kwargs})
         return fig
             
-    def plot(self, genes=None, kind="all", genes_highlight=None, subset=None,
-             group=None, layer=None, kws_qc=False, marker_genes_dict=None, 
-             kws_umap=None, kws_heat=None, kws_violin=None, kws_dot=None, 
-             kws_matrix=None, cell_types_circle=None, **kwargs):
+    def plot(
+        self, genes=None, kind="all", genes_highlight=None, subset=None,
+        group=None, layer=None, kws_qc=False, marker_genes_dict=None, 
+        kws_umap=None, kws_heat=None, kws_violin=None, kws_dot=None, 
+        kws_matrix=None, cell_types_circle=None, **kwargs):
         """Create a variety of plots."""
         figs = {}
         if genes is None and marker_genes_dict:  # marker_genes_dict -> genes
@@ -382,12 +381,14 @@ class Omics(object):
             **{"columns": col, **kwargs})  # plot by groups
         return fig
     
-    def plot_coex(self, genes, use_raw=False, **kwargs):
+    def plot_coex(self, genes, use_raw=False, copy=True, **kwargs):
         """Plot co-expression of a list of genes on a UMAP."""
         ggg = "_".join(genes)  # co-expression variable name (ex: STAT1_ERCC1)
-        adata = sc.tl.score_genes(self.rna, genes, score_name=ggg, 
-                                  use_raw=use_raw, copy=True)  # score co-GEX
+        adata = sc.tl.score_genes(
+            self.rna, genes, score_name=ggg, use_raw=use_raw, copy=True)  # ex
         fig = sc.pl.umap(adata, color=ggg, use_raw=use_raw, **kwargs)  # plot
+        if copy is False:
+            self.rna = adata
         return fig
     
     def preprocess(self, assay_protein=None, layer_in="counts", copy=False, 
@@ -436,8 +437,9 @@ class Omics(object):
             #     self.adata[assay_protein] = ad_p
         return adata, figs
     
-    def downsample(self, subset=None, assay=None, counts_per_cell=None, 
-                   total_counts=None, replace=False, seed=1618, **kwargs):
+    def downsample(
+        self, subset=None, assay=None, counts_per_cell=None, 
+        total_counts=None, replace=False, seed=1618, **kwargs):
         """Downsample counts/`.X` (optionally, of a subset). NOT IN-PLACE."""
         adata = self.adata[assay].copy() if assay else self.adata.copy()
         if subset is not None:
@@ -446,20 +448,20 @@ class Omics(object):
             adata, counts_per_cell=counts_per_cell, total_counts=total_counts, 
             random_state=seed, replace=replace, copy=True)  # downsample
     
-    def bulk(self, mode="sum", subset=None, col_cell_type=None, 
-             col_sample_id=None, layer="counts", copy=True, **kwargs):
+    def bulk(
+        self, mode="sum", subset=None, col_cell_type=None, col_sample_id=None, 
+        layer="counts", copy=True, kws_process=True, **kwargs):
         """Create pseudo-bulk data (col_sample_id=False to ignore)."""
         col_cell_type, col_sample_id = [x[1] if x[1] else self._columns[
-            x[0]] for x in zip(["col_cell_type", "col_sample_id"], 
-                               [col_cell_type, col_sample_id])]
+            x[0]] for x in zip(["col_cell_type", "col_sample_id"], [
+                col_cell_type, col_sample_id])]  # use defaults if not given
         if col_sample_id is False:  # False = don't account for sample ID
             col_sample_id = None  # b/c if use None argument -> use ._columns
-        kws_def = dict(col_sample_id=self._columns["col_sample_id"],
-                       mode="sum", kws_process=True)  # default arguments
         adata = self.rna[subset].copy() if subset else self.rna.copy()
         pdata = cr.tl.create_pseudobulk(
             adata, col_cell_type, col_sample_id=col_sample_id,
-            mode=mode, layer=layer, **kwargs)  # create pseudo-bulk data
+            mode=mode, layer=layer, kws_process=kws_process, **kwargs
+            )  # pseudo-bulk data; process if kws_process=True or dictionary
         if copy is False:
             self.pdata = pdata
         return pdata
@@ -471,23 +473,26 @@ class Omics(object):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
-        if self._integrated is True:
+        if self._integrated is True and kws_pca is not False:
+            warn("Setting kws_pca to False to use Harmony-adjusted PCA!")
             kws_pca = False  # so will use Harmony-adjusted PCA
         if self._columns["col_sample_id"] or self._columns["col_batch"]:
             if colors is None:
                 colors = []
-                for x in [self._columns["col_sample_id"], 
-                          self._columns["col_batch"]]:
-                    if x:
-                        colors += [x]  # add sample & batch UMAP
-        self.info["methods"]["clustering"] = method_cluster
+            for x in ["col_sample_id", "col_batch", "col_subject"]:
+                if self._columns[x]:  # add UMAPs ~ ID
+                    colors += [self._columns[x]]
         ann = self.adata.copy()
+        if copy is False:
+            self.info["methods"]["clustering"] = method_cluster
+        ann.obs.loc[:, "method_cluster"] = method_cluster
         if layer is not None:
             ann.X = ann.layers[layer if (
                 layer in self._layers) else self._layers[layer]].copy()
-        kws = dict(method_cluster=method_cluster, kws_pca=kws_pca, 
-                   kws_neighbors=kws_neighbors, kws_umap=kws_umap, 
-                   kws_cluster=kws_cluster, resolution=resolution)
+        kws = dict(
+            method_cluster=method_cluster, kws_pca=kws_pca, 
+            kws_neighbors=kws_neighbors, kws_umap=kws_umap, 
+            kws_cluster=kws_cluster, resolution=resolution)
         adata, figs_cl = cr.ax.cluster(
             ann, assay=assay, **self._columns, **self._keys, colors=colors, 
             kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
@@ -499,9 +504,9 @@ class Omics(object):
             return figs_cl
         return adata
     
-    def annotate_clusters(self, model, mode="best match", layer="log1p", 
-                          p_threshold=0.5, over_clustering=None, 
-                          min_proportion=0, copy=False, **kwargs):
+    def annotate_clusters(
+        self, model, mode="best match", layer="log1p", p_threshold=0.5, 
+        over_clustering=None, min_proportion=0, copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
         adata = self.rna.copy()
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
@@ -515,9 +520,9 @@ class Omics(object):
             self.rna = ann
         return ann, [res, figs]
     
-    def find_markers(self, assay=None, n_genes=10, layer="log1p", 
-                     method="wilcoxon", key_reference="rest", 
-                     plot=True, col_cell_type=None, **kwargs):
+    def find_markers(
+        self, assay=None, n_genes=10, layer="log1p", method="wilcoxon", 
+        key_reference="rest", plot=True, col_cell_type=None, **kwargs):
         if assay is None:
             assay = self._assay
         if col_cell_type is None:  # if cell type column not specified...
@@ -556,9 +561,9 @@ class Omics(object):
             self.results["composition"] = output
         return output
     
-    def run_dialogue(self, n_programs=3, col_confounder=None,
-                     col_cell_type=None, cmap="coolwarm", vcenter=0, 
-                     layer="log1p", **kws_plot):
+    def run_dialogue(
+        self, n_programs=3, col_confounder=None, col_cell_type=None, 
+        cmap="coolwarm", vcenter=0, layer="log1p", **kws_plot):
         """Analyze <`n_programs`> multicellular programs."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
@@ -586,9 +591,9 @@ class Omics(object):
         self.figures["dialogue"] = fig
         return fig
     
-    def run_gsea(self, key_condition, col_condition=None, layer="log1p",
-                 filter_by_highly_variable=True, copy=False, 
-                 pseudobulk=True, **kwargs):
+    def run_gsea(
+        self, key_condition, col_condition=None, layer="log1p", copy=False,
+        filter_by_highly_variable=True, pseudobulk=True, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
         if col_condition is None:
             col_condition = self._columns["col_cell_type"]
@@ -645,10 +650,10 @@ class Omics(object):
                         plot_stat="p_adj", uns_key="pca_anova", 
                         copy=False, figsize=30, **kwargs):
         """Perform pseudo-bulk functional analysis."""
+        if col_covariates is None and self._columns["col_condition"] is None:
+            con = "`._columns['col_condition']` is None"
+            raise ValueError(f"Specify `col_covariates` if {con}.")
         if col_covariates is None:
-            if self._columns["col_condition"] is None:
-                raise ValueError("Must specify `col_covariates` if "
-                                 "`self._columns['col_condition']` is None.")
             col_covariates = [self._columns["col_condition"]]
         cct = kwargs.pop("col_cell_type", self._columns["col_cell_type"])
         layer = layer if layer in self.adata.layers else self._layers[layer]
@@ -668,13 +673,14 @@ class Omics(object):
         col_condition=None, col_subject=True, col_sample_id=None,
         key_sources=None, key_targets=None, resource="CellPhoneDB",  
         top_n=20, min_prop=0, min_count=0, min_total_count=0, 
-        remove_ns=True, p_threshold=0.01, n_jobs=None,
+        remove_ns=False, p_threshold=0.01, n_jobs=None, copy=False,
         cmap="magma", kws_plot=None, n_perms=10, figsize=None, **kwargs):
         """Find receptor-ligand interactions (&, optionally DEA)."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        col_kws = dict(zip(["col_subject", "col_sample_id", "col_condition"], 
-                           [col_subject, col_sample_id, col_condition]))
+        figs = {}
+        col_kws = dict(zip(["col_subject", "col_sample_id", "col_condition"
+                            ], [col_subject, col_sample_id, col_condition]))
         col_subject, col_sample_id, col_condition = [
             None if col_kws[x] is False else self._columns[x] if col_kws[
                 x] in [None, True] else col_kws[x] for x in col_kws
@@ -682,7 +688,34 @@ class Omics(object):
         if layer and layer not in self.adata.layers:
             layer = self.adata._layers[layer]
         adata = (self.rna[subset] if subset is not None else self.rna).copy()
-        res, fig = cr.ax.analyze_receptor_ligand(
+
+        # Differential Expression Analysis (DEA), Optionally
+        if col_condition is not None:
+            kws_deseq2 = kwargs.pop("kws_deseq2", None)
+            if kws_deseq2 is None:
+                kws_deseq2 = {}
+            key_control, key_treatment = [
+                kwargs[x] if x in kwargs else self._keys[x] 
+                for x in ["key_control", "key_treatment"]]  # condition labels
+            pseudo = cr.tl.create_pseudobulk(
+                adata.copy(), col_cell_type, col_sample_id=col_sample_id, 
+                layer=self._layers["counts"], mode="sum", 
+                kws_process=True)  # create pseudo-bulk data
+            if copy is False:
+                self.pdata = pseudo
+            cgs = pseudo.var.index.names[0]  # gene symbols column/index name
+            res_dea = cr.ax.calculate_dea_deseq2(
+                pseudo, col_cell_type, col_condition, key_control, 
+                key_treatment, top_n=top_n, 
+                layer_counts=self._layers["counts"], 
+                col_subject=col_subject, min_prop=min_prop, 
+                min_count=min_count, col_gene_symbols=cgs,
+                min_total_count=min_total_count, **kws_deseq2)  # run DEA
+        else:
+            res_dea = None, None, None
+            
+        # Ligand-Receptor Analysis
+        res, adata, figs["l_r"] = cr.ax.analyze_receptor_ligand(
             adata, col_condition=col_condition, col_subject=col_subject, 
             col_sample_id=col_sample_id, resource=resource, n_jobs=n_jobs,
             method=method, layer=layer, layer_counts=self._layers["counts"],
@@ -691,47 +724,39 @@ class Omics(object):
             cmap=cmap, p_threshold=p_threshold, figsize=figsize, 
             min_prop=min_prop, min_total_count=min_total_count, 
             min_count=min_count, n_perms=n_perms, kws_plot=kws_plot, 
-            **kwargs)  # run receptor-ligand (& optionally, DEA) analysis
-        self.results["receptor_ligand"] = res
-        self.figures["receptor_ligand"] = fig
-        self.results["receptor_ligand_info"] = {
-            "subset": subset, "col_condition": col_condition}
-        return adata, res, fig
+            # dea_df=res_dea[1], **kwargs)  # run receptor-ligand
+            dea_df=None, plot=res_dea[1] is None, **kwargs)  # receptor-ligand
+        res["dea_results"], res["dea_df"], figs["dea"] = res_dea
+        if res_dea[1] is not None:
+            res["lr_dea_res"] = liana.mu.df_to_lr(
+                adata[adata.obs[col_condition] == key_treatment].copy(), 
+                res_dea[1], col_cell_type, stat_keys=[
+                    "stat", "pvalue", "padj"], use_raw=False, layer=layer, 
+                verbose=True, complex_col="stat", expr_prop=min_prop, 
+                return_all_lrs=True, resource_name="consensus").sort_values(
+                    "interaction_stat", ascending=False)
+            kws = cr.tl.merge(
+                dict(cmap=cmap, p_threshold=p_threshold, top_n=top_n, 
+                     figsize=figsize, key_sources=key_sources, 
+                     key_targets=key_targets), kws_plot)
+            figs["lr"] = cr.pl.plot_receptor_ligand(
+                adata=adata, lr_dea_res=res["lr_dea_res"], **kws)  # plot
+        if copy is False:
+            self.rna = adata
+            self.results["receptor_ligand"] = res
+            self.figures["receptor_ligand"] = figs
+            self.results["receptor_ligand_info"] = {
+                "subset": subset, "col_condition": col_condition}
+        return adata, res, figs
     
     def plot_receptor_ligand(self, key_sources=None, key_targets=None,
                              title=None, out_dir=None, **kwargs):
         """Plot previously-run receptorout_dir-ligand analyses."""
         subset = self.results["receptor_ligand_info"]["subset"]
-        res = self.results["receptor_ligand"]["liana_res"]
-        if isinstance(res, dict):
-            figs = {}
-            ccc = self.results["receptor_ligand_info"]["col_condition"]
-            for c in res:
-                if c.lower() == "all":
-                    continue
-                # res = (self.rna if c.lower() == "overall" else self.rna[
-                #     self.rna[ccc] == c]).copy()
-                # if subset:
-                #     res = res[subset]
-                figs[c] = cr.pl.plot_receptor_ligand(
-                    liana_res=res[c], title=f"{title} ({c})", **kwargs,
-                    # adata=res,
-                    key_sources=key_sources, key_targets=key_targets)
-                if out_dir:
-                    for r in figs[c]:
-                        figs[c][r].save(os.path.join(
-                            out_dir, f"receptor_ligand_{c}_{r}.png"), 
-                                        limitsize=False)
-        else:
-            # res = (self.rna if subset is None else self.rna[subset]).copy()
-            figs = cr.pl.plot_receptor_ligand(
-                liana_res=res, 
-                # adata=res,
-                title=title,
-                key_sources=key_sources, key_targets=key_targets, **kwargs)
-            if out_dir:
-                for r in figs:
-                    figs[r].save(os.path.join(
-                        out_dir, f"receptor_ligand.png"), limitsize=False)
+        res = self.results["receptor_ligand"].copy()
+        figs = cr.pl.plot_receptor_ligand(
+            adata=self.adata.copy(),
+            liana_res=res["liana_res"], lr_dea_res=res["lr_dea_res"], 
+            key_sources=key_sources, key_targets=key_targets, **kwargs)
         return figs
             

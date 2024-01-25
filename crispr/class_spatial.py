@@ -8,6 +8,7 @@
 import os
 import squidpy as sq
 import scanpy as sc
+import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
 from crispr.class_sc import Omics
@@ -133,6 +134,8 @@ class Spatial(Omics):
             col_cell_type = self._columns["col_cell_type"]
         if not library_id:
             library_id = self._library_id
+        if isinstance(palette, list):
+            palette = matplotlib.colors.Colormap(palette)
             
         # Connectivity & Centrality + Interaction Matrix
         print("\n<<< CALCULATING CENTRALITY SCORES >>>")
@@ -176,11 +179,10 @@ class Spatial(Omics):
         else:
             return adata, figs
     
-    def calculate_centrality(self, col_cell_type=None, delaunay=True, 
-                             coord_type="generic", figsize=None, 
-                             palette="coolwarm", shape="hex", size=None, 
-                             title=None, kws_plot=None, 
-                             copy=False, jobs=None, **kwargs):
+    def calculate_centrality(
+        self, col_cell_type=None, delaunay=True, coord_type="generic", 
+        figsize=None, palette=None, shape="hex", size=None, title=None, 
+        kws_plot=None, copy=False, n_jobs=None, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
         """
@@ -193,16 +195,18 @@ class Spatial(Omics):
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
-        kws_plot = {**dict(figsize=figsize, palette=palette, 
-                           shape=shape, size=size), 
+        if isinstance(palette, list):
+            palette = matplotlib.colors.Colormap(palette)
+        kws_plot = {**dict(figsize=figsize, palette=palette, size=size), 
                     **dict(kws_plot if kws_plot else {})}
-        if jobs is None and jobs is not False:
-            jobs = os.cpu_count() - 1  # threads for parallel processing
+        if n_jobs is None and n_jobs is not False:
+            n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.spatial_neighbors(
             adata, coord_type=coord_type, delaunay=delaunay,
             spatial_key=self._assay_spatial)  # spatial neighbor calculation
         print("\t*** Computing & plotting centrality scores...")
-        sq.gr.centrality_scores(adata, cluster_key=col_cell_type, n_jobs=jobs)
+        sq.gr.centrality_scores(adata, cluster_key=col_cell_type, 
+                                n_jobs=n_jobs)  # centrality scores
         # adata.uns["spatial"][
         #     "library_id"] = col_sample_id if col_sample_id not in [
         #         None, False] else self._columns["col_sample_id"]  # library ID
@@ -217,12 +221,13 @@ class Spatial(Omics):
             self._assay_spatial].keys())) == 1:
             print("<<< UPDATING SELF._LIBRARY_ID >>>")
             self._library_id = list(adata.uns[self._assay_spatial].keys())[0]
+        self.figures["centrality"] = fig
         return fig
         
-    def calculate_neighborhood(self, col_cell_type=None, library_id=None,
-                               figsize=None, palette=None, size=None,
-                               shape="hex", seed=1618, 
-                               kws_plot=None, copy=False):
+    def calculate_neighborhood(
+        self, col_cell_type=None, library_id=None, mode="zscore", seed=1618,
+        layer=None, palette=None, size=None, shape="hex", figsize=None, 
+        kws_plot=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.rna.copy() if copy is True else self.rna
         if col_cell_type is None:
@@ -231,22 +236,26 @@ class Spatial(Omics):
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
-        kws_plot = {**dict(palette=palette, shape=shape, size=size), 
+        if isinstance(palette, list):
+            palette = matplotlib.colors.Colormap(palette)
+        kws_plot = {**dict(palette=palette, size=size, 
+                           use_raw=False, layer=layer), 
                     **dict(kws_plot if kws_plot else {})}
         sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type,
                                n_jobs=None,
-                               # n_jobs=jobs,  # not working for some reason?
+                               # n_jobs=n_jobs,  # not working for some reason
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         sq.pl.nhood_enrichment(
-            adata, cluster_key=col_cell_type, figsize=(8, 8), 
+            adata, cluster_key=col_cell_type, 
             title="Neighborhood Enrichment", ax=axs[0])  # heatmap (panel 1)
-        sq.pl.spatial_scatter(adata, color=col_cell_type,
+        sq.pl.spatial_scatter(adata, color=col_cell_type, shape=shape,
                               ax=axs[1], **kws_plot)  # scatterplot (panel 2)
+        self.figures["neighborhood_enrichment"] = plt.gcf()
         return fig
         
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
-                          layer=None, copy=False, jobs=None,
+                          layer=None, copy=False, n_jobs=None,
                           figsize=15, palette=None, title=None,
                           kws_plot=None, shape="hex", size=None, **kwargs):
         """
@@ -254,67 +263,83 @@ class Spatial(Omics):
         enrichment analysis, but uses original spatial coordinates rather
         than connectivity matrix).
         """
+        if isinstance(key_cell_type, str):
+            key_cell_type = [key_cell_type]
         figs, adata = {}, self.rna.copy() if copy is True else self.rna
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
-        kws_plot = {**dict(palette=palette, shape=shape, size=size), 
+        if isinstance(palette, list):
+            palette = matplotlib.colors.Colormap(palette)
+        kws_plot = {**dict(palette=palette, size=size,
+                           layer=layer, use_raw=False), 
                     **dict(kws_plot if kws_plot else {})}
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        if jobs is None and jobs is not False:
-            jobs = os.cpu_count() - 1  # threads for parallel processing
+        if n_jobs is None and n_jobs is not False:
+            n_jobs = os.cpu_count() - 1  # threads for parallel processing
         if layer:
             adata.X = adata.layers[self._layers[layer]].X.copy()
-        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=jobs, 
+        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs, 
                             spatial_key=self._assay_spatial, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata, color=col_cell_type, **kws_plot, 
-            figsize=figsize, return_ax=True)  # scatter
+            adata, color=col_cell_type, **kws_plot, groups=key_cell_type,
+            figsize=figsize, return_ax=True, shape=shape)  # cell types plot
         if title:
             figs["spatial_scatter"].suptitle(title)
         figs["co_occurrence"] = sq.pl.co_occurrence(
-            adata, cluster_key=col_cell_type,
-            clusters=key_cell_type, figsize=figsize)
+            adata, cluster_key=col_cell_type, legend=False,
+            clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         if title:
             figs["co_occurrence"].suptitle(title)
+        self.figures["co_occurrence"] = figs["co_occurrence"]
         return adata, figs
         
-    def find_svgs(self, genes=None, method="moran", n_perms=10,
-                  library_id=None, layer=None, copy=False,
-                  col_cell_type=None, col_sample_id=None, jobs=None, 
-                  figsize=15, title=None, kws_plot=None):
+    def find_svgs(self, genes=None, method="moran", n_perms=10, layer=None,
+                  library_id=None, copy=False, col_cell_type=None, title=None,
+                  col_sample_id=None, n_jobs=None, figsize=15, 
+                  shape="hex", kws_plot=None):
         """Find spatially-variable genes."""
         adata = self.rna.copy() if copy else self.rna
+        if layer:
+            adata.X = adata.layers[layer if layer in adata else self._layers[
+                layer]].X.copy()
+        kws_plot = {"cmap": "magma", "use_raw": False,
+                    "layer": layer, **dict(kws_plot if kws_plot else {})}
         if not library_id:
             library_id = self._library_id
-        if jobs is None and jobs is not False:
-            jobs = os.cpu_count() - 1  # threads for parallel processing
+        if n_jobs is None and n_jobs is not False:
+            n_jobs = os.cpu_count() - 1  # threads for parallel processing
         if genes is None:
             genes = 10  # plot top 10 variable genes if un-specified
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
+        # if isinstance(palette, list):
+        #     palette = matplotlib.colors.Colormap(palette)
         # if size is None:
         #     size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         # kws_plot = {**dict(palette=palette, shape=shape, size=size), 
         #             **dict(kws_plot if kws_plot else {})}
-        kws_plot = {"cmap": "magma", **dict(kws_plot if kws_plot else {})}
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
-        sq.gr.spatial_autocorr(self.rna, mode=method, layer=layer, 
-                               n_perms=n_perms, n_jobs=jobs)  # auto-correlate
+        sq.gr.spatial_autocorr(
+            self.rna, mode=method, layer=layer, n_perms=n_perms, 
+            n_jobs=n_jobs)  # auto-correlate
         if isinstance(genes, int):
             genes = adata.uns["moranI"].head(genes).index.values
         # libid = col_sample_id if col_sample_id not in [
         #     None, False] else self._columns["col_sample_id"]  # library ID
-        # sq.pl.spatial_scatter(adata, color=col_cell_type, 
-        #                       library_id=library_id, figsize=figsize,
-        #                       **kws_plot)  # cluster plot (panel 1)
-        sc.pl.spatial(adata, color=genes + [col_cell_type], 
-                      library_id=library_id, **kws_plot)  # GEX plot (panel 2)
+        # sq.pl.spatial_scatter(adata, color=col_cell_type, figsize=figsize, 
+        #                       shape=shape, library_id=library_id, 
+        #                       **kws_plot)  # cell type/clusters plot
+        sq.pl.spatial_scatter(adata, color=genes + [col_cell_type], 
+                              figsize=figsize, shape=shape, 
+                              library_id=library_id, **kws_plot)  # cell type
+        # sc.pl.spatial(adata, color=genes, library_id=library_id, 
+        #               figsize=figsize, **kws_plot)  # SVGs GEX plot
         fig = plt.gcf()
         if title:
             fig.suptitle(title)

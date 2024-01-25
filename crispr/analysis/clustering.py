@@ -16,15 +16,11 @@ import os
 import pandas as pd
 
 
-def cluster(adata, layer=None,
-            plot=True, colors=None,
-            kws_celltypist=None,
-            paga=False,  # if issues with disconnected clusters, etc.
-            method_cluster="leiden", 
-            resolution=1,
-            kws_pca=None, kws_neighbors=None, 
-            kws_umap=None, kws_cluster=None, 
-            seed=1618, **kwargs):
+def cluster(
+    adata, layer=None, plot=True, colors=None, kws_celltypist=None,
+    paga=False,  # if issues with disconnected clusters, etc.
+    method_cluster="leiden", resolution=1, kws_pca=None, kws_neighbors=None, 
+    kws_umap=None, kws_cluster=None, seed=1618, **kwargs):
     """
     Perform clustering and visualize results.
     
