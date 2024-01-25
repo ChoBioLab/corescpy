@@ -25,6 +25,7 @@ dependencies = [
     "pertpy",
     "harmonypy",
     "squidpy",
+    "pydeseq2",
     "liana >= 1.0.4",
     "corneto",
     "graphviz",
@@ -91,8 +92,8 @@ test = [
     "pytest-cov",
 ]
 
-[tool.dependencies]
-pydeseq2 = {path = "../pydeseq2"}
+# [tool.dependencies]
+# pydeseq2 = {path = "../pydeseq2"}
 
 [tool.hatch.version]
 source = "vcs"
