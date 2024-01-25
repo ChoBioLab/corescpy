@@ -227,11 +227,14 @@ class Spatial(Omics):
     def calculate_neighborhood(
         self, col_cell_type=None, library_id=None, mode="zscore", seed=1618,
         layer=None, palette=None, size=None, shape="hex", figsize=None, 
-        kws_plot=None, copy=False):
+        kws_plot=None, title="Neighborhood Enrichment", 
+        cmap="magma", vcenter=0, cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.rna.copy() if copy is True else self.rna
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
+        if cbar_range is None:
+            cbar_range = [None, None]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
@@ -242,13 +245,14 @@ class Spatial(Omics):
                            use_raw=False, layer=layer), 
                     **dict(kws_plot if kws_plot else {})}
         sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type,
-                               n_jobs=None,
+                               n_jobs=None, 
                                # n_jobs=n_jobs,  # not working for some reason
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         sq.pl.nhood_enrichment(
-            adata, cluster_key=col_cell_type, 
-            title="Neighborhood Enrichment", ax=axs[0])  # heatmap (panel 1)
+            adata, cluster_key=col_cell_type, title=title, vcenter=vcenter, 
+            cmap=cmap, vmin=cbar_range[0], vmax=cbar_range[1], 
+            ax=axs[0])  # matrix/heat of enrichment scores (panel 1)
         sq.pl.spatial_scatter(adata, color=col_cell_type, shape=shape,
                               ax=axs[1], **kws_plot)  # scatterplot (panel 2)
         self.figures["neighborhood_enrichment"] = plt.gcf()
@@ -272,8 +276,7 @@ class Spatial(Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(palette=palette, size=size,
-                           layer=layer, use_raw=False), 
+        kws_plot = {**dict(palette=palette, size=size), 
                     **dict(kws_plot if kws_plot else {})}
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
@@ -289,9 +292,12 @@ class Spatial(Omics):
             figsize=figsize, return_ax=True, shape=shape)  # cell types plot
         if title:
             figs["spatial_scatter"].suptitle(title)
-        figs["co_occurrence"] = sq.pl.co_occurrence(
-            adata, cluster_key=col_cell_type, legend=False,
-            clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
+        # figs["co_occurrence"] = sq.pl.co_occurrence(
+        #     adata, cluster_key=col_cell_type, legend=False,
+        #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
+        figs["co_occurrence"] = cr.pl.plot_cooccurrence(
+            adata, col_cell_type=col_cell_type, **kws_plot,
+            key_cell_type=key_cell_type, figsize=figsize)  # plot
         if title:
             figs["co_occurrence"].suptitle(title)
         self.figures["co_occurrence"] = figs["co_occurrence"]
@@ -330,11 +336,6 @@ class Spatial(Omics):
             n_jobs=n_jobs)  # auto-correlate
         if isinstance(genes, int):
             genes = adata.uns["moranI"].head(genes).index.values
-        # libid = col_sample_id if col_sample_id not in [
-        #     None, False] else self._columns["col_sample_id"]  # library ID
-        # sq.pl.spatial_scatter(adata, color=col_cell_type, figsize=figsize, 
-        #                       shape=shape, library_id=library_id, 
-        #                       **kws_plot)  # cell type/clusters plot
         ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
         sq.pl.spatial_scatter(adata, color=genes + [col_cell_type], 
                               figsize=figsize, shape=shape, ncols=ncols,

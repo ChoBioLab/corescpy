@@ -4,4 +4,4 @@ from .perturbation_plots import (plot_targeting_efficiency,
                                  plot_pathway_interference_results)
 from .gene_expression_plots import (plot_gex, plot_umap_multi, 
                                     plot_umap_split, plot_cat_split)
-from .communication_plots import plot_receptor_ligand
+from .communication_plots import plot_receptor_ligand, plot_cooccurrence
