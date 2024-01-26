@@ -774,7 +774,7 @@ class Crispr(Omics):
         return data, results, figs_aug
     
     def compute_distance(self, distance_type="edistance", method="X_pca", 
-                         layer=None, kws_plot=None, 
+                         layer=None, kws_plot=None, col_condition=None,
                          highlight_real_range=False, plot=True, **kwargs):
         """
         Compute and visualize distance metrics.
@@ -782,6 +782,10 @@ class Crispr(Omics):
         Args:
             distance_type (str, optional): The type of distance 
                 calculation to perform. Defaults to "edistance".
+            col_condition (str, optional): The column representing
+                conditions between which to test distances 
+                (e.g., perturbed vs. non-perturbed, target genes names,
+                guide RNA IDs).
             method (str, optional): The method to use for 
                 dimensionality reduction. Defaults to "X_pca".
             kws_plot (dict, optional): Additional keyword arguments 
@@ -793,28 +797,7 @@ class Crispr(Omics):
             plot (bool, optional): Whether to create plots. 
                 Defaults to True.
             **kwargs: Additional keyword arguments to be passed to 
-                the `crispr.ax.perform_mixscape()` function.
-                The arguments that are used vary by method, but for ,
-                    example you can pass `key_<control, treatment>` 
-                    and/or
-                    `col_<perturbation, cell_type, etc.>` to override 
-                    those defined by 
-                    `self._columns` and `self._keys`.
-                    If not specified (which should usually be the case), 
-                    the corresponding `._key/column` attribute will be 
-                    used. You can pass these extra arguments in rare 
-                    case where you want to use different columns/keys 
-                    within columns across 
-                    different methods or runs of a method. For instance,
-                    for experimental conditions that have
-                    multiple levels (e.g., control, drug A treatment, 
-                    drug B treatment), allowing this argument 
-                    (and `col_perturbed`, for instance, 
-                    if self._columns["col_perturbed"] 
-                    is a binary treatment vs. drug column, and you want 
-                    to use the more specific column for Augur)
-                    to be specified allows for more flexibility 
-                    in analysis.
+                the `crispr.ax.compute_distance()` function.
         Returns:
             output: A tuple containing output from 
                 `cr.ax.compute_distance()`, 
@@ -826,6 +809,8 @@ class Crispr(Omics):
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
+        if col_condition is None:
+            col_condition = self._columns["col_condition"]
         adata = self.rna if layer is None else self.rna.copy()
         if layer:
             print(f"Using layer {layer} for distance calculation.")
@@ -834,7 +819,7 @@ class Crispr(Omics):
         output = cr.ax.compute_distance(
             adata, distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
-            plot=plot, **kwargs)
+            plot=plot, col_target_genes=col_condition, **kwargs)
         if plot is True:
             for x in [self.results, self.figures]:
                 if "distances" not in x:
