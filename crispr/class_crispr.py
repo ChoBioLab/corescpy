@@ -774,7 +774,8 @@ class Crispr(Omics):
         return data, results, figs_aug
     
     def compute_distance(self, distance_type="edistance", method="X_pca", 
-                         layer=None, kws_plot=None, col_condition=None,
+                         layer=None, kws_plot=None, 
+                         col_condition=None, col_cell_type=None,
                          highlight_real_range=False, plot=True, **kwargs):
         """
         Compute and visualize distance metrics.
@@ -798,6 +799,10 @@ class Crispr(Omics):
                 Defaults to True.
             **kwargs: Additional keyword arguments to be passed to 
                 the `crispr.ax.compute_distance()` function.
+                Can also override the default 
+                `key_control`/`key_treatment` and/or `col_cell_type`
+                labels (extracted from `self._keys` and/or 
+                `self._columns`) by specifying them.
         Returns:
             output: A tuple containing output from 
                 `cr.ax.compute_distance()`, 
@@ -805,12 +810,9 @@ class Crispr(Omics):
                 See function documentation.
 
         """
-        for x in [self._columns, self._keys]:
-            for c in x:  # iterate column/key name attributes
-                if c not in kwargs:  # if not passed as argument to method...
-                    kwargs.update({c: x[c]})  # & use object attribute
-        if col_condition is None:
-            col_condition = self._columns["col_condition"]
+        col_condition, col_cell_type = [x[1] if x[1] else self._columns[x[
+            0]] for x in zip(["col_condition", "col_cell_type"], [
+                col_condition, col_cell_type])]  # default column labels
         adata = self.rna if layer is None else self.rna.copy()
         if layer:
             print(f"Using layer {layer} for distance calculation.")
@@ -819,7 +821,8 @@ class Crispr(Omics):
         output = cr.ax.compute_distance(
             adata, distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range, 
-            plot=plot, col_target_genes=col_condition, **kwargs)
+            plot=plot, col_target_genes=col_condition, 
+            col_cell_type=col_cell_type, **kwargs)  # compute/plot distance
         if plot is True:
             for x in [self.results, self.figures]:
                 if "distances" not in x:

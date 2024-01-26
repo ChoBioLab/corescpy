@@ -450,13 +450,11 @@ def compute_distance(adata, col_target_genes="target_genes",
                      plot=True, **kwargs):
     """Compute distance & hierarchies; (optionally) make heatmaps."""
     figs = {}
-    distance = {}
-    if kwargs:
-        print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_plot is None:
         kws_plot = dict(robust=True, figsize=(10, 10))
     if kwargs:
         print(f"\nUn-used Keyword Arguments: {kwargs}")
+    print(col_cell_type, col_target_genes)
         
     # Distance Metrics
     distance = pt.tl.Distance(distance_type, obsm_key=method)
