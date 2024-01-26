@@ -580,7 +580,7 @@ class Omics(object):
             "col_perturbed" in self._columns) else "col_condition"] 
         d_l = pt.tl.Dialogue(
             sample_id=col, n_mpcs=n_programs, celltype_key=col_cell_type, 
-            n_counts_key=self._columns["col_num_umis"])
+            n_counts_key=self._columns["col_num_umis"])  # run Dialogue
         pdata, mcps, w_s, ct_subs = d_l.calculate_multifactor_PMD(
             adata, normalize=True)
         mcp_cols = list(set(pdata.obs.columns).difference(adata.obs.columns))
@@ -589,6 +589,10 @@ class Omics(object):
             pdata, color=mcp_cols + [col, col_cell_type],
             ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
         if col_confounder:  # correct for a confounding variable?
+            if "A1" not in dir(ct_subs[list(ct_subs.keys())[0]].X[:100].mean(
+                axis=1)):  # if doesn't have flatten attribute used by Pertpy
+                for x in ct_subs:
+                    ct_subs[x].X = np.matrix(ct_subs[x].X)  # to numpy matrix
             res, p_new = d_l.multilevel_modeling(
                 ct_subs=ct_subs, mcp_scores=mcps, ws_dict=w_s, 
                 confounder=col_confounder)

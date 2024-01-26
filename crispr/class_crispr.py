@@ -659,12 +659,12 @@ class Crispr(Omics):
     def plot_mixscape(self, target_gene_idents=True, protein_of_interest=None, 
                       color="red", subsample_number=100):
         """Plot the Mixscape score(s) for one or more target genes."""
-        g_s = self.info["guide_rna"]["keywords"]["guide_split"] if (
+        g_s = self.info["guide_rna"]["guide_split"] if (
             "keywords" in self.info["guide_rna"] and 
-            "guide_split" in self.info["guide_rna"]["keywords"]) else None
-        f_s = self.info["guide_rna"]["keywords"]["feature_split"] if (
+            "guide_split" in self.info["guide_rna"]) else None
+        f_s = self.info["guide_rna"]["feature_split"] if (
             "keywords" in self.info["guide_rna"] and 
-            "feature_split" in self.info["guide_rna"]["keywords"]) else None
+            "feature_split" in self.info["guide_rna"]) else None
         figs = cr.pl.plot_mixscape(
             self.rna, self._columns["col_target_genes"], 
             self._keys["key_treatment"], 
