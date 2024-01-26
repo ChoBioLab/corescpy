@@ -488,7 +488,7 @@ class Omics(object):
             for x in ["col_sample_id", "col_batch", "col_subject"]:
                 if self._columns[x]:  # add UMAPs ~ ID
                     colors += [self._columns[x]]
-        ann = self.adata.copy()
+        ann = self.rna.copy()
         if copy is False:
             self.info["methods"]["clustering"] = method_cluster
         ann.obs.loc[:, "method_cluster"] = method_cluster

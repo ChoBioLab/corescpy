@@ -288,6 +288,7 @@ def process_data(
             kws_scale = True  # so doesn't think scaling by reference (CRISPR)
     else:
         max_val, cen = 0, 0
+    print(kws_scale)
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)
