@@ -1,0 +1,18 @@
+from crispr.class_sc import Omics
+import pertpy as pt
+
+                
+class TestOca:
+    """Object creation tests."""
+    
+    file_path = pt.dt.haber_2017_regions()  # download data
+
+    self = Omics(file_path, col_gene_symbols="index", col_cell_type="cell_label", 
+                 col_sample_id="batch", col_batch="batch", 
+                 col_condition="condition", key_control="Control", 
+                 key_treatment="Salmonella")
+    
+    def test_run_oca(self):
+        """Ensure expected attributes are present."""
+        oca = self.run_composition_analysis(
+            est_fdr=0.05, generate_sample_level=True)
