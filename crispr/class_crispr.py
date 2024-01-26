@@ -308,15 +308,18 @@ class Crispr(Omics):
                      "methods": {}}  # extra info to store post-use of methods
         
         # Create Object & Store Raw Counts
+        if kws_process_guide_rna is not False:  # if don't explicitly skip
+            kws_pga = cr.tl.merge({
+                "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
+                "key_control": key_control, 
+                "col_guide_rna_new": col_condition}, kws_process_guide_rna)
+        else:
+            kws_pga, kws_process_guide_rna = None, None
         super().__init__(
             self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
             col_sample_id=col_sample_id, col_condition=col_condition,
             key_control=key_control, key_treatment=key_treatment,
-            kws_process_guide_rna=cr.tl.merge(
-                {"col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
-                 "key_control": key_control, 
-                 "col_guide_rna_new": col_condition}, kws_process_guide_rna), 
-            kws_multi=kws_multi)  # make AnnData
+            kws_process_guide_rna=kws_pga, kws_multi=kws_multi)  # make adata
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
         if kws_process_guide_rna and "guide_split" in kws_process_guide_rna:
             self.info["guide_rna"]["guide_split"] = kws_process_guide_rna[

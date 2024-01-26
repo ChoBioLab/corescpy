@@ -99,6 +99,9 @@ class Omics(object):
                 `AnnData.concatenate()` or None (to use defaults). 
         """
         print("\n\n<<< INITIALIZING OMICS CLASS OBJECT >>>\n")
+        if "kws_process_guide_rna" in kwargs and kwargs[
+            "kws_process_guide_rna"] in [False, None]:
+            _ = kwargs.pop("kws_process_guide_rna")
         col_num_umis = kwargs["kws_process_guide_rna"][
             "col_num_umis"] if "kws_process_guide_rna" in kwargs else kwargs[
                 "col_num_umis"] if "col_num_umis" in kwargs else None

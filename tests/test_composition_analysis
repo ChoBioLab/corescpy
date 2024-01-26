@@ -14,5 +14,5 @@ class TestOca:
     
     def test_run_oca(self):
         """Ensure expected attributes are present."""
-        oca = self.run_composition_analysis(
+        oca = TestOca.self.run_composition_analysis(
             est_fdr=0.05, generate_sample_level=True)
