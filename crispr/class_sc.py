@@ -414,7 +414,7 @@ class Omics(object):
         """
         if assay_protein is None:
             assay_protein = self._assay_protein
-        layer = layer_in if layer_in in self.adata.layers else self._layers[
+        layer = layer_in if layer_in in self.rna.layers else self._layers[
             layer_in]  # detect layer; raw counts if not specified
         kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
         kws_scale = {} if isinstance(kws_scale, str) and kws_scale.lower(
