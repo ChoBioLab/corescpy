@@ -8,10 +8,11 @@ class TestDistance:
     kwargs_init = dict(col_gene_symbols="gene_symbol",  
                        col_cell_type="leiden", 
                        col_perturbed="perturbed", 
-                       col_guide_rna="guide_id", 
+                       col_guide_rna="grna_lenient", 
                        col_condition="target", 
                        key_control="control", 
-                       key_treatment="KO")
+                       key_treatment="KO",
+                       kws_process_guide_rna=False)
     try:
         adata = pt.dt.distance_example()
     except Exception:
