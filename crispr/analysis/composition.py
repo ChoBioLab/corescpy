@@ -175,7 +175,7 @@ def perform_sccoda(
         plt.tight_layout()
         plt.show()
         try:
-            pzc = any((data.varm[f"effect_df_{x}"][parameter].any(
+            pzc = any((scodata.varm[f"effect_df_{x}"]["Final Parameter"].any(
                 ) for x in scodata.uns["scCODA_params"]["covariate_names"]
                        )) is False  # don't plot 0 effects if any non-0
             figs["effects"] = coda_plot.effects_barplot(
