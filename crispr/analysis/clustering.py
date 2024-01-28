@@ -117,9 +117,9 @@ def cluster(
     return ann, figs
 
 
-def find_marker_genes(adata, assay=None, col_cell_type="leiden", 
-                      layer="log1p", key_reference="rest", n_genes=5, 
-                      method="wilcoxon", kws_plot=True, p_threshold=None, 
+def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5, 
+                      key_reference="rest", layer="log1p", p_threshold=None, 
+                      col_gene_symbols=None, method="wilcoxon", kws_plot=True, 
                       use_raw=False, key_added="rank_genes_groups", **kwargs):
     """Find cluster gene markers."""
     figs = {}
@@ -135,8 +135,8 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden",
             adata, n_genes=n_genes, key_added=key_added, use_raw=use_raw,
             key_reference=key_reference, **kws_plot)
     ranks = sc.get.rank_genes_groups_df(
-        adata, None, key_added=key_added, pval_cutoff=p_threshold, 
-        log2fc_min=None, log2fc_max=None, gene_symbols=cgs)  # rank dataframe
+        adata, None, key=key_added, pval_cutoff=p_threshold, 
+        log2fc_min=None, log2fc_max=None, gene_symbols=col_gene_symbols)
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
     return ranks, figs
@@ -201,10 +201,11 @@ def perform_celltypist(adata, model, col_cell_type=None,
         None] + ctc:  # plot predicted-existing membership overlap
         for x in ["majority_voting", "predicted_labels"]:
             if x == "predicted_labels" or majority_voting is True and (
-                col_cell_type != x):  # label transfer dotplot if appropriate
+                col_cell_type != x):  # label transfer dot plot if appropriate
                 figs[f"label_transfer_{x}"] = celltypist.dotplot(
                     res, use_as_reference=col_cell_type, use_as_prediction=x, 
-                    title=f"Label Transfer: {col_cell_type} vs. {x}")  # plot
+                    title=f"Label Transfer: {col_cell_type} vs. {x}",
+                    cmap="coolwarm", vcenter=0)  # label transfer dot plot
     
     # Plot Markers
     if col_cell_type is not None and plot_markers is True:  # markers
@@ -223,7 +224,8 @@ def perform_celltypist(adata, model, col_cell_type=None,
     # Plot Label Transfer (Majority Voting vs. Predicted Labels)
     figs["label_transfer_mv_pl"] = celltypist.dotplot(
         res, use_as_reference=ctc[0], use_as_prediction=ctc[1], 
-        title="Majority Voting versus Predicted Labels")  # mv vs. pl dotplot
+        title="Majority Voting versus Predicted Labels",
+        cmap="coolwarm", vcenter=0)  # mv vs. pl dot plot
     
     # Plot UMAP
     ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
