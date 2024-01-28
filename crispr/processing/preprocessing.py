@@ -288,7 +288,6 @@ def process_data(
             kws_scale = True  # so doesn't think scaling by reference (CRISPR)
     else:
         max_val, cen = 0, 0
-    print(kws_scale)
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)
@@ -304,7 +303,7 @@ def process_data(
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     try:
         figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
-            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX genes
+            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX
     except Exception as err:
         print(traceback.format_exc())
         warn(f"\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
@@ -317,8 +316,6 @@ def process_data(
                        "pct_counts_in_top_20_genes"]
             outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
     cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
-    print(col_gene_symbols, "\n\n", n_top, "\n\n", ann.var.reset_index(
-        ).describe() if "var" in dir(ann) else None, "\n\n")
     
     # Exploration & QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
@@ -480,68 +477,62 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     qc_vars = list(set(patterns.keys()).intersection(
         adata.var.keys()))  # available QC metrics 
-    pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None, 
                                log1p=log1p, inplace=True)  # QC metrics
-    hhh, yes = [hue] if isinstance(hue, str) else hue, True
-    if hhh:  # plot by hue variables (e.g., batch, sample)
-        for h in hhh:
-            if h not in adata.obs and h not in adata.var:
+    qc_vars = list(np.array(qc_vars)[np.where([adata.obs[
+        f"pct_counts_{q}"].max() > 0 for q in qc_vars])[0]])  # plot if > 0
+    pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
+    patterns_names = dict(zip(qc_vars, [patterns_names[k] for k in qc_vars]))
+    hhh, yes = [hue] if isinstance(hue, str) or hue is None else hue, True
+    for h in hhh:
+        if h not in adata.obs and h not in adata.var:
+            if h is not None:
                 warn(f"\n\t{h} not in adata.obs or .var; skipping color-code")
-                if yes is None:
-                    continue  # skip if already did "None" hue
-                yes = None
-            rrs, ccs = cr.pl.square_grid(len(pct_n + ["n_genes_by_counts"])
-                                        )  # dimensions for subplot grid
-            fff, axs = plt.subplots(rrs, ccs, figsize=(
-                5 * rrs, 5 * ccs))  # subplot figure & axes
-            for a, v in zip(axs.flat, pct_n + ["n_genes_by_counts"]):
-                try:  # facet "v" of scatterplot
-                    sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
-                                  show=False, color=h if yes else None)
-                    plt.show()
-                except Exception as err:
-                    print(traceback.format_exc())
-            figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
-            try:
-                vam = pct_n + ["n_genes_by_counts"] + list([h] if yes else [])
-                fff = seaborn.pairplot(
-                    adata.obs[vam].rename_axis("Metric", axis=1).rename({
-                        "total_counts": "Total Counts", **patterns_names
-                        }, axis=1), diag_kind="kde", hue=h if yes else None, 
-                    diag_kws=dict(fill=True, cut=0))  # pairplot
+            if yes is None:
+                continue  # skip if already did "None" hue
+            yes = None
+        rrs, ccs = cr.pl.square_grid(len(pct_n + ["n_genes_by_counts"]))
+        fff, axs = plt.subplots(rrs, ccs, figsize=(
+            5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
+        for a, v in zip(axs.ravel(), pct_n + ["n_genes_by_counts"]):
+            try:  # facet "v" of scatterplot
+                sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
+                              show=False, color=h if yes else None)
+                plt.show()
             except Exception as err:
-                fff = err
                 print(traceback.format_exc())
-            figs[f"pairplot_by_{h}" if yes else "pairpolot"] = fff
-    try:
+        figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
+        try:  # pairplot of all QC variables (hue=grouping variable, if any)
+            vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
+                [h] if yes else [])  # QC variable names
+            mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
+                {"total_counts": "Counts", **patterns_names}, axis=1)
+            fff = seaborn.pairplot(
+                mets_df, diag_kind="kde", hue=h if yes else None, 
+                diag_kws=dict(fill=True, cut=0), plot_kws=dict(
+                    marker=".", linewidth=0.05))  # QC pairplot
+        except Exception as err:
+            fff = err
+            print(traceback.format_exc())
+        figs[f"pairplot_by_{h}" if yes else "pairplot"] = fff
+    try:  # KDE of % of counts ~ QC variable 
+        mets_df = adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
+            patterns_names, axis=1).stack().rename_axis(["bc", "Metric"])
         figs["pct_counts_kde"] = seaborn.displot(
-            adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
-                patterns_names, axis=1).stack().to_frame(
-                    "Percent Counts"), x="Percent Counts", col="Metric", 
-            kind="kde", fill=True)  # KDE of pct_counts
+            mets_df.to_frame("Percent Counts"), x="Percent Counts", 
+            hue="Metric", kind="kde", cut=0, fill=True)  # KDE plot
     except Exception as err:
         print(traceback.format_exc())
         figs["pct_counts_kde"] = err
-        print(err)
-    try:
-        figs["metrics_violin"] = sc.pl.violin(
-            adata, ["n_genes_by_counts", "total_counts"] + pct_n,
-            jitter=0.4, multi_panel=True)  # violin of counts, genes
-    except Exception as err:
-        print(traceback.format_exc())
-        figs["qc_metrics_violin"] = err
-        print(err)
-    try:
+    try:  # log1p genes by counts (x) vs. total counts (y)
         figs["qc_log"] = seaborn.jointplot(
             data=adata.obs, x="log1p_total_counts", 
             y="log1p_n_genes_by_counts", kind="hex")  # jointplot
     except Exception as err:
         print(traceback.format_exc())
         figs["qc_log"] = err
-        print(err)
-    print(adata.var.describe())
+    # print(adata.var.describe())
     return figs
 
 
@@ -581,7 +572,7 @@ def filter_qc(
         cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
             gene_filter_ncounts = [x if x else [None, None] for x in [
                 cell_filter_ngene, cell_filter_ncounts, 
-                gene_filter_ncell, gene_filter_ncounts]]  # -> iterable if None
+                gene_filter_ncell, gene_filter_ncounts]]  # iterable if None
             
         # Filter Cells
         print("\n\t*** Filtering genes based on # of genes expressed...")

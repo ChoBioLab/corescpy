@@ -11,6 +11,8 @@ import warnings
 import celltypist
 from anndata import AnnData
 import scanpy as sc
+import seaborn as sns
+import matplotlib.pyplot as plt
 import crispr as cr
 import os
 import pandas as pd
@@ -101,7 +103,8 @@ def cluster(
         if colors is not None:  # plot UMAP + extra color coding subplots
             try:
                 figs["umap_extra"] = sc.pl.umap(ann, color=list(pd.unique(
-                    [method_cluster] + list(colors))))  # UMAP extra panels
+                    [method_cluster] + list(colors))), wspace=(
+                        len(colors) + 1) * 0.075)  # UMAP extra panels
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
                 
@@ -115,26 +118,25 @@ def cluster(
 
 
 def find_marker_genes(adata, assay=None, col_cell_type="leiden", 
-                      layer="log1p", key_reference="rest", n_genes=25, 
-                      method="wilcoxon", plot=True, **kwargs):
+                      layer="log1p", key_reference="rest", n_genes=5, 
+                      method="wilcoxon", kws_plot=True, p_threshold=None, 
+                      use_raw=False, key_added="rank_genes_groups", **kwargs):
     """Find cluster gene markers."""
     figs = {}
-    adata = adata.copy()
+    if kws_plot is True:
+        kws_plot = {}
     if layer:
         adata.X = adata.layers[layer].copy()  # change anndata layer if need
     sc.tl.rank_genes_groups(
         adata, col_cell_type, method=method, reference=key_reference, 
-        key_added="rank_genes_groups", **kwargs)  # rank markers
-    if plot is True:
-        figs["marker_rankings"] = sc.pl.rank_genes_groups(
-            adata, n_genes=n_genes, sharey=False)  # plot rankings
-        for x in adata.obs[col_cell_type].unique():
-            figs["marker_expression_violin"] = sc.pl.rank_genes_groups_violin(
-                adata, groups=x, n_genes=n_genes)
-
+        key_added=key_added, use_raw=use_raw, **kwargs)  # rank
+    if isinstance(kws_plot, dict):
+        figs["marker_rankings"] = cr.pl.plot_markers(
+            adata, n_genes=n_genes, key_added=key_added, use_raw=use_raw,
+            key_reference=key_reference, **kws_plot)
     ranks = sc.get.rank_genes_groups_df(
-        adata, None, key="rank_genes_groups", pval_cutoff=None, 
-        log2fc_min=None, log2fc_max=None, gene_symbols=None)  # rank dataframe
+        adata, None, key_added=key_added, pval_cutoff=p_threshold, 
+        log2fc_min=None, log2fc_max=None, gene_symbols=cgs)  # rank dataframe
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
     return ranks, figs
@@ -147,6 +149,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
                        kws_train=None, space=None, out_dir=None, **kwargs):
     """
     Annotate cell types using CellTypist.
+    
     Provide string corresponding to CellTypist or, to train a custom 
     model based on other data, provide an AnnData object with training
     data (and, to provide further keyword arguments, including 
@@ -154,10 +157,13 @@ def perform_celltypist(adata, model, col_cell_type=None,
     also specify `kws_train`).
     """
     figs, kws_train = {}, kws_train if kws_train else {}
-    jobs = kwargs.pop("n_jobs") if "n_jobs" in kwargs else os.cpu_count() - 1
+    n_jobs = kwargs.pop("n_jobs", 1)  # number of CPUs to use
+    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
+    
+    # Load or Train Model
     if isinstance(model, AnnData):  # if anndata provided; train custom model
         if "n_jobs" not in kws_train:  # use cpus - 1 if # jobs unspecified
-            kws_train["n_jobs"] = jobs
+            kws_train["n_jobs"] = n_jobs
         if "col_cell_type" in kws_train:  # rename cell type argument if need
             kws_train["labels"] = kws_train.pop("col_cell_type")
         if "labels" not in kws_train and col_cell_type:
@@ -178,6 +184,8 @@ def perform_celltypist(adata, model, col_cell_type=None,
             print(celltypist.models.models_description())
     else:  # if CellTypist model object provided
             print(f"CellTypist model provided: {model}.")
+            
+    # Annotate Cells with CellTypist
     res = celltypist.annotate(
         adata, model=model, majority_voting=majority_voting, 
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering, 
@@ -187,7 +195,8 @@ def perform_celltypist(adata, model, col_cell_type=None,
         res.to_table(out_file=out_dir, plot_probability=True)  # save tables
     # ann = res.to_adata(insert_labels=True, insert_prob=True)
     ann = res.to_adata(insert_labels=True)  # results object -> anndata
-    ctc = ["predicted_labels", "majority_voting"]  # celltypist columns
+    
+    # Plot Label Transfer (Pre-Existing Annotations vs. CellTypist)
     if col_cell_type not in [
         None] + ctc:  # plot predicted-existing membership overlap
         for x in ["majority_voting", "predicted_labels"]:
@@ -196,6 +205,8 @@ def perform_celltypist(adata, model, col_cell_type=None,
                 figs[f"label_transfer_{x}"] = celltypist.dotplot(
                     res, use_as_reference=col_cell_type, use_as_prediction=x, 
                     title=f"Label Transfer: {col_cell_type} vs. {x}")  # plot
+    
+    # Plot Markers
     if col_cell_type is not None and plot_markers is True:  # markers
         figs["markers"] = {}
         for y in ctc:  # plot markers
@@ -208,14 +219,35 @@ def perform_celltypist(adata, model, col_cell_type=None,
                 except Exception as err:
                     warnings.warn(f"{err}\n\n\nError in {y}={x} marker plot!")
                     figs["markers"][y][f"markers_{x}"] = err
+    
+    # Plot Label Transfer (Majority Voting vs. Predicted Labels)
     figs["label_transfer_mv_pl"] = celltypist.dotplot(
         res, use_as_reference=ctc[0], use_as_prediction=ctc[1], 
         title="Majority Voting versus Predicted Labels")  # mv vs. pl dotplot
+    
+    # Plot UMAP
     ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
                ).intersection(ann.obs.columns)  # celltypist & original column
     if space is None:  # space b/t celltypist & cell type plot facets
-        space = 0.75 if max([len(ann.obs[x].unique()) 
-                             for x in ccts]) > 30 else 0.5
+        cats = max([len(ann.obs[x].unique()) for x in ccts])
+        space = 0.2 * int(cats / 15) if cats > 15 else 0.5
     figs["all"] = sc.pl.umap(ann, return_fig=True, legend_fontsize=6, 
                              color=list(ccts), wspace=space)  # all 1 plot
+    
+    # Plot Confidence Scores
+    if "majority_voting" in ann.obs:  # if did over-clustering/majority voting
+        conf = ann.obs[["majority_voting", "predicted_labels", "conf_score"
+                        ]].set_index("conf_score").stack().rename_axis(
+                            ["Confidence Score", "Annotation"]).to_frame(
+                                "Label").reset_index()  # scores ~ label
+        
+        aspect = int(len(conf[conf.Annotation == "predicted_labels"
+                              ].Label.unique()) / 15)  # aspect ratio
+        figs["confidence"] = sns.catplot(
+            data=conf, y="Confidence Score", row="Annotation", height=40, 
+            aspect=aspect, x="Label", hue="Label", kind="violin")  # plot
+        figs["confidence"].figure.suptitle("CellTypist Confidence Scores")
+        for a in figs["confidence"].axes.flat:
+            _ = a.set_xticklabels(a.get_xticklabels(), rotation=90)
+        figs["confidence"].fig.show()
     return ann, res, figs

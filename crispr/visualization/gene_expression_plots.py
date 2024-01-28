@@ -339,3 +339,34 @@ def plot_cat_split(adata, col_condition, col_cell_type="leiden", genes=None,
     fig.tight_layout()
     fig.fig.show()
     return fig
+
+
+def plot_markers(adata, n_genes=3, key_added="rank_genes_groups", 
+                 use_raw=False, key_cell_type=None, 
+                 col_gene_symbols=None, **kwargs):
+    """Plot gene markers ~ cluster (adapted from Scanpy function)."""
+    col_cell_type = str(adata.uns[key_added]["params"]["groupby"])
+    if use_raw is None:
+        use_raw = bool(adata.uns[key_added]["params"]["use_raw"])
+    key_reference = str(adata.uns[key_added]["params"]["reference"])
+    cts = adata.uns[key_added]["names"].dtype.names if (
+        key_cell_type is None) else key_cell_type
+    if isinstance(cts, str):
+        cts = [cts]
+    if col_wrap is None:
+        col_wrap = cr.pl.square_grid(len(cts))[1]
+    marks, kws = [], {**dict(col_wrap=col_wrap, kind="violin"), **kwargs}
+    for g in cts:  # iterate cell types for which to get gene marker data
+        dff = sc.get.obs_df(adata, adata.uns[key_added]["names"][g][:n_genes], 
+                            use_raw=use_raw, gene_symbols=col_gene_symbols)
+        dff.loc[:, "hue"] = adata.obs[col_cell_type].astype(str).values
+        if key_reference == "rest":
+            dff.loc[dff["hue"] != g, "hue"] = "rest"  # other types = rest
+        else:
+            dff.loc[~dff["hue"].isin([g, key_reference]), "hue"] = np.nan
+        marks += [dff]  # add to list of GEX dataframes for each cell type
+    marks = pd.concat(marks, names="Comparison", keys=[
+        f"{x} vs. {key_reference}" for x in cts])  # join cell types' dfs
+    fig = sb.catplot(data=marks, col="Comparison", hue="hue", split="hue", 
+                     col_wrap=col_wrap, kind="violin", **kws)  # plot 
+    return fig

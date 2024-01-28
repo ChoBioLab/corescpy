@@ -170,6 +170,7 @@ def analyze_causal_network(
         node_cutoff=node_cutoff,  # max_penalty to any node < this of cells
         max_penalty=max_penalty, min_penalty=min_penalty, solver=solver,
         max_seconds=max_seconds, edge_penalty=edge_penalty, verbose=verbose)
-    fig = corneto.methods.carnival.visualize_network(df_res)
-    fig.view()
+    # fig = corneto.methods.carnival.visualize_network(df_res)
+    # fig.view()
+    fig = None
     return df_res, problem, fig

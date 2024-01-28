@@ -107,11 +107,17 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
     if kwargs:
         pass
     print(f"\n\n{'=' * 80}\nCell Counts: {title}\n{'=' * 80}\n")
-    print(adata.n_obs)
+    print(f"\nObservations: {adata.n_obs}\n")
     if group_by is not None and group_by in adata.obs:
+        print(f"{'-' * 40}\nLAYER DIMENSIONS:\n{'-' * 40}")
         for x in adata.layers:
             print(f"{x}: {adata.layers[x].shape}")
+        print(f"{'-' * 40}\n")
         if group_by is not None and group_by in adata.obs:
-            print(adata.obs[group_by].value_counts().round(2))
+            print("\n", adata.obs[group_by].value_counts().round(2))
         print("\n")
-    print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")
+    if "var" in dir(adata):
+        print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")
+        des, stats = adata.var.reset_index().describe(), ["25%", "50%", "75%"]
+        print(des.loc[list(set(stats).intersection(des.index))])
+    print("\n\n")

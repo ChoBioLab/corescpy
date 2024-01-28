@@ -344,7 +344,6 @@ class Omics(object):
         # UMAP
         if umap is True:
             if "X_umap" in self.rna.obsm or group in self.rna.obs.columns:
-                print("\n<<< PLOTTING UMAP >>>")
                 if "col_cell_type" not in kws_umap:
                     kws_umap.update({"col_cell_type": group})
                 figs["umap"] = cr.pl.plot_umap(
@@ -528,18 +527,29 @@ class Omics(object):
     
     def find_markers(
         self, assay=None, n_genes=10, layer="log1p", method="wilcoxon", 
-        key_reference="rest", plot=True, col_cell_type=None, **kwargs):
+        key_reference="rest", kws_plot=True, col_cell_type=None, 
+        copy=False, use_raw=False, **kwargs):
         if assay is None:
             assay = self._assay
+        adata = self.rna.copy() if copy is True else self.rna  # copy?
         if col_cell_type is None:  # if cell type column not specified...
             if "clustering" in self.info["methods"]:  # use leiden/louvain #s
                 col_cell_type = self.info["methods"]["clustering"]
             else:  # otherwise, try getting from _columns attribute
                 col_cell_type = self._columns["col_cell_type"]
+        n_clus = adata.obs[col_cell_type].value_counts() > 2
+        adata = adata if all(n_clus) else adata[adata.obs[
+            col_cell_type].isin(n_clus[n_clus > 1].index.values)].copy()
         marks, figs_m = cr.ax.find_marker_genes(
-            self.adata, assay=assay, method=method, n_genes=n_genes, 
-            layer=layer, key_reference=key_reference, plot=plot,
-            col_cell_type=col_cell_type, **kwargs)  # find marker genes
+            adata, assay=assay, method=method, n_genes=n_genes,
+            layer=layer, key_reference=key_reference, kws_plot=kws_plot,
+            col_cell_type=col_cell_type, use_raw=use_raw, **kwargs)  # markers
+        if copy is False:
+            if all(n_clus) is False:
+                warn("Had to run find_markers on subset of adata because some"
+                     " clusters had N < 3. Cannot update adata attribute.")
+            else:
+                self.rna = adata
         marks.groupby(col_cell_type).apply(lambda x: print(x.head(3)))
         return marks, figs_m
 
@@ -568,12 +578,19 @@ class Omics(object):
         return output
     
     def run_dialogue(
-        self, n_programs=3, col_confounder=None, col_cell_type=None, 
-        cmap="coolwarm", vcenter=0, layer="log1p", **kws_plot):
+        self, n_programs=3, col_cell_type=None, col_condition=None,
+        col_confounder=None, cmap="coolwarm", vcenter=0, layer="log1p", 
+        **kws_plot):
         """Analyze <`n_programs`> multicellular programs."""
+        col_cell_type, col_condition = [x[1] if x[1] else self._columns[
+            x[0]] for x in zip(["col_cell_type", "col_condition"], 
+                               [col_cell_type, col_condition])]  # defaults
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        adata = self.rna.copy()
+        if col_condition is None:
+            col_condition = self._columns["col_condition"]
+        figsize = (20, 8)  # per facet for violin plots
+        adata, figs = self.rna.copy(), {}
         if layer is not None:
             adata.X = adata.layers[layer]
         col = self._columns["col_perturbed" if (
@@ -585,21 +602,35 @@ class Omics(object):
             adata, normalize=True)
         mcp_cols = list(set(pdata.obs.columns).difference(adata.obs.columns))
         cols = cr.pl.square_grid(len(mcp_cols) + 2)[1]
-        fig = sc.pl.umap(
+        figs["umap"] = sc.pl.umap(
             pdata, color=mcp_cols + [col, col_cell_type],
-            ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)
+            ncols=cols, cmap=cmap, vcenter=vcenter, **kws_plot)  # UMAP MCP
+            
+        # Correct for Confounding Variable?
         if col_confounder:  # correct for a confounding variable?
-            if "A1" not in dir(ct_subs[list(ct_subs.keys())[0]].X[:100].mean(
-                axis=1)):  # if doesn't have flatten attribute used by Pertpy
-                for x in ct_subs:
-                    ct_subs[x].X = np.matrix(ct_subs[x].X)  # to numpy matrix
-            res, p_new = d_l.multilevel_modeling(
-                ct_subs=ct_subs, mcp_scores=mcps, ws_dict=w_s, 
-                confounder=col_confounder)
-            self.results[f"dialogue_confounder_{col_confounder}"] = res, p_new
+            try:
+                res, p_n = d_l.multilevel_modeling(
+                    ct_subs=ct_subs, mcp_scores=mcps, ws_dict=w_s, 
+                    confounder=col_confounder)
+                self.results[f"dialogue_confound_{col_confounder}"] = res, p_n
+            except Exception as err:
+                print(traceback.format_exc(), "\n\nIssue w/ Pertpy Dialogue. "
+                      "Can't perform confound correction.")
+        
+        # Plot MCP ~ Condition (optional)
+        if col_condition is not None:
+            dff = pd.concat([pd.concat([sc.get.obs_df(ct_subs[q], [
+                col_cell_type, m, col_condition]).rename({m: "MCP"}, axis=1) 
+                            for m in mcp_cols], keys=mcp_cols, names=[
+                                "Program"]) for q in ct_subs]).reset_index(0)
+            col_wrap = cr.pl.square_grid(len(dff[col_cell_type].unique()))[0]
+            figs["conditions"] = sns.catplot(
+                dff, x=col_cell_type, y="MCP", col="Program",  kind="violin", 
+                hue=col_condition, col_wrap=col_wrap, split=col_condition, 
+                aspect=figsize[0] / figsize[1], height=figsize[1])  # plot
         self.results["dialogue"] = pdata, mcps, w_s, ct_subs
-        self.figures["dialogue"] = fig
-        return fig
+        self.figures["dialogue"] = figs
+        return figs
     
     def run_gsea(
         self, key_condition, col_condition=None, layer="log1p", copy=False,
@@ -794,4 +825,25 @@ class Omics(object):
             fig.tight_layout()
             figs["dea"] = fig
         return figs
-            
+    
+    def calculate_causal_network(self, key_source, key_target, 
+                                 top_n=10, **kwargs):
+        """Perform causal network analysis with Corneto."""
+        dea_df = self.results["receptor_ligand"]["dea_df"].copy()
+        dea_df = self.results["receptor_ligand"]["dea_df"].copy()
+        ccd, cct, sub = [self.results["receptor_ligand_info"][x] for x in [
+            "col_condition", "col_cell_type", "subset"]]  # columns
+        csid = kwargs.pop("col_sample_id", self._columns["col_sample_id"])
+        if csid is False:
+            csid = None  # ignore sample ID if set to False in kwargs
+        key_control, key_treatment = [kwargs.pop(x, self._keys[x]) for x in [
+            "key_control", "key_treatment"]]  # key labels
+        df_res, problem, fig = cr.ax.analyze_causal_network(
+            self.adata[sub] if sub else self.adata, ccd, key_control, 
+            key_treatment, cct, key_source, key_target, dea_df=dea_df, 
+            col_sample_id=csid, layer="log1p", solver="scipy", expr_prop=0, 
+            min_n_ulm=5, node_cutoff=0.1, max_penalty=1, min_penalty=0.01, 
+            edge_penalty=0.01, max_seconds=60*3, top_n=top_n, verbose=False)
+        # fig = corneto.methods.carnival.visualize_network(out[0])
+        # fig.view()
+        return df_res, problem, fig
