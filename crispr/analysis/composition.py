@@ -10,6 +10,7 @@ Analyses focused on cell type composition analyses.
 import pertpy as pt
 from pertpy.plot._coda import CodaPlot as coda_plot
 import arviz as az
+import traceback
 import warnings
 import matplotlib.pyplot as plt
 
@@ -99,7 +100,6 @@ def perform_sccoda(
     #     set(["coda"])))[0]  # original modality
     # scodata[mod].obs = scodata[mod].obs.join(scodata[mod_o].obs[
     #     [col_cell_type, col_condition]])
-    print(scodata)
     if plot is True:
         try:
             figs["barplot"] = coda_plot.boxplots(
@@ -114,9 +114,6 @@ def perform_sccoda(
             figs["barplot"] = err
     model.prepare(scodata, formula=col_condition,
                   reference_cell_type=reference_cell_type)  # setup
-    print(scodata)
-    print(scodata["coda"].X)
-    print(scodata["coda"].obs)
     if plot is True:
         try:
             figs[
@@ -166,12 +163,6 @@ def perform_sccoda(
             print(f"{err}\n\nFailed to plot stacked proportions.\n\n")
             figs["proportions_stacked"] = err
         try:
-            figs["effects"] = coda_plot.effects_barplot(
-                scodata, modality_key=mod, parameter="Final Parameter")
-        except Exception as err:
-            print(f"{err}\n\nFailed to plot effects.\n\n")
-            figs["effects"] = err
-        try:
             data_arviz = model.make_arviz(scodata, modality_key=mod)
             figs["mcmc_diagnostics"] = az.plot_trace(
                 data_arviz, divergences=False,
@@ -183,6 +174,16 @@ def perform_sccoda(
             figs["mcmc_diagnostics"] = err
         plt.tight_layout()
         plt.show()
+        try:
+            pzc = any((data.varm[f"effect_df_{x}"][parameter].any(
+                ) for x in scodata.uns["scCODA_params"]["covariate_names"]
+                       )) is False  # don't plot 0 effects if any non-0
+            figs["effects"] = coda_plot.effects_barplot(
+                scodata, modality_key=mod, parameter="Final Parameter",
+                plot_zero_cell_type=pzc)
+        except Exception as err:
+            print(traceback.format_exc(), f"\n\nFailed to plot effects.\n\n")
+            figs["effects"] = err
     return (results, figs, scodata)
 
 
