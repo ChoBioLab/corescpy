@@ -222,7 +222,7 @@ def plot_pathway_interference_results(adata, pathway, col_cell_type=None,
                                       cmap="coolwarm", vcenter=0):
     """Plot results from cr.ax.perform_pathway_interference()."""
     figs = {}
-    if col_cell_type not in acts.obs:
+    if col_cell_type not in adata.obs:
         warnings.warn(f"{col_cell_type} not in `.obs`. Skipping violin plot.")
     acts = decoupler.get_acts(adata, obsm_key=obsm_key)
     if col_cell_type is not None and col_cell_type in acts.obs:
