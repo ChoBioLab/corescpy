@@ -225,7 +225,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
     figs["label_transfer_mv_pl"] = celltypist.dotplot(
         res, use_as_reference=ctc[0], use_as_prediction=ctc[1], 
         title="Majority Voting versus Predicted Labels",
-        cmap="coolwarm", vcenter=0)  # mv vs. pl dot plot
+        cmap="magma")  # mv vs. pl dot plot
     
     # Plot UMAP
     ccts = set(pd.unique(ctc + list(col_cell_type if col_cell_type else []))
