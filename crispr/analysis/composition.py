@@ -48,8 +48,6 @@ def analyze_composition(
                 sample_identifier=col_sample_id, plot=plot, out_file=out_file)
             if reference_cell_type is not None:
                 results, figures, adata = results[x], figures[x], tmp
-            else:
-                del(tmp)
     else:  # TASCCODA
         results, figures, adata = perform_tasccoda(
             adata, col_condition, col_cell_type, col_list_lineage_tree,
@@ -177,7 +175,7 @@ def perform_sccoda(
                 scodata, modality_key=mod, parameter="Final Parameter",
                 plot_zero_cell_type=pzc)
         except Exception as err:
-            print(traceback.format_exc(), f"\n\nFailed to plot effects.\n\n")
+            print(traceback.format_exc(), "\n\nFailed to plot effects.\n\n")
             figs["effects"] = err
     return (results, figs, scodata)
 

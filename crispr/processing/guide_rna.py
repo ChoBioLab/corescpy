@@ -214,7 +214,7 @@ def detect_guide_targets(
         key_control_patterns = list(pd.Series(key_control_patterns).dropna())
     else:  # if NaNs mean unperturbed cells
         if any(pd.isnull(targets)):
-            warn(f"Dropping rows with NaNs in `col_guide_rna`.")
+            warn("Dropping rows with NaNs in `col_guide_rna`.")
         targets = targets.dropna()
     if feature_split is not None or guide_split is not None:
         targets, nums = [targets.apply(  # each entry -> list of target genes
@@ -223,11 +223,11 @@ def detect_guide_targets(
                     x.split(feature_split) if feature_split  # if multi
                     else [x])]  # if single gRNA
             if p not in ["", None] else  # ^ if need to remove guide suffixes
-            list(x.split(feature_split) if feature_split else [x] if p else p
-                )  # ^ no suffixes: split x or [x] (j=0), "" for suffix (j=1)
+            list(x.split(feature_split) if feature_split else [x] if p else p)
+            # ^ no suffixes: split x or [x] (j=0), "" for suffix (j=1)
             ) for j, p in enumerate(list(
-                [f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$']
-            if guide_split else [None, ""]))]
+                [f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$'
+                 ] if guide_split else [None, ""]))]
     if key_control_patterns:  # if need to search for control key patterns
         targets = targets.apply(
             lambda x: [i if i == key_control else key_control if any(

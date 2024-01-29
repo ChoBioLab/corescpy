@@ -3,7 +3,7 @@ import liana
 from liana.method import cellphonedb
 import decoupler as dc
 import omnipath
-import corneto
+# import corneto
 import traceback
 from crispr.visualization import plot_receptor_ligand
 from crispr.utils import merge

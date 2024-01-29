@@ -264,7 +264,7 @@ def perform_augur(adata, assay=None, layer=None,
             Augur predict, figures
     """
     if n_threads is True:
-        n_threads = os.cpu_count() - 1 # use available CPUs - 1
+        n_threads = os.cpu_count() - 1  # use available CPUs - 1
     if select_variance_features == "both":
         # both methods: select genes based on...
         # - original Augur (True)
