@@ -7,10 +7,8 @@ Visualizing CRISPR experiment analysis results.
 @author: E. N. Aslinger
 """
 
-import pertpy as pt
 import scanpy as sc
 import matplotlib.pyplot as plt
-import seaborn as sb
 # import cowplot
 import warnings
 import math
@@ -27,9 +25,9 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
         raise TypeError("plot_types must be a string.")
     figs, plot_types = {}, plot_types.lower()  # so not case-sensitive
     if method_cluster is None:
-        if "leiden" in adata.uns: 
-            method_cluster = "leiden" 
-        elif "louvain" in adata.uns: 
+        if "leiden" in adata.uns:
+            method_cluster = "leiden"
+        elif "louvain" in adata.uns:
             method_cluster = "louvain"
         else:
             raise ValueError("No clustering method found in object.")
@@ -41,7 +39,7 @@ def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
     if plot_types == "all" or "dot" in plot_types:
         figs["dot"] = sc.pl.dotplot(adata, genes, groupby='leiden')
     return figs
-        
+
 
 def square_grid(num):
     """Return row-column dimensions (approximately a square)."""
@@ -65,7 +63,7 @@ def square_grid(num):
 #             print(err)
 #         try:
 #             figs["qc_metrics_violin"] = sc.pl.violin(
-#                 adata[assay] if assay else adata, 
+#                 adata[assay] if assay else adata,
 #                 ["n_genes_by_counts", "total_counts"] + pct_counts_vars,
 #                 jitter=0.4, multi_panel=True)
 #         except Exception as err:
@@ -87,8 +85,8 @@ def square_grid(num):
 #         print(err)
 
 
-def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None, 
-              legend_loc="on data", genes=None, col_gene_symbols=None, 
+def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
+              legend_loc="on data", genes=None, col_gene_symbols=None,
               cell_types_circle=None,  # create plot with cell types circled
               figsize=30,  # scale of shorter axis (long plots proportional)
               **kwargs):
@@ -96,13 +94,13 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
     figs = {}
     if "cmap" in kwargs:  # in case use wrong form of argument
         kwargs["color_map"] = kwargs.pop("cmap")
-    kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE, 
+    kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE,
               "frameon": False, "vcenter": 0, **kwargs}
     if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
         print("\n<<< PLOTTING UMAP >>>")
         try:
             figs["clustering"] = sc.pl.umap(
-                adata, color=col_cell_type, return_fig=True, 
+                adata, color=col_cell_type, return_fig=True,
                 title=title,  legend_loc=legend_loc, **kwargs)  # ~ cell type
         except Exception as err:
             warnings.warn(f"{err}\n\nCould not plot UMAP clusters.")
@@ -117,7 +115,7 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
             print("\n<<< PLOTTING GEX ON UMAP >>>")
             try:
                 figs["clustering_gene_expression"] = sc.pl.umap(
-                    adata, title=genes, return_fig=True, 
+                    adata, title=genes, return_fig=True,
                     gene_symbols=col_gene_symbols, color=genes,
                     legend_loc=legend_loc, **kwargs)  # UMAP ~ GEX
             except Exception as err:
@@ -135,40 +133,40 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
                 figs[f"clustering_{color}"] = err
         if cell_types_circle and "X_umap" in adata.obsm:  # circle cell type
             figs["circled"], axu = plt.subplots(figsize=(figsize, figsize))
-            sc.pl.umap(adata, color=[color if color else col_cell_type], 
+            sc.pl.umap(adata, color=[color if color else col_cell_type],
                        ax=axu, legend_loc=legend_loc, show=False)  # umap base
             for h in cell_types_circle:  # circle cell type
                 locs = adata[adata.obs[col_cell_type] == h, :].obsm['X_umap']
                 coordinates = [locs[:, i].mean() for i in [0, 1]]
-                circle = plt.Circle(tuple(coordinates), 1.5, color="r", 
+                circle = plt.Circle(tuple(coordinates), 1.5, color="r",
                                     clip_on=False, fill=False)  # circle
                 axu.add_patch(circle)
             # l_1 = axu.get_legend()  # save original Legend
             # l_1.set_title(lab_cluster)
             # # Make a new Legend for the mark
             # l_2 = axu.legend(handles=[Line2D(
-            #     [0],[0],marker="o", color="k", markerfacecolor="none", 
-            #     markersize=12, markeredgecolor="r", lw=0, 
-            #     label="selected")], frameon=False, 
+            #     [0],[0],marker="o", color="k", markerfacecolor="none",
+            #     markersize=12, markeredgecolor="r", lw=0,
+            #     label="selected")], frameon=False,
             #                 bbox_to_anchor=(3,1), title='Annotation')
             #     # Add back the original Legend (was overwritten by new)
             # _ = plt.gca().add_artist(l_1)
         return figs
-    
 
-def plot_umap_circled(adata, col_cell_type, cell_types_circle, 
+
+def plot_umap_circled(adata, col_cell_type, cell_types_circle,
                       color=None, legend_loc="right margin", figsize=30):
     """Create a UMAP-embedded plot with cell types circled."""
     if color is None:
         color = col_cell_type
     fig, axu = plt.subplots(figsize=(figsize, figsize) if isinstance(
         figsize, (int, float)) else figsize)  # set up subplots
-    sc.pl.umap(adata, color=[col_cell_type], ax=axu, 
+    sc.pl.umap(adata, color=[col_cell_type], ax=axu,
                 legend_loc=legend_loc, show=False)  # umap base
     for h in cell_types_circle:  # circle cell type
         locs = adata[adata.obs[col_cell_type] == h, :].obsm['X_umap']
         coordinates = [locs[:, i].mean() for i in [0, 1]]
-        circle = plt.Circle(tuple(coordinates), 1.5, color="r", 
+        circle = plt.Circle(tuple(coordinates), 1.5, color="r",
                             clip_on=False, fill=False)  # circle
         axu.add_patch(circle)
     return fig, axu

@@ -1,5 +1,5 @@
 # from scanpy.plotting import _utils
-import seaborn as sns 
+import seaborn as sns
 import crispr as cr
 import scanpy as sc
 import pertpy as pt
@@ -7,23 +7,23 @@ import decoupler
 import matplotlib.pyplot as plt
 import warnings
 import functools
-import pandas as pd 
+import pandas as pd
 import numpy as np
 
 
 def plot_targeting_efficiency(
     adata, key_control="NT", key_nonperturbed="NP", key_treatment="KO",
-    col_guide_rna="guide_ids", guide_split="-", feature_split=None, 
+    col_guide_rna="guide_ids", guide_split="-", feature_split=None,
     mixscape_class_global="mixscape_class_global", **kwargs):
     """
     Plot targeting efficiency (Mixscape scores) of guide RNAs.
-    
+
     Adapted from `pertpy.pl.ms.barplot()`.
-    
+
     """
     if "palette" not in kwargs:
         kwargs.update({"palette": {
-            key_treatment: "blue", key_nonperturbed: "r", 
+            key_treatment: "blue", key_nonperturbed: "r",
             key_control: "grey"}})
     if mixscape_class_global not in adata.obs:
         raise ValueError("Please run `pt.tl.mixscape` first.")
@@ -34,7 +34,7 @@ def plot_targeting_efficiency(
                 ).to_frame(col_guide_rna))  # multi-guide cells -> multi-rows
     count = pd.crosstab(index=guides[mixscape_class_global],
                         columns=guides[col_guide_rna])
-    all_cells_pct = pd.melt(count / count.sum(), 
+    all_cells_pct = pd.melt(count / count.sum(),
                             ignore_index=False).reset_index()
     ko_cells_percentage = all_cells_pct[all_cells_pct[
         mixscape_class_global] == key_treatment].sort_values(
@@ -53,16 +53,16 @@ def plot_targeting_efficiency(
         "guide_number"]
     np_ko_cells = all_cells_pct[all_cells_pct["Gene"] != key_control]
     _, cols = cr.pl.square_grid(len(np_ko_cells["Gene"].unique()))
-    p_1 = sns.catplot(data=np_ko_cells, x="mixscape_class_global", y="value", 
-                      col="Gene", col_wrap=cols, kind="bar", 
+    p_1 = sns.catplot(data=np_ko_cells, x="mixscape_class_global", y="value",
+                      col="Gene", col_wrap=cols, kind="bar",
                       hue="mixscape_class_global", **kwargs)
     return p_1
 
 
 def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
-                  assay=None, adata_protein=None, protein_of_interest=None, 
+                  assay=None, adata_protein=None, protein_of_interest=None,
                   key_nonperturbed="NP", color="red",
-                  layer="X_pert", target_gene_idents=True, 
+                  layer="X_pert", target_gene_idents=True,
                   subsample_number=5, figsize=None, ncol=3,
                   col_guide_rna=None, guide_split="-", feature_split="|"):
     """Make Mixscape perturbation plots."""
@@ -85,7 +85,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
             figs["DEX_ordered_by_ppp_heat"][
                 g] = pt.pl.ms.heatmap(
                     adata=adata, subsample_number=subsample_number,
-                    labels=col_target_genes, target_gene=g, 
+                    labels=col_target_genes, target_gene=g,
                     layer=layer, control=key_control, show=False
                     )  # differential expression heatmap, sort by PPs
             plt.show()
@@ -93,25 +93,25 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
             figs["DEX_ordered_by_ppp_heat"][g] = err
             warnings.warn(f"{err}\n\nCould not plot DEX heatmap!")
         tg_conds = [
-            key_control, f"{g} {key_nonperturbed}", 
+            key_control, f"{g} {key_nonperturbed}",
             f"{g} {key_treatment}"]  # conditions: gene g
         figs["ppp_violin"][g] = pt.pl.ms.violin(
-            adata=adata, target_gene_idents=tg_conds, 
+            adata=adata, target_gene_idents=tg_conds,
             rotation=45, groupby="mixscape_class", show=False,
             keys=f"mixscape_class_p_{key_treatment}".lower()
             )  # gene: perturbed, NP, control
-    figs["ppp_violin"][f"global"] = pt.pl.ms.violin(
+    figs["ppp_violin"]["global"] = pt.pl.ms.violin(
         adata=adata, target_gene_idents=[
-            key_control, key_nonperturbed, key_treatment], 
+            key_control, key_nonperturbed, key_treatment],
         rotation=45, keys=f"mixscape_class_p_{key_treatment}".lower(),
         groupby="mixscape_class_global")  # same, but global
     try:
         tg_conds = [key_control] + functools.reduce(
-            lambda i, j: i + j, [[f"{g} {key_nonperturbed}", 
-                    f"{g} {key_treatment}"] 
+            lambda i, j: i + j, [[f"{g} {key_nonperturbed}",
+                    f"{g} {key_treatment}"]
             for g in target_gene_idents])  # conditions: all genes
         figs["ppp_violin"]["all"] = pt.pl.ms.violin(
-            adata=adata, 
+            adata=adata,
             # keys=f"mixscape_class_p_{key_treatment}".lower(),
             target_gene_idents=tg_conds, rotation=45,
             groupby="mixscape_class")  # gene: perturbed, NP, control
@@ -121,7 +121,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     for g in target_gene_idents:  # iterate target genes of interest
         try:
             figs["perturbation_score"][g] = pt.pl.ms.perturbscore(
-                adata=adata, labels=col_target_genes, 
+                adata=adata, labels=col_target_genes,
                 target_gene=g, color=color, perturbation_type=key_treatment)
             print(figs["perturbation_score"][g])
         except Exception as err:
@@ -140,8 +140,8 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     if col_guide_rna is not None:
         try:
             figs["targeting_efficiency"] = cr.pl.plot_targeting_efficiency(
-                adata, col_guide_rna=col_guide_rna, key_control=key_control, 
-                key_treatment=key_treatment, key_nonperturbed=key_nonperturbed, 
+                adata, col_guide_rna=col_guide_rna, key_control=key_control,
+                key_treatment=key_treatment, key_nonperturbed=key_nonperturbed,
                 guide_split=guide_split, feature_split=feature_split,
                 mixscape_class_global="mixscape_class_global")
         except Exception as err:
@@ -150,7 +150,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
     try:  # LDA clusters
         figs["perturbation_clusters"] = plt.figure(figsize=(15, 15))
         axis = figs["perturbation_clusters"].add_subplot(111)
-        pt.pl.ms.lda(adata=adata, perturbation_type=key_treatment, ax=axis, 
+        pt.pl.ms.lda(adata=adata, perturbation_type=key_treatment, ax=axis,
                      control=key_control)  # UMAP
         figs["perturbation_clusters"].tight_layout()
         figs["perturbation_clusters"].suptitle(
@@ -187,18 +187,18 @@ def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, layer=None,
     score_sort = gsea_results[gsea_results.pval < p_threshold]  # filter by p
     score_sort = score_sort.loc[score_sort.score.abs().sort_values(
         ascending=False).index]  # sort by absolute score
-    figs["bar_score"] = sns.catplot(data=score_sort.head(20), 
+    figs["bar_score"] = sns.catplot(data=score_sort.head(20),
                                     x="score", y="source", kind="bar")
-    figs["bar_p"] = sns.catplot(data=gsea_results.head(20), 
+    figs["bar_p"] = sns.catplot(data=gsea_results.head(20),
                                 x="-log10(pval)", y="source", kind="bar")
-    # fig, axes = plt.subplots(1, 3, figsize=figsize, 
+    # fig, axes = plt.subplots(1, 3, figsize=figsize,
     #                          tight_layout=True, sharey=True)
     # for i, q in enumerate(gsea_results.iloc[:, :3].columns):
     #     axes[i].set_title(q)
-    #     sns.heatmap(gsea_results, x=q, y="source", 
+    #     sns.heatmap(gsea_results, x=q, y="source",
     #                 vmin=-1, vmax=1, ax=axes[i],
     #                 cmap=["coolwarm", "coolwarm", "viridis_r"][i])  # heatmaps
-    
+
     # Cell-Level
     if ifn_pathways not in [None, False]:
         if ifn_pathways is True:  # choose (~ p & score) pathways to plot
@@ -216,7 +216,7 @@ def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, layer=None,
     return figs
 
 
-def plot_pathway_interference_results(adata, pathway, col_cell_type=None, 
+def plot_pathway_interference_results(adata, pathway, col_cell_type=None,
                                       obsm_key="mlm_estimate",
                                       standard_scale="var",
                                       cmap="coolwarm", vcenter=0):
@@ -226,13 +226,13 @@ def plot_pathway_interference_results(adata, pathway, col_cell_type=None,
         warnings.warn(f"{col_cell_type} not in `.obs`. Skipping violin plot.")
     acts = decoupler.get_acts(adata, obsm_key=obsm_key)
     if col_cell_type is not None and col_cell_type in acts.obs:
-        figs["umap"] = sc.pl.umap(acts, color=[pathway, col_cell_type], 
+        figs["umap"] = sc.pl.umap(acts, color=[pathway, col_cell_type],
                                   cmap=cmap, vcenter=vcenter)
-        figs["violin"] = sc.pl.violin(acts, keys=[pathway], 
+        figs["violin"] = sc.pl.violin(acts, keys=[pathway],
                                       groupby=col_cell_type, rotation=90)
         figs["matrix"] = sc.pl.matrixplot(
-            acts, var_names=acts.var_names, groupby=col_cell_type, 
-            dendrogram=True, standard_scale=standard_scale, 
+            acts, var_names=acts.var_names, groupby=col_cell_type,
+            dendrogram=True, standard_scale=standard_scale,
             colorbar_title="X-Scaled Scores", cmap=cmap)
     else:
         figs["umap"] = sc.pl.umap(acts, color=[pathway], cmap=cmap, vcenter=0)

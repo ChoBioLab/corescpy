@@ -2,13 +2,12 @@ from crispr.processing import get_layer_dict
 import decoupler as dc
 import scanpy as sc
 import pandas as pd
-import numpy as np
 
 layers = get_layer_dict()
 
 
-def create_pseudobulk(adata, col_cell_type, col_sample_id=None, 
-                      layer=layers["counts"], mode="sum", 
+def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
+                      layer=layers["counts"], mode="sum",
                       kws_process=True, **kwargs):
     """Get pseudo-bulk of scRNA-seq data."""
     if kws_process is True:
@@ -17,7 +16,7 @@ def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
         raise ValueError(f"{layer} not in adata.layers. Set layer argument to"
                          " None or the name of the layer with count data.")
     pdata = dc.get_pseudobulk(
-        adata, sample_col=col_sample_id, groups_col=col_cell_type, 
+        adata, sample_col=col_sample_id, groups_col=col_cell_type,
         layer=layer, mode=mode, **kwargs)
     pdata.layers[layers["counts"]] = pdata.X.copy()
     if kws_process is True or isinstance(kws_process, dict):
@@ -40,7 +39,7 @@ def create_condition_combo(adata, col_condition, col_label_new=None, sep="_"):
             adata[col_label_new] = adata[col_label_new].astype(
                 "string") + sep + adata[x]  # ...to make full combination
     else:  # if adata is an AnnData object
-        adata.obs = create_condition_combo(adata.obs, col_condition, 
+        adata.obs = create_condition_combo(adata.obs, col_condition,
                                            col_label_new=col_label_new)
     return adata
 
@@ -90,13 +89,13 @@ convert <- function(file, file_new = NULL, assay = NULL, overwrite = FALSE,
     if (write_metadata) {  # write metadata about object for later checks
         print("WRITING METADATA NOT YET SUPPORTED")
         file_meta <- gsub(".RDS", "_converted_metadata.csv", file)
-        clusters <- ifelse("active.ident" %in% slotNames(seu), 
+        clusters <- ifelse("active.ident" %in% slotNames(seu),
                            as.data.frame(seu@active.ident), NULL)
         meta <- list(assays=names(seu@assays), uns=names(seu@reductions),
                      var_names=rownames(seu@assays[[names(seu@assays)[1]]]),
                      X=layers_x, clusters=clusters, obs=seu@meta.data)
         if (file.exists(file_meta) && !overwrite) {
-            stop(paste0("Metadata file ", file_meta, 
+            stop(paste0("Metadata file ", file_meta,
                         "exists and overwrite is not allowed."))
         }
         # write.csv(meta, file = file_meta, row.names = FALSE)

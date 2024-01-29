@@ -18,9 +18,9 @@ def to_list(arg, unique=False):
 
 def merge(arg_override=None, arg_fill_in=None):
     """
-    Merge two dictionaries, giving precedence to 
+    Merge two dictionaries, giving precedence to
     arg_override in case of overlap. Use empty dictionary in place of "None."
     """
-    arg_override, arg_fill_in = [{**x} if x else {} 
+    arg_override, arg_fill_in = [{**x} if x else {}
                                  for x in [arg_override, arg_fill_in]]
     return {**arg_override, **arg_fill_in}

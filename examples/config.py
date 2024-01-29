@@ -2,7 +2,6 @@ import pertpy
 import os
 import pathlib
 import crispr as cr
-import pandas as pd
 import numpy as np
 
 
@@ -18,7 +17,7 @@ files_data = {
         "CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4"),
         "CR5": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR5")
     },
-    "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS) 
+    "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS)
     "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq
     "pool": f"{DIR}/norman_2019_raw.h5ad",
     "bulk": f"{DIR}/burczynski_crohn.h5ad",
@@ -197,7 +196,7 @@ col_num_umis_data = {
 #     "screen": np.nan,
 #     "perturb-seq": None,
 #     "ECCITE": "X_pert",
-#     "coda": None, 
+#     "coda": None,
 #     "augur_ex": None
 # }
 
@@ -211,7 +210,7 @@ col_sample_id_data = {
     "screen": np.nan,
     "perturb-seq": None,
     "ECCITE": "orig.ident",
-    "coda": "batch", 
+    "coda": "batch",
     "augur_ex": "orig.ident"
 }
 
@@ -225,25 +224,25 @@ col_batch_data = {
     "screen": np.nan,
     "perturb-seq": None,
     "ECCITE": "MULTI_ID",
-    "coda": "batch", 
+    "coda": "batch",
     "augur_ex": None
 }
 
 kws_process_guide_rna_data = {
-    "CRISPRi_scr": dict(feature_split="|", guide_split="-", 
-                        key_control_patterns=["CTRL"], 
+    "CRISPRi_scr": dict(feature_split="|", guide_split="-",
+                        key_control_patterns=["CTRL"],
                         remove_multi_transfected=True,
-                        min_n_target_control_drop=None, 
-                        max_pct_control_drop=75, 
+                        min_n_target_control_drop=None,
+                        max_pct_control_drop=75,
                         min_pct_dominant=80, min_pct_avg_n=40),
-    "CRISPRi_scr_multi": dict(feature_split="|", guide_split="-", 
-                              key_control_patterns=["CTRL"], 
+    "CRISPRi_scr_multi": dict(feature_split="|", guide_split="-",
+                              key_control_patterns=["CTRL"],
                               remove_multi_transfected=True,
-                              min_n_target_control_drop=None, 
-                              max_pct_control_drop=75, 
+                              min_n_target_control_drop=None,
+                              max_pct_control_drop=75,
                               min_pct_dominant=80, min_pct_avg_n=40),
     "CRISPRi_wgs": None,
-    "CRISPRi_ess": dict(feature_split=",", guide_split="-", 
+    "CRISPRi_ess": dict(feature_split=",", guide_split="-",
                         key_control_patterns=["CTRL"]),
     "pool": None,
     "bulk": None,
@@ -251,15 +250,16 @@ kws_process_guide_rna_data = {
     "perturb-seq": dict(feature_split=None, guide_split="_",
                         key_control_patterns=[np.nan]),
     "ECCITE": None,
-    "coda": None, 
+    "coda": None,
     "augur_ex": None
 }
+
 
 def load_example_data(file, col_gene_symbols, write_public=False):
     """(Down)load data for examples/vignettes.
     Args:
         file (str): Name of data (see keys of dictionaries in config).
-        col_gene_symbols (str): Name of column in `AnnData.obs` 
+        col_gene_symbols (str): Name of column in `AnnData.obs`
             that has gene symbols.
         write_public (bool, optional): If you have to download from pertpy.data
             (i.e., hasn't already been saved in examples/data)
@@ -278,7 +278,7 @@ def load_example_data(file, col_gene_symbols, write_public=False):
             kwargs = dict(genome=None, gex_only=False, backup_url=None)
         else:
             kwargs = {}
-        adata = cr.pp.create_object(file_path, assay=None, 
+        adata = cr.pp.create_object(file_path, assay=None,
                                     col_gene_symbols=col_gene_symbols,
                                     **kwargs)
     if adata is None:  # if file doesn't exist or failed to load
@@ -286,7 +286,7 @@ def load_example_data(file, col_gene_symbols, write_public=False):
             print(f"\n\nLooking for downloadable files for: {file}.")
             if file == "CRISPRi_wgs":  # CRISPRi Perturb-seq Pertpy data
                 adata = pertpy.data.replogle_2022_k562_gwps()  # HJ design
-                # adata = pertpy.data.replogle_2022_k562_essential()  # ~1 hr. 
+                # adata = pertpy.data.replogle_2022_k562_essential()  # ~1 hr.
                 # adata = pertpy.data.replogle_2022_rpe1()
                 # adata = pertpy.data.adamson_2016_upr_perturb_seq()  # ~8 min.
             elif file == "CRISPRi_ess":
@@ -299,7 +299,7 @@ def load_example_data(file, col_gene_symbols, write_public=False):
             elif file == "pool":
                 adata = pertpy.data.norman_2019_raw()  # download ~ 10 minutes
             elif file == "ECCITE":
-                adata = pertpy.data.papalexi_2021()  # sc CRISPR screen+protein
+                adata = pertpy.data.papalexi_2021()  # scCRISPR screen+protein
             elif file == "augur_ex":  # Pertpy's AUGUR example dataset
                 adata = pertpy.data.bhattacherjee()
             elif file == "coda":
@@ -312,22 +312,21 @@ def load_example_data(file, col_gene_symbols, write_public=False):
                 if err:
                     raise ValueError(f"{file} error:\n\n{err}.")
                 else:
-                    raise ValueError(
-                        f"{file} not a valid public data download option.")
+                    raise ValueError(f"{file} not a valid download option.")
             if write_public is True:
                 adata.write(file_path)
         else:
             raise ValueError(f"{file_path} does not exist.")
     if file == "CRISPRi_ess":
         adata = adata[adata.obs["guide_ids"].isin(
-            ["NT", "CDKN1A", "CDKN1A,CDKN1B", "CEBPA", "CEBPB", 
-            "CEBPA,CEBPB", "CEBPB,OSR2", "S1PR2,SGK1",
-            "DUSP9,KLF1", "SAMD1,UBASH3B", "TGFBR2", 
-            "FEV,ISL2", "PRTG,TGFBR2",
-            "JUN", "CLDN6,KLF1", "CBFA2T3,POU3F2", "FOXA1,HOXB9",
-            "DLX2,ZBTB10", "SAMD1,TGFBR2", "ZBTB10", "CEBPE,SPI1", "PTPN13",
-            "CEBPE,PTPN12", "CDKN1B,CDKN1C", "FOXF1,FOXL2", "AHR,FEV",
-            "KLF1,TGFBR2", "CDKN1A,CDKN1B"])]  # subset for speed
-    if file == "coda": 
+            ["NT", "CDKN1A", "CDKN1A,CDKN1B", "CEBPA", "CEBPB",
+             "CEBPA,CEBPB", "CEBPB,OSR2", "S1PR2,SGK1",
+             "DUSP9,KLF1", "SAMD1,UBASH3B", "TGFBR2",
+             "FEV,ISL2", "PRTG,TGFBR2",
+             "JUN", "CLDN6,KLF1", "CBFA2T3,POU3F2", "FOXA1,HOXB9",
+             "DLX2,ZBTB10", "SAMD1,TGFBR2", "ZBTB10", "CEBPE,SPI1", "PTPN13",
+             "CEBPE,PTPN12", "CDKN1B,CDKN1C", "FOXF1,FOXL2", "AHR,FEV",
+             "KLF1,TGFBR2", "CDKN1A,CDKN1B"])]  # subset for speed
+    if file == "coda":
         adata.var.loc[:, col_gene_symbols_data[file]] = adata.var.index.values
     return adata

@@ -1,7 +1,7 @@
 import decoupler as dc
 
 
-def get_markers_database(resource="PanglaoDB", organism="human", 
+def get_markers_database(resource="PanglaoDB", organism="human",
                          canonical_only=True, **kwargs):
     """Get database of cell type marker genes."""
     try:
