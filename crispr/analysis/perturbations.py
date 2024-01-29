@@ -318,7 +318,6 @@ def perform_augur(adata, assay=None, layer=None,
         print(results["summary_metrics"])  # results summary
 
         # Plotting & Output
-        if "palette"
         if plot is True:
             if "vcenter" not in kwargs:
                 kwargs.update({"vcenter": 0})
