@@ -9,3 +9,10 @@ from .gene_expression_plots import (
     plot_gex, plot_umap_multi, plot_umap_split, plot_cat_split,
     plot_markers)
 from .communication_plots import plot_receptor_ligand, plot_cooccurrence
+
+__all__ = [
+    "square_grid", "plot_umap", "plot_targeting_efficiency", "plot_mixscape",
+    "plot_gsea_results", "plot_pathway_interference_results", "plot_gex",
+    "plot_umap_multi", "plot_umap_split", "plot_cat_split", "plot_markers",
+    "plot_receptor_ligand", "plot_cooccurrence"
+]
