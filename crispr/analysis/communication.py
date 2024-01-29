@@ -11,15 +11,17 @@ from crispr.analysis import calculate_dea_deseq2
 import pandas as pd
 
 
-def analyze_receptor_ligand(
-    adata, method="liana", n_jobs=4, seed=1618,
-    col_condition=None, dea_df=None,
-    col_cell_type=None, col_sample_id=None, col_subject=None,
-    key_control=None, key_treatment=None, key_sources=None, key_targets=None,
-    layer="log1p", layer_counts="counts", min_prop=0, min_count=0,
-    min_total_count=0, kws_deseq2=None, n_perms=10, p_threshold=0.05,
-    figsize=None, remove_ns=True, top_n=20, cmap="magma", kws_plot=None,
-    resource="CellPhoneDB", copy=True, plot=True, **kwargs):
+def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
+                            layer="log1p", layer_counts="counts", dea_df=None,
+                            col_condition=None, col_cell_type=None,
+                            col_sample_id=None, col_subject=None,
+                            key_control=None, key_treatment=None,
+                            key_sources=None, key_targets=None,
+                            min_prop=0, min_count=0, min_total_count=0,
+                            kws_deseq2=None, n_perms=10, p_threshold=0.05,
+                            figsize=None, remove_ns=True, top_n=20,
+                            cmap="magma", kws_plot=None, copy=True, plot=True,
+                            resource="CellPhoneDB", **kwargs):
     """Perform receptor-ligand analysis."""
     if copy is True:
         adata = adata.copy()
@@ -79,13 +81,14 @@ def analyze_receptor_ligand(
     return res, adata, figs
 
 
-def analyze_causal_network(
-    adata, col_condition, key_control, key_treatment,
-    col_cell_type, key_source, key_target, dea_df=None,
-    col_gene_symbols=None, col_sample_id=None, top_n=10, verbose=False,
-    layer="log1p", layer_counts="counts", resource_name="cellphonedb",
-    expr_prop=0.1, min_n_ulm=5, node_cutoff=0.1, max_penalty=1,
-    min_penalty=0.01, edge_penalty=0.01, max_seconds=60*3, solver="scipy"):
+def analyze_causal_network(adata, col_condition, key_control, key_treatment,
+                           col_cell_type, key_source, key_target, dea_df=None,
+                           col_gene_symbols=None, col_sample_id=None,
+                           resource_name="cellphonedb", top_n=10,
+                           layer="log1p", layer_counts="counts",
+                           expr_prop=0.1, min_n_ulm=5, node_cutoff=0.1,
+                           max_penalty=1, min_penalty=0.01, edge_penalty=0.01,
+                           max_seconds=60*3, solver="scipy", verbose=False):
     """Analyze causal network (adapted from Liana tutorial)."""
     if layer is not None:
         adata.X = adata.layers[layer].copy()

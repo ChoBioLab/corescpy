@@ -15,13 +15,16 @@ import warnings
 import matplotlib.pyplot as plt
 
 
-def analyze_composition(
-    adata, col_condition,  col_cell_type, assay=None, layer=None, copy=False,
-    generate_sample_level=True, reference_cell_type="automatic",
-    key_reference_cell_type="automatic", col_sample_id=None, covariates=None,
-    out_file=None, est_fdr=0.05, analysis_type="cell_level",  # only scCoda
-    col_list_lineage_tree=None,  # only for TASCCoda
-    key_treatment="Perturbed", key_control="Control", plot=True, *kwargs):
+def analyze_composition(adata, col_condition,  col_cell_type, assay=None,
+                        layer=None, copy=False, generate_sample_level=True,
+                        plot=True, reference_cell_type="automatic",
+                        key_reference_cell_type="automatic",
+                        col_sample_id=None, covariates=None,
+                        key_treatment="Perturbed", key_control="Control",
+                        out_file=None, est_fdr=0.05,
+                        analysis_type="cell_level",  # only scCoda
+                        col_list_lineage_tree=None,  # only for TASCCoda
+                        plot=True, *kwargs):
     """Perform SCCoda compositional analysis.
         copy (bool, optional): If False (default),
             modify adata in place; otherwise, copy the object.
@@ -58,12 +61,11 @@ def analyze_composition(
     return (results, figures, adata)
 
 
-def perform_sccoda(
-    adata, col_condition, col_cell_type,
-    reference_cell_type="automatic", assay=None,
-    analysis_type="cell_level",
-    generate_sample_level=True, sample_identifier="batch",
-    covariates=None, est_fdr=0.05, plot=True, out_file=None):
+def perform_sccoda(adata, col_condition, col_cell_type, assay=None,
+                   reference_cell_type="automatic",
+                   analysis_type="cell_level",
+                   generate_sample_level=True, sample_identifier="batch",
+                   covariates=None, est_fdr=0.05, plot=True, out_file=None):
     """Perform SCCoda compositional analysis."""
     figs, results = {}, {}
     if generate_sample_level is True and sample_identifier is None:
@@ -237,8 +239,7 @@ def perform_tasccoda(adata, col_condition, col_cell_type,
         adata, type="cell_level", cell_type_identifier=col_cell_type,
         sample_identifier=col_sample_id,
         covariate_obs=covariates + [col_condition],
-        levels_orig=col_list_lineage_tree,
-                         add_level_name=True)
+        levels_orig=col_list_lineage_tree, add_level_name=True)  # load model
     coda_plot.draw_tree(ts_data["coda"])
     ts_data.mod["coda_subset"] = ts_data["coda"][ts_data["coda"].obs[
         col_condition].isin([key_control, key_treatment])]  # subset if needed

@@ -16,11 +16,11 @@ import crispr as cr
 import pandas as pd
 
 
-def cluster(
-    adata, layer=None, plot=True, colors=None, kws_celltypist=None,
-    paga=False,  # if issues with disconnected clusters, etc.
-    method_cluster="leiden", resolution=1, kws_pca=None, kws_neighbors=None,
-    kws_umap=None, kws_cluster=None, seed=1618, **kwargs):
+def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
+            paga=False,  # if issues with disconnected clusters, etc.
+            method_cluster="leiden", resolution=1, kws_pca=None,
+            kws_neighbors=None, kws_umap=None, kws_cluster=None,
+            seed=1618, **kwargs):
     """
     Perform clustering and visualize results.
 
@@ -195,8 +195,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
     ann = res.to_adata(insert_labels=True)  # results object -> anndata
 
     # Plot Label Transfer (Pre-Existing Annotations vs. CellTypist)
-    if col_cell_type not in [
-        None] + ctc:  # plot predicted-existing membership overlap
+    if col_cell_type not in [None] + ctc:  # plot membership overlap
         for x in ["majority_voting", "predicted_labels"]:
             dot = x == "predicted_labels" or (majority_voting is True and (
                 col_cell_type != x))  # plot on this iteration?

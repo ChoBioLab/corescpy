@@ -31,16 +31,16 @@ ifn_pathways_default = [
     "REACTOME_INTERFERON_GAMMA_SIGNALING"]
 
 
-def perform_mixscape(
-    adata, assay=None, assay_protein=None, layer=None,
-    protein_of_interest=None, col_perturbed="perturbation",
-    key_control="NT", key_treatment="perturbed", key_nonperturbed="NP",
-    col_guide_rna="guide_ID", col_split_by=None,
-    col_target_genes="gene_target", iter_num=10, min_de_genes=5,
-    pval_cutoff=5e-2, logfc_threshold=0.25, subsample_number=300,
-    n_comps_lda=10, guide_split="-", feature_split="|",
-    target_gene_idents=None, kws_perturbation_signature=None,
-    plot=True, **kwargs):
+def perform_mixscape(adata, assay=None, assay_protein=None, layer=None,
+                     protein_of_interest=None, col_perturbed="perturbation",
+                     key_control="NT", key_treatment="perturbed",
+                     key_nonperturbed="NP", col_guide_rna="guide_ID",
+                     col_split_by=None, col_target_genes="gene_target",
+                     iter_num=10, min_de_genes=5, pval_cutoff=5e-2,
+                     logfc_threshold=0.25, subsample_number=300,
+                     n_comps_lda=10, guide_split="-", feature_split="|",
+                     target_gene_idents=None, kws_perturbation_signature=None,
+                     plot=True, **kwargs):
     """
     Identify perturbed cells based on target genes
     (`adata.obs['mixscape_class']`,
@@ -356,12 +356,15 @@ def perform_augur(adata, assay=None, layer=None,
     return data, results, figs
 
 
-def perform_differential_prioritization(
-    adata, col_perturbed="perturbation", key_treatment_list="NT",
-    label_col="label", assay=None, n_permutations=1000,
-    n_subsamples=50, col_cell_type="cell_type",
-    classifier="random_forest_classifier",
-    plot=True, kws_augur_predict=None, **kwargs):
+def perform_differential_prioritization(adata, col_perturbed="perturbation",
+                                        key_treatment_list="NT", assay=None,
+                                        label_col="label",
+                                        n_permutations=1000,
+                                        n_subsamples=50,
+                                        col_cell_type="cell_type",
+                                        classifier="random_forest_classifier",
+                                        plot=True, kws_augur_predict=None,
+                                        **kwargs):
     """
     Determine differential prioritization based on which cell types
     were most accurately (AUC) classified as (not) perturbed in
@@ -605,9 +608,10 @@ def perform_gsea(pdata, adata_sc=None,
     return pdata, adata_sc, res, figs
 
 
-def perform_pathway_interference(
-    adata, layer=None, n_top=500, organism="human", obsm_key="mlm_estimate",
-    col_cell_type="louvain", pathways=True, copy=True, **kwargs):
+def perform_pathway_interference(adata, layer=None, n_top=500, copy=True,
+                                 organism="human", obsm_key="mlm_estimate",
+                                 col_cell_type="louvain", pathways=True,
+                                 **kwargs):
     """Perform Pathway Interference Analysis."""
     if copy is True:
         adata = adata.copy()
@@ -632,9 +636,9 @@ def perform_pathway_interference(
     return adata, figs
 
 
-def perform_dea(
-    adata, col_cell_type, col_covariates, layer=None, col_sample_id=None,
-    figsize=30, uns_key="pca_anova", obsm_key="X_pca", plot_stat="p_adj"):
+def perform_dea(adata, col_cell_type, col_covariates, layer=None,
+                col_sample_id=None, figsize=30, uns_key="pca_anova",
+                obsm_key="X_pca", plot_stat="p_adj"):
     """
     Perform functional analysis of pseudobulk data
     (created by this method), then differential expression analysis.
@@ -667,11 +671,11 @@ def perform_dea(
     return pdata, fig
 
 
-def calculate_dea_deseq2(
-    pdata, col_cell_type, col_condition, key_control, key_treatment, top_n=20,
-    n_jobs=4, layer_counts="counts", col_subject=None, col_gene_symbols=None,
-    min_prop=0, min_count=0, min_total_count=0,
-    shrink_lfc=True, p_threshold=0.05, **kwargs):
+def calculate_dea_deseq2(pdata, col_cell_type, col_condition, key_control,
+                         key_treatment, top_n=20, n_jobs=4, col_subject=None,
+                         layer_counts="counts", col_gene_symbols=None,
+                         min_prop=0, min_count=0, min_total_count=0,
+                         shrink_lfc=True, p_threshold=0.05, **kwargs):
     """
     Calculate DEA based on Liana tutorial usage of DESeq2.
 

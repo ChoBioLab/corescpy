@@ -1,1 +1,2 @@
-"""Test suite for the crispr package."""
+# __init__.py
+# pylint: disable=unused-import
