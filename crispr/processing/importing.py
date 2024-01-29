@@ -137,8 +137,8 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
     for f in files_out:
         if dir_strip is True:
             new_path = re.sub("^_", "", re.sub("^[.]", "", re.sub(
-                os.path.basename(dir_sub[f]), "", files_out[f]))
-            new_path = os.path.join(dir_sub[f], new_path))
+                os.path.basename(dir_sub[f]), "", files_out[f])))
+            new_path = os.path.join(dir_sub[f], new_path)
         else:
             new_path = os.path.join(dir_sub[f], files_out[f])
         if overwrite is False:
