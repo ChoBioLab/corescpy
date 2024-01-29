@@ -181,7 +181,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
             print(f"{err}\n\nNo CellTypist model: {model}. Try:\n\n")
             print(celltypist.models.models_description())
     else:  # if CellTypist model object provided
-            print(f"CellTypist model provided: {model}.")
+        print(f"CellTypist model provided: {model}.")
 
     # Annotate Cells with CellTypist
     res = celltypist.annotate(

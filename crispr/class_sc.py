@@ -680,7 +680,6 @@ class Omics(object):
             self.figures["gsea"] = output[-1]
         return output
 
-
     def plot_gsea(self, ifn_pathways=True, p_threshold=0.0001, **kwargs):
         """
         Plot stored GSEA results (e.g., with different pathways,

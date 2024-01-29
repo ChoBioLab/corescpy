@@ -21,10 +21,9 @@ def analyze_composition(adata, col_condition,  col_cell_type, assay=None,
                         key_reference_cell_type="automatic",
                         col_sample_id=None, covariates=None,
                         key_treatment="Perturbed", key_control="Control",
-                        out_file=None, est_fdr=0.05,
                         analysis_type="cell_level",  # only scCoda
                         col_list_lineage_tree=None,  # only for TASCCoda
-                        plot=True, *kwargs):
+                        out_file=None, est_fdr=0.05, **kwargs):
     """Perform SCCoda compositional analysis.
         copy (bool, optional): If False (default),
             modify adata in place; otherwise, copy the object.

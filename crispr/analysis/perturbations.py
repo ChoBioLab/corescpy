@@ -572,8 +572,8 @@ def perform_gsea(pdata, adata_sc=None,
         source="geneset", target="genesymbol")  # run cluster-level GSEA
     # pdata.obsm[obsm_key] = scores
     gsea_results = pd.concat({"score": scores.T, "norm": norm.T, "pval":
-        pvals.T}, axis=1).droplevel(
-            level=1, axis=1).sort_values("pval")  # cell type-level
+        pvals.T}, axis=1).droplevel(level=1, axis=1).sort_values(
+            "pval")  # cell type-level
     gsea_results = gsea_results.assign(
         **{"-log10(pval)": lambda x: -np.log10(x["pval"])})
     gsea_results = gsea_results.assign(
@@ -657,9 +657,9 @@ def perform_dea(adata, col_cell_type, col_covariates, layer=None,
 
     # Calculate Associations
     decoupler.get_metadata_associations(
-        pdata, obs_keys=[col_cell_type, "psbulk_n_cells",
-                        "psbulk_counts"] + col_covariates,
-        obsm_key=obsm_key, uns_key=uns_key, inplace=True)
+        pdata, obs_keys=[col_cell_type, "psbulk_n_cells", "psbulk_counts"
+                         ] + col_covariates, obsm_key=obsm_key,
+        uns_key=uns_key, inplace=True)
 
     # Plot
     fig = plt.figure(figsize=figsize)

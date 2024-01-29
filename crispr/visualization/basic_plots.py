@@ -162,7 +162,7 @@ def plot_umap_circled(adata, col_cell_type, cell_types_circle,
     fig, axu = plt.subplots(figsize=(figsize, figsize) if isinstance(
         figsize, (int, float)) else figsize)  # set up subplots
     sc.pl.umap(adata, color=[col_cell_type], ax=axu,
-                legend_loc=legend_loc, show=False)  # umap base
+               legend_loc=legend_loc, show=False)  # umap base
     for h in cell_types_circle:  # circle cell type
         locs = adata[adata.obs[col_cell_type] == h, :].obsm['X_umap']
         coordinates = [locs[:, i].mean() for i in [0, 1]]

@@ -438,8 +438,8 @@ def z_normalize_by_reference(
     if layer:
         adata.X = adata.layers[layer].copy()
     gex = adata.X.copy()  #  gene expression matrix (full)
-    gex_ctrl = adata[adata.obs[
-        col_reference] == key_reference].X.A.copy()  # reference condition
+    gex_ctrl = adata[adata.obs[col_reference] == key_reference
+                     ].X.A.copy()  # reference condition
     gex, gex_ctrl = [q.A if "A" in dir(q) else q
                      for q in [gex, gex_ctrl]]  # sparse -> dense matrix
     mus, sds = np.nanmean(gex_ctrl, axis=0), np.nanstd(
@@ -499,11 +499,11 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             for a, v in zip(axf, pct_n + ["n_genes_by_counts"]):
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a,
-                                show=False, color=h if yes else None)
+                                  show=False, color=h if yes else None)
                     plt.show()
                 except Exception:
                     print(traceback.format_exc())
-        except Exception as err:
+        except Exception:
             print(traceback.format_exc(), "\n\nQC scatterplots failed.")
         figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)

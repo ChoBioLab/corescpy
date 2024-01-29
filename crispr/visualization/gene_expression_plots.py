@@ -258,7 +258,7 @@ def plot_umap_multi(adata, genes, title=None, **kwargs):
                           colorbar_loc=None, color_map=cmaps[i], **kwargs)
         c_b = plt.colorbar(
             axis.collections[i], ax=axis, pad=0.05, aspect=30,
-             orientation="horizontal", ticklocation="top")
+            orientation="horizontal", ticklocation="top")
         c_b.ax.spines[["left", "right", "top"]].set_visible(False)
         c_b.minorticks_off()
         c_b.set_ticklabels(c_b.get_ticks(), rotation=270, fontdict={
