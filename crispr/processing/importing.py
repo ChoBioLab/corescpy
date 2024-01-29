@@ -17,6 +17,7 @@ import numpy as np
 FILE_STRUCTURE = ["matrix", "cells", "genes"]
 DEF_FILE_P = "crispr_analysis/protospacer_calls_per_cell.csv"
 
+
 def name_path_iterative(path):
     """Check for existence of path and, if needed, make path_#
     to avoid overwriting.

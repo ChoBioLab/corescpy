@@ -216,7 +216,7 @@ class Spatial(Omics):
         print("\t*** Computing interaction matrix...")
         sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
         if self._library_id is None and len(list(self.adata.uns[
-            self._assay_spatial].keys())) == 1:
+                self._assay_spatial].keys())) == 1:
             print("<<< UPDATING SELF._LIBRARY_ID >>>")
             self._library_id = list(adata.uns[self._assay_spatial].keys())[0]
         self.figures["centrality"] = fig

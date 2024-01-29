@@ -571,9 +571,9 @@ def perform_gsea(pdata, adata_sc=None,
         **kws_run_gsea, use_raw=use_raw,
         source="geneset", target="genesymbol")  # run cluster-level GSEA
     # pdata.obsm[obsm_key] = scores
-    gsea_results = pd.concat({"score": scores.T, "norm": norm.T, "pval":
-        pvals.T}, axis=1).droplevel(level=1, axis=1).sort_values(
-            "pval")  # cell type-level
+    gsea_results = pd.concat({
+        "score": scores.T, "norm": norm.T, "pval": pvals.T
+        }, axis=1).droplevel(level=1, axis=1).sort_values("pval")  # results
     gsea_results = gsea_results.assign(
         **{"-log10(pval)": lambda x: -np.log10(x["pval"])})
     gsea_results = gsea_results.assign(
