@@ -30,3 +30,4 @@ class TestDistance:
             outs[x] = TestDistance.self.compute_distance(
                 x, method="X_pca", n_perms=100,
                 alpha=0.0015, kws_plot=dict(robust=False, figsize=(10, 10)))
+            print(outs[x][-2])

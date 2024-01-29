@@ -43,7 +43,7 @@ def analyze_composition(adata, col_condition,  col_cell_type, assay=None,
             col_cell_type].unique()
         for x in cells:  # if "automatic", try w/ all b/c required for scCoda
             results[x], figures[x], tmp = perform_sccoda(
-                adata, col_condition, col_cell_type, x,
+                adata, col_condition, col_cell_type, reference_cell_type=x,
                 covariates=covariates, assay=assay,
                 analysis_type=analysis_type,
                 generate_sample_level=generate_sample_level, est_fdr=est_fdr,
