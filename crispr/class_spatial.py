@@ -7,13 +7,11 @@
 
 import os
 import squidpy as sq
-import scanpy as sc
 import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
 from .class_sc import Omics
 import pandas as pd
-import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -21,52 +19,52 @@ COLOR_MAP = "coolwarm"
 
 class Spatial(Omics):
     """A class for CRISPR analysis and visualization."""
-    
+
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
-    def __init__(self, file_path, file_path_spatial=None, 
+    def __init__(self, file_path, file_path_spatial=None,
                  visium=False, **kwargs):
         """
         Initialize Crispr class object.
 
         Args:
-            file_path (str, AnnData, or MuData): Path or object 
-                containing data. Used in initialization to create 
-                the initial `.adata` attribute (an AnnData or 
+            file_path (str, AnnData, or MuData): Path or object
+                containing data. Used in initialization to create
+                the initial `.adata` attribute (an AnnData or
                 MuData object). Either
-                    - a path to a 10x directory (with matrix.mtx.gz, 
+                    - a path to a 10x directory (with matrix.mtx.gz,
                     barcodes.tsv.gz, features.tsv.gz),
-                    - a path to an .h5ad or .mu file 
-                        (Scanpy/AnnData/Muon-compatible), 
-                    - an AnnData or MuData object (e.g., already 
+                    - a path to an .h5ad or .mu file
+                        (Scanpy/AnnData/Muon-compatible),
+                    - an AnnData or MuData object (e.g., already
                         loaded with Scanpy or Muon), or
-                    - a dictionary containing keyword arguments to 
-                        pass to `crispr.pp.combine_matrix_protospacer` 
-                        (in order to load information about 
-                        perturbations from other file(s); see 
+                    - a dictionary containing keyword arguments to
+                        pass to `crispr.pp.combine_matrix_protospacer`
+                        (in order to load information about
+                        perturbations from other file(s); see
                         function documentation), or
-                    - to concatenate multiple datasets, a dictionary 
-                        (keyed by your desired subject/sample names 
-                        to be used in `col_sample_id`) consisting 
-                        of whatever objects you would pass to 
-                        `create_object()`'s `file` argument for the 
-                        individual objects. You must also specify 
-                        `col_sample` (a tuple as described in the 
-                        documentation below). The other arguments 
-                        passed to the `crispr.pp.create_object()` 
-                        function (e.g., `col_gene_symbols`) can be 
-                        specified as normal if they are common across 
-                        samples; otherwise, specify them as lists in 
-                        the same order as the `file` dictionary. 
-            file_path_spatial (str, optional): Path to spatial 
+                    - to concatenate multiple datasets, a dictionary
+                        (keyed by your desired subject/sample names
+                        to be used in `col_sample_id`) consisting
+                        of whatever objects you would pass to
+                        `create_object()`'s `file` argument for the
+                        individual objects. You must also specify
+                        `col_sample` (a tuple as described in the
+                        documentation below). The other arguments
+                        passed to the `crispr.pp.create_object()`
+                        function (e.g., `col_gene_symbols`) can be
+                        specified as normal if they are common across
+                        samples; otherwise, specify them as lists in
+                        the same order as the `file` dictionary.
+            file_path_spatial (str, optional): Path to spatial
                 information csv file, if needed.
-            visium (bool or dict, optional): File path provided is to 
+            visium (bool or dict, optional): File path provided is to
                 10x Visium data? Provide as a dictionary of keyword
                 arguments to pass to `scanpy.read_visium()` or simply
                 as True to use default arguments. The default is False
-                (assumes 10x Xenium data format and 
+                (assumes 10x Xenium data format and
                 `file_path_spatial` provided).
-            kwargs (dict, optional): Keyword arguments to pass to the 
+            kwargs (dict, optional): Keyword arguments to pass to the
                 Omics class initialization method.
         """
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
@@ -88,9 +86,9 @@ class Spatial(Omics):
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
         self._library_id = None
-            
-    def plot_spatial(self, color, include_umap=True, 
-                     col_sample_id=None, library_id=None, 
+
+    def plot_spatial(self, color, include_umap=True,
+                     col_sample_id=None, library_id=None,
                      shape="hex", figsize=30, cmap="magma", **kwargs):
         """Create basic spatial plots."""
         figs = {}
@@ -111,19 +109,19 @@ class Spatial(Omics):
         # libid = col_sample_id if col_sample_id not in [
         #     None, False] else self._columns["col_sample_id"]  # library ID
         figs["spatial"] = sq.pl.spatial_scatter(
-            self.adata, library_id=library_id, figsize=figsize, shape=shape, 
-            color=[color] if isinstance(color, str) else color, 
+            self.adata, library_id=library_id, figsize=figsize, shape=shape,
+            color=[color] if isinstance(color, str) else color,
             cmap=cmap, alt_var=self._columns["col_gene_symbols"] if (
                 self._columns["col_gene_symbols"
                               ] != self.rna.var.index.names[0]) else None,
             **kwargs)
-        return figs        
-    
+        return figs
+
     def analyze_spatial(
         self, col_cell_type=None, genes=None, layer="log1p", library_id=None,
         figsize_multiplier=1, dpi=100, palette=None,
         kws_receptor_ligand=None, key_source=None, key_targets=None,
-        method_autocorr="moran", alpha=0.005, n_perms=100, 
+        method_autocorr="moran", alpha=0.005, n_perms=100,
         seed=1618, cmap="magma", copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
@@ -136,40 +134,40 @@ class Spatial(Omics):
             library_id = self._library_id
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-            
+
         # Connectivity & Centrality + Interaction Matrix
         print("\n<<< CALCULATING CENTRALITY SCORES >>>")
-        self.calculate_graph(col_cell_type=col_cell_type, 
+        self.calculate_graph(col_cell_type=col_cell_type,
                              figsize_multiplier=figsize_multiplier)  # run
-        
+
         # Co-Occurence
         print("\n<<< QUANTIFYING CELL TYPE CO-OCCURRENCE >>>")
         adata, figs["cooccurrence"] = self.find_cooccurrence(
             col_cell_type=col_cell_type, copy=False)
-        
+
         # Neighbors Enrichment Analysis
         print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
         figs["enrichment"] = self.calculate_neighborhood(
             col_cell_type=col_cell_type, copy=False, kws_plot=dict(cmap=cmap))
-        
+
         # Spatially-Variable Genes
         if method_autocorr not in [None, False]:
             figs["svgs_autocorrelation"] = self.find_svgs(
-                genes=genes, method=method_autocorr, 
+                genes=genes, method=method_autocorr,
                 layer=layer, n_perms=n_perms, palette=palette)
-            
+
         # Receptor-Ligand Interaction
         if kws_receptor_ligand is not False:
             if not kws_receptor_ligand:
                 kws_receptor_ligand = {}
             res_rl, figs["receptor_ligand"] = self.calculate_receptor_ligand(
-                col_cell_type=col_cell_type, n_perms=n_perms, alpha=alpha, 
+                col_cell_type=col_cell_type, n_perms=n_perms, alpha=alpha,
                 dpi=dpi, key_source=None, key_targets=None,
                 **kws_receptor_ligand)  # run receptor-ligand analysis
-        
+
         # Distribution Pattern
         figs["distribution_pattern"] = self.calculate_distribution_pattern()
-        
+
         # Output
         if copy is False:
             self.results["spatial"]["receptor_ligand"] = res_rl
@@ -178,10 +176,10 @@ class Spatial(Omics):
             return figs
         else:
             return adata, figs
-    
+
     def calculate_centrality(
-        self, col_cell_type=None, delaunay=True, coord_type="generic", 
-        figsize=None, palette=None, shape="hex", size=None, title=None, 
+        self, col_cell_type=None, delaunay=True, coord_type="generic",
+        figsize=None, palette=None, shape="hex", size=None, title=None,
         kws_plot=None, copy=False, n_jobs=None, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
@@ -197,7 +195,7 @@ class Spatial(Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(figsize=figsize, palette=palette, size=size), 
+        kws_plot = {**dict(figsize=figsize, palette=palette, size=size),
                     **dict(kws_plot if kws_plot else {})}
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
@@ -205,12 +203,12 @@ class Spatial(Omics):
             adata, coord_type=coord_type, delaunay=delaunay,
             spatial_key=self._assay_spatial)  # spatial neighbor calculation
         print("\t*** Computing & plotting centrality scores...")
-        sq.gr.centrality_scores(adata, cluster_key=col_cell_type, 
+        sq.gr.centrality_scores(adata, cluster_key=col_cell_type,
                                 n_jobs=n_jobs)  # centrality scores
         # adata.uns["spatial"][
         #     "library_id"] = col_sample_id if col_sample_id not in [
         #         None, False] else self._columns["col_sample_id"]  # library ID
-        sq.pl.centrality_scores(adata, cluster_key=col_cell_type, 
+        sq.pl.centrality_scores(adata, cluster_key=col_cell_type,
                                 figsize=figsize)
         fig = plt.gcf()
         if title:
@@ -223,11 +221,11 @@ class Spatial(Omics):
             self._library_id = list(adata.uns[self._assay_spatial].keys())[0]
         self.figures["centrality"] = fig
         return fig
-        
+
     def calculate_neighborhood(
         self, col_cell_type=None, library_id=None, mode="zscore", seed=1618,
-        layer=None, palette=None, size=None, shape="hex", figsize=None, 
-        kws_plot=None, title="Neighborhood Enrichment", 
+        layer=None, palette=None, size=None, shape="hex", figsize=None,
+        kws_plot=None, title="Neighborhood Enrichment",
         cmap="magma", vcenter=0, cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.rna.copy() if copy is True else self.rna
@@ -241,23 +239,23 @@ class Spatial(Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(palette=palette, size=size, 
-                           use_raw=False, layer=layer), 
+        kws_plot = {**dict(palette=palette, size=size,
+                           use_raw=False, layer=layer),
                     **dict(kws_plot if kws_plot else {})}
         sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type,
-                               n_jobs=None, 
+                               n_jobs=None,
                                # n_jobs=n_jobs,  # not working for some reason
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         sq.pl.nhood_enrichment(
-            adata, cluster_key=col_cell_type, title=title, vcenter=vcenter, 
-            cmap=cmap, vmin=cbar_range[0], vmax=cbar_range[1], 
+            adata, cluster_key=col_cell_type, title=title, vcenter=vcenter,
+            cmap=cmap, vmin=cbar_range[0], vmax=cbar_range[1],
             ax=axs[0])  # matrix/heat of enrichment scores (panel 1)
         sq.pl.spatial_scatter(adata, color=col_cell_type, shape=shape,
                               ax=axs[1], **kws_plot)  # scatterplot (panel 2)
         self.figures["neighborhood_enrichment"] = plt.gcf()
         return fig
-        
+
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
                           layer=None, copy=False, n_jobs=None,
                           figsize=15, palette=None, title=None,
@@ -276,7 +274,7 @@ class Spatial(Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(palette=palette, size=size), 
+        kws_plot = {**dict(palette=palette, size=size),
                     **dict(kws_plot if kws_plot else {})}
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
@@ -284,7 +282,7 @@ class Spatial(Omics):
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         if layer:
             adata.X = adata.layers[self._layers[layer]].X.copy()
-        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs, 
+        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs,
                             spatial_key=self._assay_spatial, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
@@ -302,10 +300,10 @@ class Spatial(Omics):
             figs["co_occurrence"].suptitle(title)
         self.figures["co_occurrence"] = figs["co_occurrence"]
         return adata, figs
-        
+
     def find_svgs(self, genes=None, method="moran", n_perms=10, layer=None,
                   library_id=None, copy=False, col_cell_type=None, title=None,
-                  col_sample_id=None, n_jobs=None, figsize=15, 
+                  col_sample_id=None, n_jobs=None, figsize=15,
                   shape="hex", kws_plot=None):
         """Find spatially-variable genes."""
         adata = self.rna.copy() if copy else self.rna
@@ -328,28 +326,28 @@ class Spatial(Omics):
         #     palette = matplotlib.colors.Colormap(palette)
         # if size is None:
         #     size = int(1 if figsize[0] < 25 else figsize[0] / 15)
-        # kws_plot = {**dict(palette=palette, shape=shape, size=size), 
+        # kws_plot = {**dict(palette=palette, shape=shape, size=size),
         #             **dict(kws_plot if kws_plot else {})}
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
         sq.gr.spatial_autocorr(
-            self.rna, mode=method, layer=layer, n_perms=n_perms, 
+            self.rna, mode=method, layer=layer, n_perms=n_perms,
             n_jobs=n_jobs)  # auto-correlate
         if isinstance(genes, int):
             genes = adata.uns["moranI"].head(genes).index.values
         ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
-        sq.pl.spatial_scatter(adata, color=genes + [col_cell_type], 
+        sq.pl.spatial_scatter(adata, color=genes + [col_cell_type],
                               figsize=figsize, shape=shape, ncols=ncols,
                               library_id=library_id, **kws_plot)  # cell type
-        # sc.pl.spatial(adata, color=genes, library_id=library_id, 
+        # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
         fig = plt.gcf()
         if title:
             fig.suptitle(title)
         return fig
-        
+
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):
         """
-        Use Ripley's statistics to determine whether distributions are 
+        Use Ripley's statistics to determine whether distributions are
         random, dispersed, or clustered.
         """
         if col_cell_type is None:

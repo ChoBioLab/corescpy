@@ -2,29 +2,23 @@ import squidpy as sq
 import liana
 from liana.method import cellphonedb
 import decoupler as dc
-from pydeseq2.dds import DeseqDataSet
-from pydeseq2.ds import DeseqStats
-import scanpy as sc
 import omnipath
 import corneto
 import traceback
-import matplotlib.pyplot as plt
-from warnings import warn
-from crispr.visualization import plot_receptor_ligand, square_grid
-from crispr.utils import create_pseudobulk, merge
+from crispr.visualization import plot_receptor_ligand
+from crispr.utils import merge
 from crispr.analysis import calculate_dea_deseq2
 import pandas as pd
-import numpy as np
 
 
 def analyze_receptor_ligand(
-    adata, method="liana", n_jobs=4, seed=1618, 
+    adata, method="liana", n_jobs=4, seed=1618,
     col_condition=None, dea_df=None,
-    col_cell_type=None, col_sample_id=None, col_subject=None, 
-    key_control=None, key_treatment=None, key_sources=None, key_targets=None, 
-    layer="log1p", layer_counts="counts", min_prop=0, min_count=0, 
-    min_total_count=0, kws_deseq2=None, n_perms=10, p_threshold=0.05, 
-    figsize=None, remove_ns=True, top_n=20, cmap="magma", kws_plot=None, 
+    col_cell_type=None, col_sample_id=None, col_subject=None,
+    key_control=None, key_treatment=None, key_sources=None, key_targets=None,
+    layer="log1p", layer_counts="counts", min_prop=0, min_count=0,
+    min_total_count=0, kws_deseq2=None, n_perms=10, p_threshold=0.05,
+    figsize=None, remove_ns=True, top_n=20, cmap="magma", kws_plot=None,
     resource="CellPhoneDB", copy=True, plot=True, **kwargs):
     """Perform receptor-ligand analysis."""
     if copy is True:
@@ -32,28 +26,27 @@ def analyze_receptor_ligand(
     res_keys = ["squidpy", "liana_res", "lr_dea_res", "dea_results", "dea_df"]
     figs, res = {}, dict(zip(res_keys, [None] * len(res_keys)))  # for output
     kws_plot = {} if kws_plot is None else {**kws_plot}
-    cgs = kwargs.pop("col_gene_symbols", adata.var.index.names[0])
-    kws_deseq2 = merge({"n_jobs": n_jobs, "refit_cooks": True, 
+    kws_deseq2 = merge({"n_jobs": n_jobs, "refit_cooks": True,
                         "p_threshold": p_threshold}, kws_deseq2)  # deseq2 kws
     if layer is not None:
         adata.X = adata.layers[layer].copy()
-        
+
     # Squidpy Method
     if method == "squidpy":
         res["squidpy"] = sq.gr.ligrec(
             adata, n_perms=n_perms, cluster_key=col_cell_type, copy=True,
-            transmitter_params={"categories": "ligand"}, 
-            receiver_params={"categories": "receptor"}, kws_plot=None, 
+            transmitter_params={"categories": "ligand"},
+            receiver_params={"categories": "receptor"}, kws_plot=None,
             interactions_params={"resources": resource}, **kwargs)
         figs["squidpy"] = sq.pl.ligrec(
             res, alpha=p_threshold, source_groups=key_sources, **kws_plot,
             target_groups=key_targets,  # pvalue_threshold=p_threshold
             remove_nonsig_interactions=remove_ns, **kws_plot)  # plot
-        
+
     # Liana Method
     else:
         resource = resource.lower()  # all Liana resources are lowercase
-        kwargs = {**dict(use_raw=False, return_all_lrs=True, 
+        kwargs = {**dict(use_raw=False, return_all_lrs=True,
                          verbose=True, key_added="liana_res"), **kwargs}
         cellphonedb(adata, groupby=col_cell_type, n_jobs=n_jobs,
                     resource_name=resource, seed=seed, **kwargs)  # run l-r
@@ -61,20 +54,20 @@ def analyze_receptor_ligand(
         kws = {**dict(
             cmap=cmap, p_threshold=p_threshold, top_n=top_n, figsize=figsize,
             key_sources=key_sources, key_targets=key_targets), **kws_plot}
-    
+
     # DEA + Liana
     if dea_df is not None and method.lower() == "liana":
         try:  # merge DEA results & scRNA treatment group data
             res["lr_dea_res"] = liana.mu.df_to_lr(
                 adata[adata.obs[col_condition] == key_treatment].copy(),  # tx
                 dea_df, col_cell_type, stat_keys=[
-                    "stat", "pvalue", "padj"], use_raw=False, layer=layer, 
-                verbose=True, complex_col="stat", expr_prop=min_prop, 
+                    "stat", "pvalue", "padj"], use_raw=False, layer=layer,
+                verbose=True, complex_col="stat", expr_prop=min_prop,
                 return_all_lrs=True, resource_name="consensus").sort_values(
                     "interaction_stat", ascending=False)
         except Exception:
             print(traceback.format_exc(), "Liana + DEA failed!\n\n",)
-    
+
     # Plotting
     if plot is True:
         try:
@@ -87,19 +80,18 @@ def analyze_receptor_ligand(
 
 
 def analyze_causal_network(
-    adata, col_condition, key_control, key_treatment, 
-    col_cell_type, key_source, key_target, dea_df=None, 
+    adata, col_condition, key_control, key_treatment,
+    col_cell_type, key_source, key_target, dea_df=None,
     col_gene_symbols=None, col_sample_id=None, top_n=10, verbose=False,
-    layer="log1p", layer_counts="counts", resource_name="cellphonedb", 
-    expr_prop=0.1, min_n_ulm=5, node_cutoff=0.1, max_penalty=1, 
+    layer="log1p", layer_counts="counts", resource_name="cellphonedb",
+    expr_prop=0.1, min_n_ulm=5, node_cutoff=0.1, max_penalty=1,
     min_penalty=0.01, edge_penalty=0.01, max_seconds=60*3, solver="scipy"):
     """Analyze causal network (adapted from Liana tutorial)."""
-    figs = {}
     if layer is not None:
         adata.X = adata.layers[layer].copy()
     if col_gene_symbols is None:
         col_gene_symbols = adata.var.index.names[0]
-    
+
     # Pseudo-Bulk -> DEA
     if dea_df is None:
         pdata = dc.get_pseudobulk(
@@ -117,7 +109,7 @@ def analyze_causal_network(
         use_raw=False, stat_keys=["stat", "pvalue", "padj"], verbose=True,
         resource_name="consensus", expr_prop=expr_prop, complex_col="stat",
         ).sort_values("interaction_stat", ascending=False)  # merge DEA, scRNA
-    
+
     # Subset to Treatment Condition
     adata = adata[adata.obs[col_condition] == key_treatment].copy()
 
@@ -126,16 +118,16 @@ def analyze_causal_network(
         lr_dea_res["target"].isin([key_target]))]  # subset source-target
     lr_stats = lr_stats.sort_values(
         "interaction_stat", ascending=False, key=abs)  # sort by statistic
-    
+
     # Select Starting Nodes (Receptors) for the Network ~ Interaction Effects
     lr_dict = lr_stats.set_index("receptor")["interaction_stat"].to_dict()
     lr_n = dict(sorted({**lr_dict}.items(), key=lambda item: abs(
         item[1]), reverse=True))  # sort
     scores_in = {k: v for i, (k, v) in enumerate(lr_n.items()) if i < top_n}
-    
+
     # Top Transcription Factor Selection
     dea_wide = dea_df[[col_cell_type, "stat"]].reset_index().set_index(
-        col_gene_symbols).pivot(index=col_cell_type, columns=col_gene_symbols, 
+        col_gene_symbols).pivot(index=col_cell_type, columns=col_gene_symbols,
                                 values="stat").fillna(0)  # long to wide
     net = dc.get_collectri()  # get TF regulons
     ests, pvals = dc.run_ulm(
@@ -152,18 +144,18 @@ def analyze_causal_network(
     input_pkn = ppis[["source_genesymbol", "mor", "target_genesymbol"]]
     input_pkn.columns = ["source", "mor", "target"]
     scores_in = {k: v for i, (k, v) in enumerate(lr_n.items()) if i < top_n}
-    
+
     # Prior Knowledge Network
     prior_graph = liana.mt.build_prior_network(
         input_pkn, scores_in, scores_out, verbose=True)
-    
+
     # Node Weights = GEX Proportions w/i Target Cell Type
     temp = adata[adata.obs[col_cell_type] == key_target].copy()
-    node_weights = pd.DataFrame(temp.X.getnnz(axis=0) / temp.n_obs, 
+    node_weights = pd.DataFrame(temp.X.getnnz(axis=0) / temp.n_obs,
                                 index=temp.var_names)
     node_weights = node_weights.rename(columns={0: 'props'})
     node_weights = node_weights["props"].to_dict()
-    
+
     # Find Causal Network
     df_res, problem = liana.mt.find_causalnet(
         prior_graph, scores_in, scores_out, node_weights,
