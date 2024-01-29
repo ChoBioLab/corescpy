@@ -7,7 +7,6 @@ Visualizing CRISPR experiment analysis results.
 @author: E. N. Aslinger
 """
 
-import pertpy as pt
 import scanpy as sc
 import matplotlib.pyplot as plt
 from matplotlib import colors

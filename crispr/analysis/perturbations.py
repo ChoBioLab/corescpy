@@ -661,7 +661,7 @@ def perform_dea(
     fig = plt.figure(figsize=figsize)
     axs, legend_axes = decoupler.plot_associations(
         pdata, uns_key=uns_key, obsm_key=obsm_key,
-        stat_col=plot_stat, obs_annotation_cols = col_covariates,
+        stat_col=plot_stat, obs_annotation_cols=col_covariates,
         titles=["Adjusted p-Values from ANOVA", "Principle Component Scores"])
     plt.show()
     return pdata, fig

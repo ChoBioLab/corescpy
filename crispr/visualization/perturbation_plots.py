@@ -107,9 +107,9 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
         groupby="mixscape_class_global")  # same, but global
     try:
         tg_conds = [key_control] + functools.reduce(
-            lambda i, j: i + j, [[f"{g} {key_nonperturbed}",
-                    f"{g} {key_treatment}"]
-            for g in target_gene_idents])  # conditions: all genes
+            lambda i, j: i + j, [[
+                f"{g} {key_nonperturbed}", f"{g} {key_treatment}"
+                ] for g in target_gene_idents])  # conditions: all genes
         figs["ppp_violin"]["all"] = pt.pl.ms.violin(
             adata=adata,
             # keys=f"mixscape_class_p_{key_treatment}".lower(),
@@ -165,7 +165,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
         nrow = int(np.ceil(len(target_gene_idents) / ncol))
     if figsize is None:
         figsize = (3 * ncol, 3 * nrow)
-    figs[f"gex_violin"], axs = plt.subplots(nrow, ncol, figsize=figsize)
+    figs["gex_violin"], axs = plt.subplots(nrow, ncol, figsize=figsize)
     if "flatten" in dir(axs):  # if enough target genes for multi-row plot
         axs = axs.flatten()  # flatten axis so can access by flat index
     # for i, x in enumerate(target_gene_idents):  # iterate target genes
