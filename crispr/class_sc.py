@@ -251,7 +251,7 @@ class Omics(object):
         print(self.rna.obs.head(), "\n\n")
         print(self.adata, "\n\n")
         for q in [self._columns, self._keys]:
-            cr.tl.print_pretty_dictionary()
+            cr.tl.print_pretty_dictionary(q)
 
     def describe(self, group_by=None, plot=False):
         """Describe data."""
