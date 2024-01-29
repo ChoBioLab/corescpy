@@ -47,7 +47,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
         x if x else {} for x in [kws_heat, kws_violin, kws_matrix, kws_dot]]
     kws_heat = {**{"dendrogram": True, "show_gene_labels": True}, **kws_heat}
     if not isinstance(genes, (list, np.ndarray)) and (
-        genes is None or genes == "all"):
+            genes is None or genes == "all"):
         genes = list(pd.unique(adata.var_names))  # gene names
     else:  # if unspecified, random subset of genes
         if isinstance(genes, (int, float)):
@@ -161,8 +161,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
                 **{**kws_dot, "title": title_d})  # dot plot
             try:
                 if genes_highlight is not None:
-                    for x in figs["dot"][
-                        "mainplot_ax"].get_xticklabels():
+                    for x in figs["dot"]["mainplot_ax"].get_xticklabels():
                         # x.set_style("italic")
                         if x.get_text() in genes_highlight:
                             x.set_color('#A97F03')

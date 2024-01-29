@@ -23,15 +23,13 @@ class Crispr(Omics):
 
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
-    def __init__(
-        self, file_path, assay=None, assay_protein=None,
-        col_gene_symbols="gene_symbols",
-        col_cell_type="leiden", col_sample_id="standard_sample_id",
-        col_condition="perturbation",
-        col_perturbed="perturbation", col_guide_rna="guide_ids",
-        col_num_umis="num_umis", key_control="NT", key_treatment="KO",
-        key_nonperturbed="NP", kws_process_guide_rna=None,
-        kws_multi=None, **kwargs):
+    def __init__(self, file_path, assay=None, assay_protein=None,
+                 col_gene_symbols="gene_symbols", col_cell_type="leiden",
+                 col_sample_id="standard_sample_id",
+                 col_condition="perturbation", col_perturbed="perturbation",
+                 col_guide_rna="guide_ids", col_num_umis="num_umis",
+                 key_control="NT", key_treatment="KO", key_nonperturbed="NP",
+                 kws_process_guide_rna=None, kws_multi=None, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -341,9 +339,9 @@ class Crispr(Omics):
 
         # Check Arguments & Data
         if any((x in self.rna.obs for x in [
-            col_guide_rna, col_perturbed, col_condition])):
+                col_guide_rna, col_perturbed, col_condition])):
             if col_perturbed in self.rna.obs and (
-                col_condition in self.rna.obs):
+                    col_condition in self.rna.obs):
                 pass
             elif col_perturbed in self.rna.obs:
                 warnings.warn(f"col_perturbed {col_perturbed} already "
@@ -647,7 +645,7 @@ class Crispr(Omics):
             layer=layer, **kwargs)
         self._layers.update({"mixscape": layer})
         if "perturbation_score" in figs_mix and isinstance(
-            figs_mix["perturbation_score"], dict):
+                figs_mix["perturbation_score"], dict):
             for x in figs_mix["perturbation_score"]:
                 print(figs_mix["perturbation_score"][x])
         if copy is False:  # store results

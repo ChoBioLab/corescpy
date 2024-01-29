@@ -5,10 +5,10 @@ import pandas as pd
 import numpy as np
 
 
-def process_guide_rna(
-    adata, col_guide_rna="guide_id", col_guide_rna_new="condition",
-    col_num_umis="UMI count", key_control="NT", conserve_memory=False,
-    remove_multi_transfected=False, **kws_process_guide_rna):
+def process_guide_rna(adata, col_guide_rna="guide_id",
+                      col_guide_rna_new="condition", col_num_umis="UMI count",
+                      key_control="NT", remove_multi_transfected=False,
+                      conserve_memory=False, **kws_process_guide_rna):
     """
     Process and filter guide RNAs, (optionally) remove cells considered
     multiply-transfected (after filtering criteria applied), and remove
@@ -196,9 +196,9 @@ def process_guide_rna(
     return ann
 
 
-def detect_guide_targets(
-    col_guide_rna_series, feature_split="|", guide_split="-",
-    key_control_patterns=None, key_control="Control", **kwargs):
+def detect_guide_targets(col_guide_rna_series, feature_split="|",
+                         guide_split="-", key_control_patterns=None,
+                         key_control="Control", **kwargs):
     """Detect guide gene targets (see `filter_by_guide_counts`)."""
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
@@ -209,7 +209,7 @@ def detect_guide_targets(
         key_control_patterns = [key_control_patterns]
     targets = col_guide_rna_series.str.strip(" ").replace("", np.nan)
     if key_control_patterns and pd.Series(
-        key_control_patterns).isnull().any():  # if NAs = control sgRNAs
+            key_control_patterns).isnull().any():  # if NAs = control sgRNAs
         targets = targets.replace(np.nan, key_control)  # NaNs -> control key
         key_control_patterns = list(pd.Series(key_control_patterns).dropna())
     else:  # if NaNs mean unperturbed cells
@@ -243,11 +243,12 @@ def detect_guide_targets(
     return targets, grnas
 
 
-def filter_by_guide_counts(
-    adata, col_guide_rna, col_num_umis, max_pct_control_drop=75,
-    min_n_target_control_drop=100, min_pct_avg_n=40, min_pct_dominant=80,
-    drop_multi_control=False, feature_split="|", guide_split="-",
-    key_control_patterns=None, key_control="Control", **kwargs):
+def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
+                           key_control_patterns=None, key_control="Control",
+                           max_pct_control_drop=75, min_pct_avg_n=40,
+                           min_n_target_control_drop=100,
+                           min_pct_dominant=80, drop_multi_control=False,
+                           feature_split="|", guide_split="-", **kwargs):
     """
     Filter processed guide RNA names (wraps `detect_guide_targets`).
 
@@ -322,7 +323,7 @@ def filter_by_guide_counts(
             sum).to_frame(col_num_umis + "_total"))  # total UMIs/cell
     tg_info = ann.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
     if tg_info[col_guide_rna].isnull().any() and (~any(
-        [pd.isnull(x) for x in key_control_patterns])):
+            [pd.isnull(x) for x in key_control_patterns])):
         ndrop = tg_info[col_guide_rna].isnull().sum()  # number dropped
         warn(
             f"NaNs present in guide RNA column ({col_guide_rna}). "

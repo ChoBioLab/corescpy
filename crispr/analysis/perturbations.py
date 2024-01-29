@@ -318,6 +318,7 @@ def perform_augur(adata, assay=None, layer=None,
         print(results["summary_metrics"])  # results summary
 
         # Plotting & Output
+        if "palette"
         if plot is True:
             if "vcenter" not in kwargs:
                 kwargs.update({"vcenter": 0})
@@ -325,6 +326,10 @@ def perform_augur(adata, assay=None, layer=None,
                 kwargs.update({"legend_loc": "on data"})
             if "frameon" not in kwargs:
                 kwargs.update({"frameon": False})
+            if "palette" not in kwargs:
+                kwargs.update({"palette": None})
+            if "color_map" not in kwargs:
+                kwargs.update({"color_map": "reds"})
             figs["perturbation_score_umap"] = sc.pl.umap(
                 data, color=["augur_score", col_cell_type],
                 cmap=cmap, vcenter=0, vmax=1)
@@ -339,12 +344,8 @@ def perform_augur(adata, assay=None, layer=None,
                 sc.pp.neighbors(data, **kws_neighbors)
                 sc.tl.umap(data, **kws_umap)
                 figs["perturbation_effect_umap"] = sc.pl.umap(
-                    data, color=["augur_score", col_cell_type,
-                                 col_perturbed],
-                    color_map=kwargs[
-                        "color_map"] if "color_map" in kwargs else "reds",
-                    palette=kwargs[
-                        "palette"] if "palette" in kwargs else None,
+                    data, color=["augur_score", col_cell_type, col_perturbed],
+                    color_map=kwargs["color_map"], palette=kwargs["palette"],
                     title=["Augur Score", col_cell_type, col_perturbed]
                 )  # scores super-imposed on UMAP
             except Exception as err:
@@ -424,8 +425,8 @@ def perform_differential_prioritization(adata, col_perturbed="perturbation",
                                       **kws_augur_predict)  # augur
         dff_p, res_p = ag_rfc.predict(ddd, augur_mode="permute",
                                       **kws_augur_predict)  # permute
-        if plot is True and (
-            ("umap" in adata[assay].uns) if assay else ("umap" in adata.uns)):
+        if plot is True and (("umap" in adata[assay].uns) if assay else (
+                "umap" in adata.uns)):
             figs["umap_augur_score_differential"][x] = sc.pl.umap(
                 adata=adata[assay] if assay else adata, color="augur_score")
         augur_results.append([res_a])

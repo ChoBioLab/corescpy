@@ -11,10 +11,11 @@ import pandas as pd
 import numpy as np
 
 
-def plot_targeting_efficiency(
-    adata, key_control="NT", key_nonperturbed="NP", key_treatment="KO",
-    col_guide_rna="guide_ids", guide_split="-", feature_split=None,
-    mixscape_class_global="mixscape_class_global", **kwargs):
+def plot_targeting_efficiency(adata, key_control="NT", key_nonperturbed="NP",
+                              key_treatment="KO", col_guide_rna="guide_ids",
+                              guide_split="-", feature_split=None,
+                              mixscape_class_global="mixscape_class_global",
+                              **kwargs):
     """
     Plot targeting efficiency (Mixscape scores) of guide RNAs.
 

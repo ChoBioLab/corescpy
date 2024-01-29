@@ -100,7 +100,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     # Load Object (or Copy if Already AnnData or MuData)
     _ = kwargs.pop("col_sample_id", None)
     if isinstance(file, (str, os.PathLike)) and os.path.splitext(
-        file)[1] == ".h5mu":  # MuData
+            file)[1] == ".h5mu":  # MuData
         print(f"\n\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
     elif isinstance(file, dict):  # metadata in protospacer files
@@ -171,12 +171,12 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     return adata
 
 
-def process_data(
-    adata, col_gene_symbols=None, col_cell_type=None,
-    outlier_mads=None, cell_filter_pmt=None, cell_filter_ncounts=None,
-    cell_filter_ngene=None, gene_filter_ncell=None, gene_filter_ncounts=None,
-    remove_malat1=False, target_sum=1e4, kws_hvg=True, kws_scale=None,
-    regress_out=regress_out_vars, **kwargs):
+def process_data(adata, col_gene_symbols=None, col_cell_type=None,
+                 outlier_mads=None, cell_filter_pmt=None,
+                 cell_filter_ncounts=None, cell_filter_ngene=None,
+                 gene_filter_ncell=None, gene_filter_ncounts=None,
+                 remove_malat1=False, target_sum=1e4, kws_hvg=True,
+                 kws_scale=None, regress_out=regress_out_vars, **kwargs):
     """
     Perform various data processing steps.
 
@@ -282,7 +282,7 @@ def process_data(
         max_val, cen = [kws_scale.pop(x, None)
                         for x in ["max_value", "zero_center"]]
         if any((i for i in [max_val, cen])) and len(
-            kws_scale) == 0:  # if extracted all regular-scale keywords
+                kws_scale) == 0:  # if extracted all regular-scale keywords
             kws_scale = True  # so doesn't think scaling by reference (CRISPR)
     else:
         max_val, cen = 0, 0
@@ -400,7 +400,7 @@ def normalize_genes(adata, zero_center=True, max_value=None,
     if kws_reference is not None:  # with reference to some control
         print("\n\t*** Resetting to raw counts before scaling...")
         if any((x not in kws_reference for x in [
-            "col_reference", "key_reference"])):
+                "col_reference", "key_reference"])):
             err = "'col_reference' & 'key_reference' must be in normalization"
             raise ValueError(err + " argument if method = 'z'.")
         print("\n\t*** Z-scoring (relative to "
@@ -420,9 +420,9 @@ def check_normalization(adata, n_genes=1000):
     return (adata.X[:1000].min() >= 0) or (adata.X[:n_genes].max() <= 9.22)
 
 
-def z_normalize_by_reference(
-    adata, col_reference="Perturbation", key_reference="Control",
-    retain_zero_variance=True, layer=None, **kwargs):
+def z_normalize_by_reference(adata, col_reference="Perturbation",
+                             key_reference="Control",
+                             retain_zero_variance=True, layer=None, **kwargs):
     """
     Mean-center & standardize by reference condition
     (within-batch option).
@@ -437,7 +437,7 @@ def z_normalize_by_reference(
         adata.X = adata.layers[layer].copy()  # reset to raw counts
     if layer:
         adata.X = adata.layers[layer].copy()
-    gex = adata.X.copy()  #  gene expression matrix (full)
+    gex = adata.X.copy()  # gene expression matrix (full)
     gex_ctrl = adata[adata.obs[col_reference] == key_reference
                      ].X.A.copy()  # reference condition
     gex, gex_ctrl = [q.A if "A" in dir(q) else q
@@ -539,9 +539,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     return figs
 
 
-def filter_qc(
-    adata, outlier_mads=None, cell_filter_pmt=None, cell_filter_ncounts=None,
-    cell_filter_ngene=None, gene_filter_ncell=None, gene_filter_ncounts=None):
+def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
+              cell_filter_ncounts=None, cell_filter_ngene=None,
+              gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
     if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...

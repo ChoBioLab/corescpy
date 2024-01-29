@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 
 FILE_STRUCTURE = ["matrix", "cells", "genes"]
-
+DEF_FILE_P = "crispr_analysis/protospacer_calls_per_cell.csv"
 
 def name_path_iterative(path):
     """Check for existence of path and, if needed, make path_#
@@ -189,11 +189,12 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
 #     return fbm, gex, barcodes, genes
 
 
-def combine_matrix_protospacer(
-    directory="", subdirectory_mtx="filtered_feature_bc_matrix",
-    file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv",
-    col_gene_symbols="gene_symbols", col_barcode="cell_barcode",
-    gex_only=False, drop_guide_capture=True, prefix=None, **kwargs):
+def combine_matrix_protospacer(directory="",
+                               subdirectory_mtx="filtered_feature_bc_matrix",
+                               file_protospacer=DEF_FILE_P, prefix=None,
+                               col_gene_symbols="gene_symbols",
+                               col_barcode="cell_barcode", gex_only=False,
+                               drop_guide_capture=True, **kwargs):
     """
     Join CellRanger directory-derived AnnData `.obs` & perturbations.
 

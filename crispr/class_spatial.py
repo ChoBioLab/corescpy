@@ -117,12 +117,12 @@ class Spatial(Omics):
             **kwargs)
         return figs
 
-    def analyze_spatial(
-        self, col_cell_type=None, genes=None, layer="log1p", library_id=None,
-        figsize_multiplier=1, dpi=100, palette=None,
-        kws_receptor_ligand=None, key_source=None, key_targets=None,
-        method_autocorr="moran", alpha=0.005, n_perms=100,
-        seed=1618, cmap="magma", copy=False):
+    def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
+                        library_id=None, figsize_multiplier=1, dpi=100,
+                        palette=None, kws_receptor_ligand=None,
+                        key_source=None, key_targets=None,
+                        method_autocorr="moran", alpha=0.005, n_perms=100,
+                        seed=1618, cmap="magma", copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
         adata = self.rna if copy is False else self.rna.copy()
@@ -177,10 +177,10 @@ class Spatial(Omics):
         else:
             return adata, figs
 
-    def calculate_centrality(
-        self, col_cell_type=None, delaunay=True, coord_type="generic",
-        figsize=None, palette=None, shape="hex", size=None, title=None,
-        kws_plot=None, copy=False, n_jobs=None, **kwargs):
+    def calculate_centrality(self, col_cell_type=None, delaunay=True,
+                             coord_type="generic", n_jobs=None, figsize=None,
+                             palette=None, shape="hex", size=None, title=None,
+                             kws_plot=None, copy=False, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
         """
@@ -222,11 +222,12 @@ class Spatial(Omics):
         self.figures["centrality"] = fig
         return fig
 
-    def calculate_neighborhood(
-        self, col_cell_type=None, library_id=None, mode="zscore", seed=1618,
-        layer=None, palette=None, size=None, shape="hex", figsize=None,
-        kws_plot=None, title="Neighborhood Enrichment",
-        cmap="magma", vcenter=0, cbar_range=None, copy=False):
+    def calculate_neighborhood(self, col_cell_type=None, library_id=None,
+                               mode="zscore", seed=1618, layer=None,
+                               palette=None, size=None, shape="hex",
+                               title="Neighborhood Enrichment", kws_plot=None,
+                               figsize=None, cmap="magma", vcenter=0,
+                               cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.rna.copy() if copy is True else self.rna
         if col_cell_type is None:
