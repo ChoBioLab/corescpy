@@ -9,3 +9,12 @@ from .perturbations import (
 from .clustering import cluster, find_marker_genes, perform_celltypist
 from .composition import analyze_composition
 from .communication import analyze_receptor_ligand, analyze_causal_network
+
+__all__ = [
+    "perform_mixscape", "perform_augur",
+    "perform_differential_prioritization", "compute_distance",
+    "perform_gsea", "perform_pathway_interference", "perform_dea",
+    "calculate_dea_deseq2", "cluster", "find_marker_genes",
+    "perform_celltypist", "analyze_composition",
+    "analyze_receptor_ligand", "analyze_causal_network"
+]

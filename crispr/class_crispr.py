@@ -457,10 +457,10 @@ class Crispr(Omics):
                     n_grna = n_grna.join(self.adata.obs[
                         group_by].rename_axis("bc"))  # join group_by variable
                 h_t = len(self.info["descriptives"][
-                    "guide_rna_counts"].reset_index().gene.unique()
+                    "guide_rna_counts"].reset_index().gene.unique())
                 figs["n_grna"] = sns.catplot(
                     data=n_grna.reset_index(), y="gene", x="sgRNA Count",
-                    kind="violin", hue=group_by, height=h_t))  # gNRAs/cell
+                    kind="violin", hue=group_by, height=h_t)  # gNRAs/cell
         except Exception as err:
             warnings.warn(f"{err}\n\n\nCould not describe sgRNA count.")
         # try:
