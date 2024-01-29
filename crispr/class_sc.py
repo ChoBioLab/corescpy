@@ -8,6 +8,7 @@
 import scanpy as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
+import pertpy as pt
 import liana
 import decoupler
 import traceback
