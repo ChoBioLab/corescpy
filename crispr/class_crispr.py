@@ -320,6 +320,8 @@ class Crispr(Omics):
             col_sample_id=col_sample_id, col_condition=col_condition,
             key_control=key_control, key_treatment=key_treatment,
             kws_process_guide_rna=kws_pga, kws_multi=kws_multi)  # make adata
+        
+        # Store gRNA Processing Information
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
         if kws_process_guide_rna and "guide_split" in kws_process_guide_rna:
             self.info["guide_rna"]["guide_split"] = kws_process_guide_rna[

@@ -33,8 +33,8 @@ class Omics(object):
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(
-        self, file_path, assay=None, assay_protein=None, raw=False,
-        col_gene_symbols="gene_symbols", col_cell_type="leiden", 
+        self, file_path, prefix=None, assay=None, assay_protein=None,
+        raw=False, col_gene_symbols="gene_symbols", col_cell_type="leiden", 
         col_sample_id=None, col_subject=None, col_condition=None, 
         key_control=None, key_treatment=None, kws_multi=None, **kwargs):
         """
@@ -69,6 +69,12 @@ class Omics(object):
                         specified as normal if they are common across 
                         samples; otherwise, specify them as lists in 
                         the same order as the `file` dictionary. 
+            prefix (str, optional):
+                As per Scanpy documentation: 'Any prefix before 
+                matrix.mtx, genes.tsv and barcodes.tsv. For instance, 
+                if the files are named patientA_matrix.mtx, 
+                patientA_genes.tsv and patientA_barcodes.tsv the prefix
+                is patientA_. (Default: no prefix)' Defaults to None.
             assay (str, optional): Name of the gene expression assay if 
                 loading a multi-modal data object (e.g., "rna"). 
                 Defaults to None.
@@ -140,7 +146,7 @@ class Omics(object):
             self._integrated = True
             self.adata = cr.pp.create_object_multi(
                 file_path, kws_init=dict(
-                    assay=assay, assay_protein=assay_protein, 
+                    prefix=prefix, assay=assay, assay_protein=assay_protein, 
                     col_gene_symbols=col_gene_symbols, 
                     col_condition=col_condition,
                     key_control=key_control, 
@@ -150,7 +156,7 @@ class Omics(object):
                 **kws_multi)  # create integrated object
         else:
             self.adata = cr.pp.create_object(
-                self._file_path, assay=assay, raw=raw,
+                self._file_path, prefix=prefix, assay=assay, raw=raw,
                 col_gene_symbols=col_gene_symbols,
                 col_sample_id=col_sample_id, **kwargs)  # make AnnData
         print(self.adata.obs, "\n\n") if assay else None

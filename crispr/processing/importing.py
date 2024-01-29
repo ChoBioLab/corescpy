@@ -196,7 +196,7 @@ def combine_matrix_protospacer(
     directory="", subdirectory_mtx="filtered_feature_bc_matrix", 
     file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
     col_gene_symbols="gene_symbols", col_barcode="cell_barcode", 
-    gex_only=False, prefix=None, **kwargs):
+    gex_only=False, drop_guide_capture=True, prefix=None, **kwargs):
     """
     Join CellRanger directory-derived AnnData `.obs` & perturbations.
     
@@ -228,5 +228,7 @@ def combine_matrix_protospacer(
                       index_col=col_barcode)  # perturbation information
     if col_barcode is None:
         dff, col_barcode = dff.set_index(dff.columns[0]), dff.columns[0]
+    if drop_guide_capture:
+        adata = adata[:, adata.var["feature_types"] != "CRISPR Guide Capture"]
     adata.obs = adata.obs.join(dff.rename_axis(adata.obs.index.names[0]))
     return adata
