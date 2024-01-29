@@ -495,13 +495,17 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         rrs, ccs = cr.pl.square_grid(len(pct_n + ["n_genes_by_counts"]))
         fff, axs = plt.subplots(rrs, ccs, figsize=(
             5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
-        for a, v in zip(axs.ravel(), pct_n + ["n_genes_by_counts"]):
-            try:  # facet "v" of scatterplot
-                sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
-                              show=False, color=h if yes else None)
-                plt.show()
-            except Exception as err:
-                print(traceback.format_exc())
+        try:
+            axf = axs.ravel() if rrs > 1 or ccs > 1 else [axs]
+            for a, v in zip(axf, pct_n + ["n_genes_by_counts"]):
+                try:  # facet "v" of scatterplot
+                    sc.pl.scatter(adata, x="total_counts", y=v, ax=a, 
+                                show=False, color=h if yes else None)
+                    plt.show()
+                except Exception as err:
+                    print(traceback.format_exc())
+        except Exception as err:
+            print(traceback.format_exc(), "\n\nQC scatterplots failed.")
         figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)
             vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(

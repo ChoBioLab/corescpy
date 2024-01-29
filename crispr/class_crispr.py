@@ -11,7 +11,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pertpy as pt
 import crispr as cr
-from crispr.class_sc import Omics
+from .class_sc import Omics
 from crispr.analysis.perturbations import layer_perturbation
 import pandas as pd
 
@@ -774,7 +774,7 @@ class Crispr(Omics):
         return data, results, figs_aug
     
     def compute_distance(self, distance_type="edistance", method="X_pca", 
-                         layer=None, kws_plot=None, 
+                         layer=None, kws_plot=None, copy=True,
                          col_condition=None, col_cell_type=None,
                          highlight_real_range=False, plot=True, **kwargs):
         """
@@ -813,7 +813,11 @@ class Crispr(Omics):
         col_condition, col_cell_type = [x[1] if x[1] else self._columns[x[
             0]] for x in zip(["col_condition", "col_cell_type"], [
                 col_condition, col_cell_type])]  # default column labels
-        adata = self.rna if layer is None else self.rna.copy()
+        adata = self.rna.copy() if copy is True else self.rna
+        if self.rna.obs[col_condition].isna().any():  # if any missing , drop
+            if copy is False:
+                warnings.warn(f"NAs in {col_condition}. Setting copy=True.")    
+            adata = adata[adata.obs[col_condition].dropna().index].copy()
         if layer:
             print(f"Using layer {layer} for distance calculation.")
             adata.X = adata.layers[layer].copy() if (

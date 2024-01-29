@@ -11,7 +11,7 @@ import scanpy as sc
 import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
-from crispr.class_sc import Omics
+from .class_sc import Omics
 import pandas as pd
 import numpy as np
 
