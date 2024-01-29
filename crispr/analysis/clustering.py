@@ -204,7 +204,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
                 figs[f"label_transfer_{x}"] = celltypist.dotplot(
                     res, use_as_reference=col_cell_type, use_as_prediction=x,
                     title=f"Label Transfer: {col_cell_type} vs. {x}",
-                    cmap="coolwarm", vcenter=0)  # label transfer dot plot
+                    cmap="magma")  # label transfer dot plot
 
     # Plot Markers
     if col_cell_type is not None and plot_markers is True:  # markers
