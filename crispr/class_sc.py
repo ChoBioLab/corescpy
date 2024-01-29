@@ -78,8 +78,9 @@ class Omics(object):
                 expected to contain the AnnData object for the 
                 protein modality. ONLY FOR MULTI-MODAL DATA for certain 
                 bonus visualization methods. Defaults to None. 
-            col_gene_symbols (str, optional): Column name in `.var` for 
-                gene symbols. Defaults to "gene_symbols".
+            col_gene_symbols (str, optional): Specify "gene_symbols" 
+                to use gene names or "gene_ids" to use EnsemblIDs) as
+                the index of `.var`. Defaults to "gene_symbols".
             col_cell_type (str, optional): Column name in `.obs` for 
                 cell type. Defaults to "leiden" (anticipating that you 
                 will run `self.cluster(...)` with 

@@ -92,7 +92,8 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
 
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
-                  kws_process_guide_rna=None, raw=False, **kwargs):
+                  kws_process_guide_rna=None, raw=False, 
+                  gex_only=False, prefix=None, **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
@@ -105,20 +106,16 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     elif isinstance(file, dict):  # metadata in protospacer files
         print(f"\n\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = cr.pp.combine_matrix_protospacer(
-            **file, col_gene_symbols=col_gene_symbols, 
-            **kwargs)  # + metadata from protospacer
+            **file, col_gene_symbols=col_gene_symbols, gex_only=gex_only,
+            prefix=prefix, **kwargs)  # + metadata from protospacer
     elif not isinstance(file, (str, os.PathLike)):  # if already AnnData
         print(f"\n\n<<< LOADING OBJECT >>>")
         adata = file.copy()
     elif os.path.isdir(file):  # if directory, assume 10x format
         print(f"\n\n<<< LOADING 10X FILE {file} >>>")
         adata = sc.read_10x_mtx(
-            file, var_names=col_gene_symbols, cache=True, **kwargs)
-    elif os.path.splitext(file)[1] == ".h5":  # .h5 file
-        print(f"\n\n<<< LOADING 10X .h5 FILE {file} >>>")
-        print(f"H5 File Format ({file})\n\n")
-        # cr.tl.explore_h5_file(file, "\n\n\n")
-        adata = sc.read_10x_h5(file, **kwargs)
+            file, var_names=col_gene_symbols, cache=True, 
+            gex_only=gex_only, prefix=prefix, **kwargs)  # read 10x
     else:
         print(f"\n\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
@@ -150,6 +147,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata.var = adata.var.reset_index().set_index(col_gene_symbols) if (
             col_gene_symbols in adata.var.columns) else adata.var.rename_axis(
                 col_gene_symbols)
+    print(adata.var)
     
     # Process Guide RNA
     if kws_process_guide_rna:
@@ -264,7 +262,7 @@ def process_data(
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
     if layers["counts"] not in ann.layers:
-        if min(ann.X) < 0:  # if any data < 0, can't be gene read counts
+        if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(
                 f"Must have counts in `adata.layers['{layers['counts']}']`.")
         # warn("\n\nASSUMING COUNTS IN `adata.X`! (No counts layer present.)")
@@ -327,6 +325,7 @@ def process_data(
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>") 
     if cell_filter_ngene:
         sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
+    cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
     if gene_filter_ncell:
         sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
     cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
@@ -470,8 +469,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     for k in patterns:
         try:
             gvars = adata.var_names.str.startswith(patterns[k])
-            if len(gvars) > 0:
-                adata.var[k] = gvars
+            adata.var[k] = gvars
         except Exception as err:
             print(traceback.format_exc())
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
@@ -483,6 +481,8 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     qc_vars = list(np.array(qc_vars)[np.where([adata.obs[
         f"pct_counts_{q}"].max() > 0 for q in qc_vars])[0]])  # plot if > 0
     pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
+    for x in pct_n:  # replace NaN % (in case no mt, rb, hb) wth 0
+        adata.obs.loc[adata.obs[x].isnull(), x] = 0
     patterns_names = dict(zip(qc_vars, [patterns_names[k] for k in qc_vars]))
     hhh, yes = [hue] if isinstance(hue, str) or hue is None else hue, True
     for h in hhh:

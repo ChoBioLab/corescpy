@@ -54,7 +54,7 @@ def process_paths(files=None, directory_in=None):
             if isinstance(files, (set, tuple, np.ndarray)):  # if list-like... 
                 files = list(files)  # ...convert to list
             else:
-                raise ValueError("Files must be a list of paths to the files.")
+                raise ValueError("Files must be list of paths to the files.")
         if directory_in:  # if directory provided too, ensure files relative
             if any((directory_in in f for f in files)):
                 warnings.warn("""If directory_in provided, 
@@ -100,7 +100,7 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
     paths = process_paths(files=files, directory_in=directory_in)
     if not directory_out:  # if directory not provided, assume same as in
         directory_out = directory_in
-        if overwrite is False:  # if no overwrite & output = input directory...
+        if overwrite is False:  # if no overwrite & output=input directory...
             directory_out = name_path_iterative(
                 os.path.join(directory_in, "organized"))  # subdirectory
     # DO NOT MODIFY "paths" OR "directory_out" AFTER THIS POINT
@@ -121,7 +121,7 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
             strip_strings = [strip_strings]  # ensure list if only 1
         for i in strip_strings:
             stems["file"] = dict(zip(stems["file"], [re.sub(
-                i, "", stems["file"][f]) for f in stems["file"]]))  # rm strs if need
+                i, "", stems["file"][f]) for f in stems["file"]]))  # rm strs
     # ids = pd.unique([stems["file"][f] for f in stems["file"]])
     # non_redundant_parts = pd.DataFrame(
     #     [os.path.basename(f).split(sep) for f in stems["file"].values()],
@@ -132,8 +132,8 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
     #             list(y.dropna())), axis=1)
     
     # Create sub-directories & move or copy files
-    dir_sub = dict(zip(files_out, [os.path.join(directory_out, stems["file"][i]) 
-                                   for i in files_out]))
+    dir_sub = dict(zip(files_out, [
+        os.path.join(directory_out, stems["file"][i]) for i in files_out]))
     for d in pd.unique(list(dir_sub.values())):
         if not os.path.exists(d):
             os.mkdir(d)
@@ -147,7 +147,7 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
         if overwrite is False:
             new_path = name_path_iterative(new_path)  # new path
         new_path = re.sub("cells.tsv", "barcodes.tsv", re.sub(
-            "genes.tsv", "features.tsv", new_path))  # fix unconventional naming
+            "genes.tsv", "features.tsv", new_path))  # fix unconventional
         os.system(f"{'cp' if overwrite is False else 'mv'} {f} {new_path}")
         if os.path.splitext(new_path)[-1] == ".gz" and unzip is True:
             os.system(f"gunzip {new_path}")  # unzip if needed
@@ -194,21 +194,20 @@ def create_subdirectories(files=None, directory_in=None, strip_strings=None,
 
 def combine_matrix_protospacer(
     directory="", subdirectory_mtx="filtered_feature_bc_matrix", 
-    col_gene_symbols="gene_symbols", 
     file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
-    col_barcode="cell_barcode", 
-    **kwargs):
+    col_gene_symbols="gene_symbols", col_barcode="cell_barcode", 
+    gex_only=False, prefix=None, **kwargs):
     """
-    Combine CellRanger directory-derived AnnData `.obs` & perturbation data.
+    Join CellRanger directory-derived AnnData `.obs` & perturbations.
     
     Example
     -------
     >>> data_dir = "/home/asline01/projects/crispr/examples/data"
+    >>> f_p = "crispr_analysis/protospacer_calls_per_cell.csv"
     >>> adata = combine_matrix_protospacer(
     ... f"{data_dir}/crispr-screening/HH03", 
     ... "filtered_feature_bc_matrix", col_gene_symbols="gene_symbols", 
-    ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv", 
-    ... col_barcode="cell_barcode")
+    ... file_protospacer=f_p, col_barcode="cell_barcode")
     
     Or using create_object(), with directory/file-related arguments in 
     a dictionary passed to the "file" argument:
@@ -217,13 +216,14 @@ def combine_matrix_protospacer(
     >>> adata = create_object(
     ... dict(directory=f"{data_dir}/crispr-screening/HH03", 
     ... subdirectory_mtx="filtered_feature_bc_matrix", 
-    ... file_protospacer="crispr_analysis/protospacer_calls_per_cell.csv"),
-    ... col_barcode="cell_barcode", col_gene_symbols="gene_symbols")
+    ... file_protospacer=f_p, col_barcode="cell_barcode",
+    ... col_gene_symbols="gene_symbols")
     
     """
     adata = sc.read_10x_mtx(
         os.path.join(directory, subdirectory_mtx), 
-        var_names=col_gene_symbols, **kwargs)  # 10x matrix, barcodes, features
+        var_names=col_gene_symbols, gex_only=gex_only, prefix=prefix,
+        **kwargs)  # read 10x matrix, barcodes, features files
     dff = pd.read_csv(os.path.join(directory, file_protospacer), 
                       index_col=col_barcode)  # perturbation information
     if col_barcode is None:

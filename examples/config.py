@@ -11,7 +11,7 @@ DIR = pathlib.Path(__file__).parent.resolve()
 DIR = os.path.join(DIR, "data")
 
 files_data = {
-    "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH03"),
+    "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH06"),
     "CRISPRi_scr_multi": {
         # "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
         "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
