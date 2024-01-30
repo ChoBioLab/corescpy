@@ -211,17 +211,13 @@ def perform_mixscape(adata, assay=None, assay_protein=None, layer=None,
     return figs, adata_pert
 
 
-def perform_augur(adata, assay=None, layer=None,
-                  classifier="random_forest_classifier",
-                  augur_mode="default",
-                  subsample_size=20, n_folds=3,
-                  select_variance_features=False,
-                  col_cell_type="leiden",
-                  col_perturbed=None,
+def perform_augur(adata, assay=None, layer=None, augur_mode="default",
+                  classifier="random_forest_classifier", subsample_size=20,
+                  select_variance_features=False, n_folds=3, seed=1618,
+                  n_jobs=None, kws_augur_predict=None, col_cell_type="leiden",
+                  col_perturbed=None, key_control="NT", key_treatment=None,
                   col_gene_symbols="gene_symbols",
-                  key_control="NT", key_treatment=None,
-                  seed=1618, plot=True, n_threads=None,
-                  kws_augur_predict=None, cmap="coolwarm", **kwargs):
+                  plot=True, cmap="coolwarm", **kwargs):
     """Calculates AUC using Augur and a specified classifier.
 
     Args:
@@ -238,7 +234,7 @@ def perform_augur(adata, assay=None, layer=None,
             from each experimental condition."
         n_folds (int, optional): Number of folds for cross-validation.
             Defaults to 3.
-        n_threads (int, optional): _description_. Defaults to 4.
+        n_jobs (int, optional): _description_. Defaults to 4.
         select_variance_features (bool, optional): Use Augur to select
             genes (True), or Scanpy's  highly_variable_genes (False).
             Defaults to False.
@@ -263,8 +259,8 @@ def perform_augur(adata, assay=None, layer=None,
         tuple: Augur AnnData object, results from
             Augur predict, figures
     """
-    if n_threads is True:
-        n_threads = os.cpu_count() - 1  # use available CPUs - 1
+    if n_jobs is True:
+        n_jobs = os.cpu_count() - 1  # use available CPUs - 1
     if select_variance_features == "both":
         # both methods: select genes based on...
         # - original Augur (True)
@@ -277,7 +273,7 @@ def perform_augur(adata, assay=None, layer=None,
                 layer=layer,
                 select_variance_features=x, classifier=classifier,
                 augur_mode=augur_mode, subsample_size=subsample_size,
-                n_threads=n_threads, n_folds=n_folds,
+                n_jobs=n_jobs, n_folds=n_folds,
                 col_cell_type=col_cell_type, col_perturbed=col_perturbed,
                 col_gene_symbols=col_gene_symbols,
                 key_control=key_control, key_treatment=key_treatment,
@@ -313,7 +309,7 @@ def perform_augur(adata, assay=None, layer=None,
         data, results = ag_rfc.predict(
             loaded_data, subsample_size=subsample_size, augur_mode=augur_mode,
             select_variance_features=select_variance_features,
-            n_threads=n_threads, random_state=seed,
+            n_threads=n_jobs, random_state=seed,
             **kws_augur_predict)  # AUGUR model prediction
         print(results["summary_metrics"])  # results summary
 

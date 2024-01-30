@@ -92,7 +92,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
 
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
-                  kws_process_guide_rna=None, raw=False,
+                  kws_process_guide_rna=None, assay_gdo=None, raw=False,
                   gex_only=False, prefix=None, **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
@@ -116,9 +116,21 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata = sc.read_10x_mtx(
             file, var_names=col_gene_symbols, cache=True,
             gex_only=gex_only, prefix=prefix, **kwargs)  # read 10x
-    else:
+    else:  # other, catch-all attempt
         print(f"\n\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
+
+    # For CRISPR Data with gRNAA in Separate Assay of Muon Object
+    if assay_gdo:
+        print(f"\n\n<<< Joining {assay_gdo} (gRNA) & {assay} assay data >>>")
+        kws_pmc = dict(assay=[assay, assay_gdo])
+        for x in ["col_guide_rna", "col_num_umis", "feature_split",
+                  "guide_split", "keep_extra_columns"]:
+            if (kws_process_guide_rna and x in kws_process_guide_rna
+                    ) or x in kwargs:
+                kws_pmc.update({x: kwargs[x] if (
+                    x in kwargs) else kws_process_guide_rna[x]})
+        adata = cr.pp.process_multimodal_crispr(adata, **kws_pmc)
 
     # Use Raw Data (Optional)
     if raw is True:
@@ -138,22 +150,17 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     cr.tl.print_counts(adata, title="Initial")
 
     # Gene Symbols -> Index of .var
-    if assay:
-        adata[assay].var = adata[assay].var.reset_index().set_index(
-            col_gene_symbols) if (col_gene_symbols in adata[
-                assay].var.columns) else adata[assay].var.rename_axis(
-                    col_gene_symbols)
-    else:
-        adata.var = adata.var.reset_index().set_index(col_gene_symbols) if (
-            col_gene_symbols in adata.var.columns) else adata.var.rename_axis(
-                col_gene_symbols)
-    print(adata.var)
+    rename_var_index(adata, assay=assay, col_gene_symbols=col_gene_symbols)
 
     # Process Guide RNA
-    if kws_process_guide_rna:
+    if kws_process_guide_rna not in [None, False]:
         if assay:
-            raise NotImplementedError("Multi-modal CRISPR not supported.")
-        adata = cr.pp.process_guide_rna(adata, **kws_process_guide_rna)
+            apg = cr.pp.process_guide_rna(
+                adata.mod[assay].copy(), **kws_process_guide_rna)
+            adata = adata[adata.obs.index.isin(apg.obs.index)]  # subset
+            adata.mod[assay] = apg
+        else:
+            adata = cr.pp.process_guide_rna(adata, **kws_process_guide_rna)
         cct = kws_process_guide_rna["col_cell_type"] if "col_cell_type" in (
             kws_process_guide_rna) else None  # to group counts ~ cell type
         cr.tl.print_counts(adata, title="Post-gRNA Processing", group_by=cct)
@@ -413,6 +420,29 @@ def normalize_genes(adata, zero_center=True, max_value=None,
             kwargs.update({"max_value": max_value})
         sc.pp.scale(adata, copy=False, zero_center=zero_center,
                     **kwargs)  # center/standardize
+
+
+def rename_var_index(adata, assay=None, col_gene_symbols="gene_symbols"):
+    """Make sure `.var` index name is same as `gene_symbols`."""
+    ixn = (adata.var if assay is None else adata.mod[assay] if "mod" in dir(
+        adata) else adata[assay].var).var.index.names[0]  # var index name
+    if "mod" in dir(adata) and ixn != col_gene_symbols:
+        for x in adata.mod.keys():
+            adata.mod[x].var = adata.mod[x].var.reset_index().set_index(
+                col_gene_symbols) if (col_gene_symbols in adata.mod[
+                    x].var.columns) else adata.mod[x].var.rename_axis(
+                        col_gene_symbols)
+    elif assay is not None and ixn != col_gene_symbols:
+        adata[assay].var = adata[assay].var.reset_index().set_index(
+            col_gene_symbols) if (col_gene_symbols in adata[
+                assay].var.columns) else adata[assay].var.rename_axis(
+                    col_gene_symbols)
+    elif ixn != col_gene_symbols:
+        adata.var = adata.var.reset_index().set_index(col_gene_symbols) if (
+            col_gene_symbols in adata.var.columns) else adata.var.rename_axis(
+                col_gene_symbols)
+    else:
+        pass  # index already = col_gene_symbols
 
 
 def check_normalization(adata, n_genes=1000):

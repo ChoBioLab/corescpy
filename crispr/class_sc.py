@@ -107,9 +107,10 @@ class Omics(object):
         if "kws_process_guide_rna" in kwargs and kwargs[
                 "kws_process_guide_rna"] in [False, None]:
             _ = kwargs.pop("kws_process_guide_rna")
-        col_num_umis = kwargs["kws_process_guide_rna"][
-            "col_num_umis"] if "kws_process_guide_rna" in kwargs else kwargs[
-                "col_num_umis"] if "col_num_umis" in kwargs else None
+        kpg = kwargs.pop("kws_process_guide_rna", None)
+        col_num_umis = kpg["col_num_umis"] if kpg not in [
+            None, False] else kwargs["col_num_umis"] if (
+                "col_num_umis" in kwargs) else None
         self.pdata = None  # for pseudobulk data if ever created
         self._assay = assay
         self._assay_protein = assay_protein
@@ -122,12 +123,10 @@ class Omics(object):
         if kws_multi and col_sample_id is None:
             col_sample_id = "unique.idents"
 
-        # Create Attributes to Store Results/Figures
-        self.figures = {"main": {}}
-        self.results = {"main": {}}
-        self.info = {
-            "descriptives": {}, "guide_rna": {},
-            "methods": {}}  # extra info to store post-use of methods
+        # Create Attributes to Store Results/Figures/Methods
+        self.figures, self.figures = {}, {}
+        self.info = {"descriptives": {}, "guide_rna": {},
+                     "methods": {}}  # extra info to store post-use of methods
 
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
@@ -135,7 +134,8 @@ class Omics(object):
             col_sample_id=col_sample_id, col_batch=col_sample_id,
             col_subject=col_subject,  # e.g., patient ID rather than sample
             col_condition=col_condition, col_num_umis=col_num_umis)
-        self._keys = dict(key_control=key_control, key_treatment=key_treatment)
+        self._keys = dict(key_control=key_control,
+                          key_treatment=key_treatment)
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
 
@@ -146,16 +146,15 @@ class Omics(object):
                 file_path, kws_init=dict(
                     prefix=prefix, assay=assay, assay_protein=assay_protein,
                     col_gene_symbols=col_gene_symbols,
-                    col_condition=col_condition,
-                    key_control=key_control,
-                    key_treatment=key_treatment,
+                    col_condition=col_condition, kws_process_guide_rna=kpg,
+                    key_control=key_control, key_treatment=key_treatment,
                     col_cell_type=col_cell_type, raw=raw,
                     col_sample_id=col_sample_id, **kwargs),
                 **kws_multi)  # create integrated object
         else:
             self.adata = cr.pp.create_object(
                 self._file_path, prefix=prefix, assay=assay, raw=raw,
-                col_gene_symbols=col_gene_symbols,
+                col_gene_symbols=col_gene_symbols, kws_process_guide_rna=kpg,
                 col_sample_id=col_sample_id, **kwargs)  # make AnnData
         print(self.adata.obs, "\n\n") if assay else None
 

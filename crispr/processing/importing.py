@@ -231,3 +231,36 @@ def combine_matrix_protospacer(directory="",
         adata = adata[:, adata.var["feature_types"] != "CRISPR Guide Capture"]
     adata.obs = adata.obs.join(dff.rename_axis(adata.obs.index.names[0]))
     return adata
+
+
+def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
+                              col_num_umis="num_umis", feature_split="|",
+                              guide_split="-", keep_extra_columns=True):
+    """
+    Merge gRNA counts stored in a separate assay into RNA assay.
+
+    Specify the "assay" argument as a list with 1st and 2nd elements
+    corresponding to the modality labels (keys in `adata.mod`) for
+    gene expression (RNA) and CRISPR guide data, respectively.
+
+    """
+    if assay is None:
+        assay = ["rna", "gdo"]  # default assay labels
+    rna, crispr = assay  # GEX & CRISPR counts assay labels
+    gdo = adata.mod[crispr]
+    gdo.layers["counts"] = gdo.X.copy()
+    umis = pd.DataFrame(adata.mod[crispr].X.toarray(), columns=gdo.var_names,
+                        index=gdo.obs.index)  # make gRNA counts dataframe
+    guides = umis.apply(
+        lambda x: feature_split.join([str(i) for i in np.array(
+            umis.columns)[np.where(x != 0)[0]]]) if any(
+                x != 0) else np.nan, axis=1)
+    nums = umis.apply(
+        lambda x: feature_split.join([str(i) for i in np.array(
+            x)[np.where(x != 0)[0]]]) if any(x != 0) else np.nan, axis=1)
+    umis = guides.to_frame(col_guide_rna).join(nums.to_frame(col_num_umis))
+    adata.mod[rna].obs = adata.mod[rna].obs.join(umis)
+    if keep_extra_columns is True:  # join columns in gdo not present in adata
+        adata.mod[rna].obs = adata.mod[rna].obs.join(gdo.obs[
+            gdo.obs.columns.difference(adata.mod[rna].obs.columns)])
+    return adata

@@ -1,47 +1,84 @@
-# import crispr as cr
-# import pertpy as pt
-# import numpy as np
+import crispr as cr
+import scanpy as sc
+import pertpy as pt
+import scipy
+import numpy as np
+
+class TestOmics:
+    """Object creation tests."""
+    kws_pga = dict(feature_split=None, guide_split="_",
+                   key_control_patterns=[np.nan],
+                   remove_multi_transfected=True)
+    kwargs = dict(col_gene_symbols="gene_symbol", col_cell_type="leiden",
+                  col_sample_id=None, col_batch=None, col_subject=None,
+                  col_condition="target_gene", col_num_umis="UMI count",
+                  col_perturbed="perturbed", col_guide_rna="perturbation",
+                  key_control="Control", key_treatment="KO")
+    adata = sc.datasets.pbmc68k_reduced()
+    self = cr.Crispr(adata, **kwargs, kws_process_guide_rna=kws_pga)
+
+    def test_attribute_presence(self):
+        """Ensure expected attributes are present."""
+        assert "adata" in dir(TestOmics.self)
+        assert "rna" in dir(TestOmics.self)
+        assert "uns" in dir(TestOmics.self)
+        assert "obs" in dir(TestOmics.self)
+        assert "_columns" in dir(TestOmics.self)
+        assert "_layers" in dir(TestOmics.self)
+        assert "_keys" in dir(TestOmics.self)
+        assert ".layers" in dir(TestOmics.self)
+
+    def test_var(self):
+        """Ensure `.var` meets expectations."""
+        var_ixn = TestOmics.self.obs.index.names[0]
+        assert var_ixn == TestOmics.self._columns["col_gene_symbols"]
+
+    def test_obs(self):
+        """Ensure `.obs` meets expectations."""
+        pass
 
 
-# class CrisprObject:
-#     """Object creation tests."""
+class TestCiteSeq:
+    """Test CITE-seq with guide RNA data in separate modality."""
+    col_guide_rna, col_num_umis, col_condition = "guide", "num_umis", "target"
+    col_condition = "target_gene"
+    feature_split, guide_split = "|", "g"
+    key_control = "Control"
+    kws_pg = dict(feature_split=feature_split, guide_split=guide_split,
+                  key_control_patterns=["NT"], remove_multi_transfected=True,
+                  max_pct_control_drop=None, min_pct_avg_n=None,
+                  min_n_target_control_drop=None, min_pct_dominant=51)
+    kwargs = dict(assay="rna", assay_gdo="gdo", assay_protein="adt",
+                  col_batch="orig.ident", col_subject_id="replicate",
+                  col_sample_id="MULTI_ID", col_condition=col_condition,
+                  col_num_umis=col_num_umis, col_perturbed="perturbed",
+                  col_cell_type="leiden", col_guide_rna=col_guide_rna,
+                  key_control=key_control, key_treatment="KO")
+    adata = pt.data.papalexi_2021()
+    adata.mod["gdo"].X = scipy.sparse.csr_matrix(adata.mod["gdo"].X.A - 1)
+    self = cr.Crispr(adata, **kwargs, kws_process_guide_rna=kws_pg)
 
-#     kwargs = {
-#         "assay": None, "assay_protein": None, "col_cell_type": "celltype",
-#         "col_gene_symbols": "gene_symbol", "col_sample_id": None,
-#         "col_perturbation": "perturbation",
-#         "col_guide_rna": "perturbation", "col_num_umis": "UMI count",
-#         "kws_process_guide_rna": dict(
-#             feature_split=None, guide_split="_", key_control_patterns=[np.nan],
-#             remove_multi_transfected=True),
-#         "col_target_genes": "perturbation", "key_control": "Control",
-#         "key_treatment": "KO"}
-#     adata = pt.dt.adamson_2016_upr_perturb_seq()
-#     self = cr.Crispr(adata, **kwargs)
-
-#     def test_attribute_presence(self):
-#         """Ensure expected attributes are present."""
-#         assert "adata" in dir(CrisprObject.self)
-#         assert "rna" in dir(CrisprObject.self)
-#         assert "uns" in dir(CrisprObject.self)
-#         assert "obs" in dir(CrisprObject.self)
-#         assert "_columns" in dir(CrisprObject.self)
-#         assert "_layers" in dir(CrisprObject.self)
-#         assert "_keys" in dir(CrisprObject.self)
+    def test_guide_assign(tol=2):
+        """See if guide assignment roughly matches author's."""
+        guides = TestCiteSeq.self.rna.obs[[TestCiteSeq.self._columns[
+            "col_condition"], "gene_target"]].copy()
+        guides.columns = ["us", "them"]
+        print(guides[guides.us != guides.them])
+        assert np.mean(guides.us != guides.them) * 100 < tol  # < tol %
 
 
-# # class Preprocessing:
+# class Preprocessing:
 
-# #     def test_filtering(adata):
-# #         self.preprocess(adata)
-# #         if assay is None:
-# #             adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts,
-# #                           :]
-# #             adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
-# #         else:
-# #             adata[assay] = adata[assay][
-# #                 adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
-# #             adata[assay] = adata[assay][
-# #                 adata[assay].obs.pct_counts_mt < max_pct_mt, :]  # MT counts
-# #             adata[assay].raw = adata[assay
-# #                                      ]  # freeze normalized, filtered data
+#     def test_filtering(adata):
+#         self.preprocess(adata)
+#         if assay is None:
+#             adata = adata[adata.obs.n_genes_by_counts < max_genes_by_counts,
+#                           :]
+#             adata = adata[adata.obs.pct_counts_mt < max_pct_mt, :]
+#         else:
+#             adata[assay] = adata[assay][
+#                 adata[assay].obs.n_genes_by_counts < max_genes_by_counts, :]
+#             adata[assay] = adata[assay][
+#                 adata[assay].obs.pct_counts_mt < max_pct_mt, :]  # MT counts
+#             adata[assay].raw = adata[assay
+#                                      ]  # freeze normalized, filtered data

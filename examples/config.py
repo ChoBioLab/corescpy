@@ -248,7 +248,7 @@ kws_process_guide_rna_data = {
     "bulk": None,
     "screen": None,
     "perturb-seq": dict(feature_split=None, guide_split="_",
-                        key_control_patterns=[np.nan]),
+                        key_control_patterns=["*"]),
     "ECCITE": None,
     "coda": None,
     "augur_ex": None
@@ -308,6 +308,8 @@ def load_example_data(file, col_gene_symbols, write_public=False):
                 adata = pertpy.data.tian_2021_crispra()
             elif file == "perturb-seq":
                 adata = pertpy.data.adamson_2016_upr_perturb_seq()
+                adata.obs[adata.obs.perturbation == "*", "perturbation"
+                          ] = "CTRL"  # replace special character
             else:
                 if err:
                     raise ValueError(f"{file} error:\n\n{err}.")

@@ -23,11 +23,12 @@ class Crispr(Omics):
 
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
-    def __init__(self, file_path, assay=None, assay_protein=None,
+    def __init__(self, file_path,
+                 assay=None, assay_protein=None, assay_gdo=None,
                  col_gene_symbols="gene_symbols", col_cell_type="leiden",
                  col_sample_id="standard_sample_id",
-                 col_condition="perturbation", col_perturbed="perturbation",
-                 col_guide_rna="guide_ids", col_num_umis="num_umis",
+                 col_condition="perturbation", col_perturbed="perturbed",
+                 col_guide_rna=None, col_num_umis="num_umis",
                  key_control="NT", key_treatment="KO", key_nonperturbed="NP",
                  kws_process_guide_rna=None, kws_multi=None, **kwargs):
         """
@@ -65,10 +66,17 @@ class Crispr(Omics):
             assay (str, optional): Name of the gene expression assay if
                 loading a multi-modal data object (e.g., "rna").
                 Defaults to None.
-            assay_protein (str, optional):  Name of the assay containing
-                the protein expression modality, if available.
-                For instance, if "adt", `self.adata["adt"]` would be
-                expected to contain the AnnData object for the
+            assay_protein (str, optional):  Name of the assay
+                containing the protein expression modality, if
+                available. For instance, if "adt", `self.adata["adt"]`
+                would be expected to contain the AnnData object for the
+                protein modality. ONLY FOR MULTI-MODAL DATA for certain
+                bonus visualization methods. Defaults to None.
+            assay_gdo (str, optional):  For objects
+            Name of the assay
+                containing the guide RNA information, if
+                available. For instance, if "adt", `self.adata["adt"]`
+                would be expected to contain the AnnData object for the
                 protein modality. ONLY FOR MULTI-MODAL DATA for certain
                 bonus visualization methods. Defaults to None.
             col_gene_symbols (str, optional): Column name in `.var` for
@@ -92,10 +100,10 @@ class Crispr(Omics):
                 `AnnData.concatenate()` or None (to use defaults).
             col_condition (str, optional): Either the name of an
                 existing column in `.obs` indicating the experimental
-                condition to which each cell belongs or
-                (for CRISPR designs) the **desired** name of the column
-                that will be created from `col_guide_rna` to indicate
-                the gene(s) targeted in each cell.
+                condition to which each cell belongs or, for CRISPR
+                designs, the **desired** name of the column that will
+                be created from `col_guide_rna` to indicate the gene(s)
+                targeted in each cell.
                 - If there are multiple conditions besides control
                     (e.g., multiple types of drugs and/or exposure
                     times, multiple target genes in CRISPR),
@@ -105,14 +113,13 @@ class Crispr(Omics):
                     this column will be where each guide RNA's target
                     gene will be stored, whether pre-existing (copied
                     directly from `col_guide_rna` if
-                    `kws_process_guide_rna` is None) or created during
+                    `kws_process_guide_rna` is False) or created during
                     the Crispr object initialization by passing
                     `col_guide_rna` and `kws_process_guide_rna` to
                     `crispr.pp.filter_by_guide_counts()` in order to
                     convert particular guide RNA IDs to their target(s)
                     (e.g., STAT1-1|IL6-2-1|NegCtrl32a|IL6-1 =>
-                    STAT1|IL6|NT|IL6).
-                    Defaults to None.
+                    STAT1|IL6|NT|IL6). Defaults to None.
                 - For non-CRISPR designs (e.g., drug exposure):
                     - This column should exist in the AnnData or MuData
                         object (either already available upon simply
@@ -125,15 +132,15 @@ class Crispr(Omics):
                         that all translate to `key_treatment` in
                         `col_perturbed`.
                     - If you have multiple control conditions, you
-                        should pass an already-created AnnData object to
-                        the `file_path` argument of the `Crispr` class
-                        initialization method after adding a separate
-                        column with a name different from those
-                        specified in any of the other column arguments.
-                        You can then pass that column name manually to
-                        certain functions' `col_control` arguments and
-                        specify the particular control condition in
-                        `key_control`.
+                        should pass an already-created AnnData object
+                        to the `file_path` argument of the `Crispr`
+                        class initialization method after adding a
+                        separate column with a name different from
+                        those specified in any of the other column
+                        arguments. You can then pass that column name
+                        manually to certain functions' `col_control`
+                        arguments and specify the particular control
+                        condition in `key_control`.
                 - In most methods, `key_control` and `key_treatment`,
                     as well as `col_perturbed` or `col_condition`
                     (for methods that don't require binary labeling),
@@ -149,7 +156,7 @@ class Crispr(Omics):
                 methods will be able to find the binary experimental
                 condition variable. It will be created during `Crispr`
                 object initialization as a binary version of
-                `col_condition`. Defaults to "perturbation". For CRISPR
+                `col_condition`. Defaults to "perturbed". For CRISPR
                 designs, all entries containing the patterns specified
                 in `kws_process_guide_rna["key_control_patterns"]` will
                 be changed to `key_control`, and all cells with
@@ -198,12 +205,13 @@ class Crispr(Omics):
                 convention established in
                 `kws_process_guide_rna["feature_split"]`.
                 Defaults to "num_umis".
-            key_control (str, optional): The label that is or will be in
-                `col_condition`, `col_guide_rna`, and `col_perturbed`
-                indicating control rows. Defaults to "NT". Either
+            key_control (str, optional): The label that is or will be
+                in `col_condition`, `col_guide_rna`, and
+                `col_perturbed` indicating control rows. Defaults to
+                "NT". Either
                     - exists as entries in pre-existing column(s), or
-                    - is the name you want the control entries (detected
-                    using `.obs[<col_guide_rna>]` and
+                    - is the name you want the control entries
+                    (detected using `.obs[<col_guide_rna>]` and
                     `kws_process_guide_rna["key_control_patterns"]`)
                     to be categorized as control rows under the new
                     version(s) of `.obs[<col_guide_rna>]`,
@@ -222,31 +230,33 @@ class Crispr(Omics):
                 as opposed to a control condition? This name will also
                 be used for Mixscape classification labeling.
                 Defaults to "KO".
-            key_nonperturbed (str, optional): What will be stored in the
-                `mixscape_class_global` and related columns/labels after
-                running Mixscape methods. Indicates cells without a
-                detectible perturbation. Defaults to "NP".
+            key_nonperturbed (str, optional): What will be stored in
+                the `mixscape_class_global` and related columns/labels
+                after running Mixscape methods. Indicates cells without
+                a detectible perturbation. Defaults to "NP".
             kws_process_guide_rna (dict, optional): Dictionary of
                 keyword arguments to pass to
                 `crispr.pp.filter_by_guide_counts()`.
-                (See below and crispr.processing.preprocessing
-                documentation). Defaults to None (no processing will
+                (See below and crispr.processing.guide_rna
+                documentation). Defaults to False (no processing will
                 take place, in which case BE SURE THAT
-                `col_target_genes` already exists in the data once
+                `col_condition` already exists in the data once
                 loaded and contains the already-filtered, summed up,
                 generic gene-named, etc. versions of the guide
-                RNA column). Keys of this dictionary should be:
+                RNA column). NOTE: If "None", processing with default
+                parameters (e.g., for filtering) will still occur.
+                Keys of this dictionary should be:
                     - key_control_patterns (list, optional): List
                         (or single string) of patterns in guide RNA
                         column entries that correspond to a control.
-                        For instance, if control entries in the original
-                        `col_guide_rna` column include `NEGCNTRL` and
-                        `Control.D`, you should specify
+                        For instance, if control entries in the
+                        original `col_guide_rna` column include
+                        `NEGCNTRL` and `Control.D`, you should specify
                         ['Control', 'CNTRL'] (assuming no non-control
                         sgRNA names contain those patterns). If blank
-                        entries should be interpreted as control guides,
-                        then include np.nan/numpy.nan in this list.
-                        Defaults to None, which turns to [np.nan].
+                        entries should be interpreted as control
+                        guides, then include np.nan/numpy.nan in this
+                        list. Defaults to None (turns to [np.nan]).
                     - `max_percent_umis_control_drop` (int, optional):
                         If control UMI counts are $<=$ this percentage
                         of the total counts for that cell, and if a
@@ -296,10 +306,14 @@ class Crispr(Omics):
                         "mixscape": layer_perturbation}
         if kwargs:
             print(f"Unused keyword arguments: {kwargs}.\n")
+        if col_guide_rna == col_condition:
+            warnings.warn(f"`col_condition` ({col_condition}) can't be same "
+                          "as `col_guide_rna`! Now = {col_condition}_target.")
+            col_condition = col_condition + "_target"
 
         # Create Attributes to Store Results/Figures
-        self.figures = {"main": {}}
-        self.results = {"main": {}}
+        self.figures = {}
+        self.results = {}
         self.info = {"descriptives": {},
                      "guide_rna": {},
                      "methods": {}}  # extra info to store post-use of methods
@@ -313,10 +327,11 @@ class Crispr(Omics):
         else:
             kws_pga, kws_process_guide_rna = None, None
         super().__init__(
-            self._file_path, assay=assay, col_gene_symbols=col_gene_symbols,
-            col_sample_id=col_sample_id, col_condition=col_condition,
-            key_control=key_control, key_treatment=key_treatment,
-            kws_process_guide_rna=kws_pga, kws_multi=kws_multi)  # make adata
+            self._file_path, assay=assay, assay_gdo=assay_gdo,
+            col_gene_symbols=col_gene_symbols, col_sample_id=col_sample_id,
+            col_condition=col_condition, key_control=key_control,
+            key_treatment=key_treatment, kws_process_guide_rna=kws_pga,
+            kws_multi=kws_multi)  # make adata & process gRNA (if needed)
 
         # Store gRNA Processing Information
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
@@ -338,22 +353,19 @@ class Crispr(Omics):
             self.info["guide_rna"]["feature_split"] = None
 
         # Check Arguments & Data
-        if any((x in self.rna.obs for x in [
-                col_guide_rna, col_perturbed, col_condition])):
-            if col_perturbed in self.rna.obs and (
-                    col_condition in self.rna.obs):
+        conds = [col_guide_rna, col_perturbed, col_condition]
+        if any((x in self.rna.obs for x in conds)):
+            if all((x in self.rna.obs for x in conds[1:])):
                 pass
             elif col_perturbed in self.rna.obs:
                 warnings.warn(f"col_perturbed {col_perturbed} already "
                               " in `.obs`. Assuming perturbation is binary "
                               "(i.e., only has two conditions, including "
-                              "control), so col_condition will be "
-                              "equivalent.")
+                              "control); col_condition will be equivalent.")
                 self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_perturbed]
+                    col_perturbed].copy()  # col_condition = col_perturbed
         else:
-            raise ValueError("col_condition or "
-                             "col_guide_rna must be in `.obs`.")
+            raise ValueError(f"{' or '.join(conds)} must be in `.obs` ")
         print(self.adata.obs, "\n\n") if assay else None
 
         # Create Binary Perturbation Column (if not yet existent)
@@ -682,7 +694,7 @@ class Crispr(Omics):
     def run_augur(self, assay=None, layer=None,
                   classifier="random_forest_classifier",
                   augur_mode="default", kws_augur_predict=None, n_folds=3,
-                  subsample_size=20, n_threads=True,
+                  subsample_size=20, n_jobs=True,
                   select_variance_features=False, seed=1618,
                   plot=True, copy=False, **kwargs):
         """
@@ -703,7 +715,7 @@ class Crispr(Omics):
             subsample_size (int, optional): Per Pertpy code:
                 "number of cells to subsample randomly per type
                 from each experimental condition." Defaults to 20.
-            n_threads (bool): The number of threads to be used for
+            n_jobs (bool): The number of threads to be used for
                 parallel processing. If set to True, the available
                 CPUs minus 1 will be used. Defaults to True.
             select_variance_features (bool, optional): Use Augur
@@ -763,7 +775,7 @@ class Crispr(Omics):
             layer=layer, augur_mode=augur_mode, subsample_size=subsample_size,
             select_variance_features=select_variance_features,
             n_folds=n_folds, kws_augur_predict=kws_augur_predict,
-            seed=seed, n_threads=n_threads, plot=plot, **kwargs)  # Augur
+            seed=seed, n_jobs=n_jobs, plot=plot, **kwargs)  # Augur
         if copy is False:  # store results
             self.rna.uns["augurpy_results"] = data.uns["augurpy_results"]
             self.rna.obs = self.rna.obs.join(data.obs["augur_score"],
