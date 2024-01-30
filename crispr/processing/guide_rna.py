@@ -23,6 +23,8 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
             within-cell probes separated by `feature_split` and
             any probe ID suffixes at the end following `guide_split`
             (e.g., '-' if STAT1-1-2, STAT-1-1-4, etc.).
+        min_n (int, optional): Minimum number of counts to retain a
+            guide past filtering. The default is None.
         max_pct_control_drop (int, optional): If control
             UMI counts are less than or equal to this percentage of the
             total counts for that cell, and if a non-control sgRNA is
@@ -252,7 +254,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                            feature_split="|", guide_split="-",
                            max_pct_control_drop=0, min_pct_avg_n=None,
                            min_n_target_control_drop=None,
-                           min_pct_dominant="highest",
+                           min_pct_dominant="highest", min_n=5,
                            drop_multi_control=False, **kwargs):
     """
     Filter processed guide RNA names (wraps `detect_guide_targets`).
@@ -371,13 +373,14 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     if min_pct_dominant is not None:
         if min_pct_dominant == "highest":  # if just choosing most abundant...
             feats_n = feats_n.join(feats_n.groupby("bc").apply(
-                lambda x: x.p.max()).to_frame("thresh_dominance"))
+                lambda x: x.p.max()).to_frame("thr_dominance"))
         else:  # if defined a % threshold...
-            feats_n = feats_n.assign(thresh_dominance=min_pct_dominant)
-        feats_n = feats_n.assign(dominant=feats_n.p >= x.thresh_dominance)
-        feats_n = feats_n.assign(
-            dominant=feats_n.dominant & feats_n.target
-            )  # only non-control guides considered dominant
+            feats_n = feats_n.assign(thr_dominance=min_pct_dominant)
+        feats_n = feats_n.assign(dominant=feats_n.p >= feats_n.thr_dominance)
+        if min_pct_dominant != "highest":  # if defined a % threshold...
+            feats_n = feats_n.assign(
+                dominant=feats_n.dominant & feats_n.target
+                )  # ...only non-control guides considered dominant
     else:
         feats_n = feats_n.assign(dominant=False)  # no filtering based on this
     # CHECK:
@@ -386,6 +389,9 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         low_umi=feats_n.n < feats_n.n_cell_avg * min_pct_avg_n / 100
         if min_pct_avg_n is not None else False
         )  # low % of mean UMI count (if filtering based on that)?
+    feats_n = feats_n.assign(
+        low_umi_ct=feats_n.n < min_n if min_n is not None else False
+        )  # low UMI count (if filtering based on that)?
     if min_pct_dominant is not None:
         feats_n = feats_n.join(feats_n.dominant.groupby("bc").apply(
                 lambda x: pd.Series([False] if len(x) == 1 else [
@@ -403,6 +409,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     # Filtering Phase I (If Dominant Guide, Drop Others; Drop Low Controls)
     filt = filt[filt.drop_control.isin(
         ["retain"])]  # low control or high non-control=pseudo-not control
+    filt = filt[~filt.low_umi_ct]  # drop if UMI count too low
     # if max_pct_control_drop & min_n_target_control_drop None, all retained
     if min_pct_dominant is not None:
         filt = filt[~filt.drop_nondominant]  # drop if another guide dominates

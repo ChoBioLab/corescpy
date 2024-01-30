@@ -515,16 +515,24 @@ class Omics(object):
                           p_threshold=0.5, over_clustering=None,
                           min_proportion=0, copy=False, **kwargs):
         """Use CellTypist to annotate clusters."""
-        adata = self.rna.copy()
+        adata, re_ix = self.rna.copy(), False
+        re_ix = self._assay is not None and ":" in adata.var.index.values[0]
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
+        if re_ix is True:  # rename multi-modal index if <assay>:<gene>
+            adata.var = adata.var.rename(dict(zip(adata.var.index, ["".join(
+                x.split(":")[1:]) for x in adata.var.index])))
         c_t = kwargs.pop("col_cell_type", self._columns["col_cell_type"])
         ann, res, figs = cr.ax.perform_celltypist(
             adata, model, majority_voting=True, p_threshold=p_threshold,
             mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
             min_proportion=min_proportion, **kwargs)  # annotate
         self.figures["celltypist"], self.results["celltypist"] = figs, res
+        if re_ix is True:
+            adata.var = adata.var.reset_index().set_index(
+                self.rna.var.index.names[0])  # back to original index
         if copy is False:  # assign if performing inplace
             self.rna = ann
+            self.results["celltypist"], self.figures["celltypist"] = res, figs
         return ann, [res, figs]
 
     def find_markers(self, assay=None, n_genes=10, layer="log1p",

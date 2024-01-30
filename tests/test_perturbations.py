@@ -4,43 +4,56 @@ import pertpy as pt
 import numpy as np
 
 
-class TestDistance:
-    """Object creation tests."""
+class TestCiteSeq:
+    """Test CITE-seq with guide RNA data in separate modality."""
+    col_guide_rna, col_num_umis, col_condition = "guide", "num_umis", "target"
+    col_condition = "target_gene"
+    feature_split, guide_split = "|", "g"
+    key_control = "Control"
+    kws_pg = dict(feature_split=feature_split, guide_split=guide_split,
+                  key_control_patterns=["NT"], remove_multi_transfected=True,
+                  max_pct_control_drop=None, min_pct_avg_n=None,
+                  min_n_target_control_drop=None, min_pct_dominant=51)
+    kwargs = dict(assay="rna", assay_gdo="gdo", assay_protein="adt",
+                  col_batch="orig.ident", col_subject_id="replicate",
+                  col_sample_id="MULTI_ID", col_condition=col_condition,
+                  col_num_umis=col_num_umis, col_perturbed="perturbed",
+                  col_cell_type="leiden", col_guide_rna=col_guide_rna,
+                  key_control=key_control, key_treatment="KO")
+    adata = pt.data.papalexi_2021()
+    adata.mod["gdo"].X = scipy.sparse.csr_matrix(adata.mod["gdo"].X.A - 1)
+    self = cr.Crispr(adata, **kwargs, kws_process_guide_rna=kws_pg)
+    _ = self.preprocess()
+    _ = self.cluster()
 
-    kwargs_init = dict(col_gene_symbols="gene_symbol",
-                       col_cell_type="leiden",
-                       col_perturbed="perturbed",
-                       col_guide_rna="grna_lenient",
-                       col_condition="target",
-                       key_control="control",
-                       key_treatment="KO",
-                       kws_process_guide_rna=False)
-    try:
-        adata = pt.dt.distance_example()
-    except Exception:
-        adata = pt.dt.distance_example_data()
-    adata.layers["log1p"] = adata.X.copy()  # already log
-    self = cr.Crispr(adata, **kwargs_init)
-    self.cluster(kws_neighbors=dict(n_neighbors=30), use_rep="X_pca",
-                 n_comps=30, resolution=0.5, layer="log1p")
+    def test_celltypist():
+        _ = TestCiteSeq.self.annotate_clusters("Immune_All_Low.pkl")
+
+    def test_guide_assign(tol=2):
+        """See if guide assignment roughly matches author's."""
+        guides = TestCiteSeq.self.rna.obs[[TestCiteSeq.self._columns[
+            "col_condition"], "gene_target"]].copy()
+        guides.columns = ["us", "them"]
+        print(guides[guides.us != guides.them])
+        assert np.mean(guides.us != guides.them) * 100 < tol  # < tol %
 
     def test_distance_metrics(self):
         """Ensure expected attributes are present."""
         outs = {}
         for x in ["mmd", "edistance"]:
             print(x)
-            outs[x] = TestDistance.self.compute_distance(
+            outs[x] = TestCiteSeq.self.compute_distance(
                 x, method="X_pca", n_perms=100,
                 alpha=0.0015, kws_plot=dict(robust=False, figsize=(10, 10)))
             print(outs[x][-2])
 
     def test_mixscape(self):
         """Ensure expected attributes are present."""
-        self.run_mixscape()
+        out_mix = TestCiteSeq.self.run_mixscape()
 
     def test_augur(self):
         """Ensure expected attributes are present."""
-        self.run_augur()
+        out_aug = TestCiteSeq.self.run_augur()
 
 
 class TestAdamson:

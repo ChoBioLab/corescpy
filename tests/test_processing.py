@@ -38,34 +38,6 @@ class TestOmics:
         pass
 
 
-class TestCiteSeq:
-    """Test CITE-seq with guide RNA data in separate modality."""
-    col_guide_rna, col_num_umis, col_condition = "guide", "num_umis", "target"
-    col_condition = "target_gene"
-    feature_split, guide_split = "|", "g"
-    key_control = "Control"
-    kws_pg = dict(feature_split=feature_split, guide_split=guide_split,
-                  key_control_patterns=["NT"], remove_multi_transfected=True,
-                  max_pct_control_drop=None, min_pct_avg_n=None,
-                  min_n_target_control_drop=None, min_pct_dominant=51)
-    kwargs = dict(assay="rna", assay_gdo="gdo", assay_protein="adt",
-                  col_batch="orig.ident", col_subject_id="replicate",
-                  col_sample_id="MULTI_ID", col_condition=col_condition,
-                  col_num_umis=col_num_umis, col_perturbed="perturbed",
-                  col_cell_type="leiden", col_guide_rna=col_guide_rna,
-                  key_control=key_control, key_treatment="KO")
-    adata = pt.data.papalexi_2021()
-    adata.mod["gdo"].X = scipy.sparse.csr_matrix(adata.mod["gdo"].X.A - 1)
-    self = cr.Crispr(adata, **kwargs, kws_process_guide_rna=kws_pg)
-
-    def test_guide_assign(tol=2):
-        """See if guide assignment roughly matches author's."""
-        guides = TestCiteSeq.self.rna.obs[[TestCiteSeq.self._columns[
-            "col_condition"], "gene_target"]].copy()
-        guides.columns = ["us", "them"]
-        print(guides[guides.us != guides.them])
-        assert np.mean(guides.us != guides.them) * 100 < tol  # < tol %
-
 
 # class Preprocessing:
 
