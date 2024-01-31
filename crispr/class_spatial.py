@@ -75,8 +75,10 @@ class Spatial(Omics):
         super().__init__(file_path, **kwargs)  # Omics initialization
         self._assay_spatial = "spatial"
         if file_path_spatial:  # if need to read in additional spatial data
-            self.adata.obs = pd.read_csv(file_path_spatial).set_index(
-                self.adata.obs_names).copy()  # read in spatial information
+            comp = "gzip" if ".gz" in file_path_spatial[-3:] else None
+            dff = pd.read_csv(file_path_spatial, compression=comp,
+                              index_col=0)  # read in spatial information
+            self.adata.obs = self.adata.obs.join(dff, how="left")
             self.adata.obsm["spatial"] = self.adata.obs[
                 ["x_centroid", "y_centroid"]].copy().to_numpy()  # coordinates
         print("\n\n")

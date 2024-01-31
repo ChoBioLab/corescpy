@@ -252,6 +252,10 @@ class Omics(object):
         print(self.adata, "\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
+        if "highly_variable" in self.rna.var:
+            print(f"\n\n{'=' * 80}\nHighly Variable Genes\n{'=' * 80}\n\n",
+                  self.rna.var.highly_variable.describe())
+        print("\n\n\n")
 
     def describe(self, group_by=None, plot=False):
         """Describe data."""
@@ -393,8 +397,8 @@ class Omics(object):
     def plot_coex(self, genes, use_raw=False, copy=True, **kwargs):
         """Plot co-expression of a list of genes on a UMAP."""
         ggg = "_".join(genes)  # co-expression variable name (ex: STAT1_ERCC1)
-        adata = sc.tl.score_genes(
-            self.rna, genes, score_name=ggg, use_raw=use_raw, copy=True)  # ex
+        adata = sc.tl.score_genes(self.rna, genes, score_name=ggg,
+                                  use_raw=use_raw, copy=True)  # score co-GEX
         fig = sc.pl.umap(adata, color=ggg, use_raw=use_raw, **kwargs)  # plot
         if copy is False:
             self.rna = adata

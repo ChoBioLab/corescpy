@@ -367,7 +367,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     # Gene Variability (Detection, Optional Filtering)
     print("\n<<< DETECTING VARIABLE GENES >>>")
     sc.pp.highly_variable_genes(ann, **kws_hvg)
-    sc.pl.highly_variable_genes(ann)
+    cr.pl.plot_hvgs(ann, palette=["red", "black"])
     if filter_hvgs is True:
         print("\n<<< FILTERING BY HIGHLY VARIABLE GENES >>>")
         ann = ann[:, ann.var.highly_variable]  # filter by HVGs
@@ -526,7 +526,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             for a, v in zip(axf, pct_n + ["n_genes_by_counts"]):
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a,
-                                  show=False, color=h if yes else None)
+                                  show=False, color=h if yes else None,
+                                  frameon=False)
+                    a.legend_.set_bbox_to_anchor((-0.2, -0.7))
                     plt.show()
                 except Exception:
                     print(traceback.format_exc())
@@ -537,7 +539,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
                 [h] if yes else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
-                {"total_counts": "Counts", **patterns_names}, axis=1)
+                {"total_counts": "Total Counts in Cell",
+                 "n_genes_by_counts": "Number of Genes Detected in Cell",
+                 **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(
                 mets_df, diag_kind="kde", hue=h if yes else None,
                 diag_kws=dict(fill=True, cut=0), plot_kws=dict(
