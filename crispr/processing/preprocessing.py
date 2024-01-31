@@ -546,7 +546,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             fff = err
             print(traceback.format_exc())
         figs[f"pairplot_by_{h}" if yes else "pairplot"] = fff
-    if len(pct_ns) > 0:  # if any QC vars (e.g., MT RNA) present...
+    if len(pct_n) > 0:  # if any QC vars (e.g., MT RNA) present...
         try:  # KDE of % of counts ~ QC variable
             mets_df = adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
                 patterns_names, axis=1).stack().rename_axis(["bc", "Metric"])
