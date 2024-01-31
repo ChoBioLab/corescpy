@@ -170,6 +170,8 @@ class Spatial(Omics):
 
         # Output
         if copy is False:
+            if "spatial" not in self.results:
+                self.results["spatial"] = {}
             self.results["spatial"]["receptor_ligand"] = res_rl
             self.figures["spatial"] = figs
             self.rna = adata
@@ -219,7 +221,8 @@ class Spatial(Omics):
                 self._assay_spatial].keys())) == 1:
             print("<<< UPDATING SELF._LIBRARY_ID >>>")
             self._library_id = list(adata.uns[self._assay_spatial].keys())[0]
-        self.figures["centrality"] = fig
+        if copy is False:
+            self.figures["centrality"] = fig
         return fig
 
     def calculate_neighborhood(self, col_cell_type=None, library_id=None,
@@ -254,7 +257,8 @@ class Spatial(Omics):
             ax=axs[0])  # matrix/heat of enrichment scores (panel 1)
         sq.pl.spatial_scatter(adata, color=col_cell_type, shape=shape,
                               ax=axs[1], **kws_plot)  # scatterplot (panel 2)
-        self.figures["neighborhood_enrichment"] = plt.gcf()
+        if copy is False:
+            self.figures["neighborhood_enrichment"] = plt.gcf()
         return fig
 
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
@@ -299,7 +303,8 @@ class Spatial(Omics):
             key_cell_type=key_cell_type, figsize=figsize)  # plot
         if title:
             figs["co_occurrence"].suptitle(title)
-        self.figures["co_occurrence"] = figs["co_occurrence"]
+        if copy is False:
+            self.figures["co_occurrence"] = figs["co_occurrence"]
         return adata, figs
 
     def find_svgs(self, genes=None, method="moran", n_perms=10, layer=None,
@@ -344,6 +349,8 @@ class Spatial(Omics):
         fig = plt.gcf()
         if title:
             fig.suptitle(title)
+        if copy is False:
+            self.figures["svg"] = fig
         return fig
 
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):
@@ -355,4 +362,6 @@ class Spatial(Omics):
             col_cell_type = self._columns["col_cell_type"]
         sq.gr.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
         fig = sq.pl.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
+        if copy is False:
+            self.figures["distribution_patterns"] = fig
         return fig

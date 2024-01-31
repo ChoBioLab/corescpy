@@ -111,6 +111,9 @@ class Omics(object):
         col_num_umis = kpg["col_num_umis"] if kpg not in [
             None, False] else kwargs["col_num_umis"] if (
                 "col_num_umis" in kwargs) else None
+        if kws_multi and col_sample_id is None:
+            col_sample_id = "unique.idents"
+        col_batch = kwargs.pop("col_batch", col_sample_id)
         self.pdata = None  # for pseudobulk data if ever created
         self._assay = assay
         self._assay_protein = assay_protein
@@ -120,18 +123,16 @@ class Omics(object):
         self._integrated = kws_multi is not None
         if kwargs:
             print(f"Unused keyword arguments: {kwargs}.\n")
-        if kws_multi and col_sample_id is None:
-            col_sample_id = "unique.idents"
 
         # Create Attributes to Store Results/Figures/Methods
-        self.figures, self.figures = {}, {}
+        self.results, self.figures = {}, {}
         self.info = {"descriptives": {}, "guide_rna": {},
                      "methods": {}}  # extra info to store post-use of methods
 
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = dict(
             col_gene_symbols=col_gene_symbols, col_cell_type=col_cell_type,
-            col_sample_id=col_sample_id, col_batch=col_sample_id,
+            col_sample_id=col_sample_id, col_batch=col_batch,
             col_subject=col_subject,  # e.g., patient ID rather than sample
             col_condition=col_condition, col_num_umis=col_num_umis)
         self._keys = dict(key_control=key_control,
@@ -426,7 +427,7 @@ class Omics(object):
             znorm_default = {
                 "col_reference": self._columns["col_condition"],
                 "key_reference": self._keys["key_control"],
-                "col_batch": self._columns["col_sample_id"]}
+                "col_sample_id": self._columns["col_sample_id"]}
             kws_scale = {**znorm_default, **kws_scale}  # merge arguments
         self.info["methods"]["scale"] = kws_scale
         kws.update(dict(kws_scale=kws_scale))

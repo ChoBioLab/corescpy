@@ -296,14 +296,12 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)
-    if "col_batch" in kwargs or "col_sample_id" in kwargs:
-        sids = []
-        for x in ["col_batch", "col_sample_id"]:
-            if x in kwargs and x not in sids and kwargs[x] is not None:
-                sss = kwargs.pop("col_sample_id")
-                sids += [sss]
-        if len(sids) == 0:
-            sids = None
+    sids = [np.nan if f"col_{x}" not in kwargs else np.nan if kwargs[
+        f"col_{x}"] is None else kwargs[f"col_{x}"]for x in [
+            "batch", "sample_id", "subject"]]  # batch/sample/subject
+    sids = list(pd.Series(sids).dropna().unique())  # unique & not None
+    if len(sids) == 0:
+        sids = None
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     try:
@@ -502,13 +500,12 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         except Exception as err:
             print(traceback.format_exc())
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
-    qc_vars = list(set(patterns.keys()).intersection(
-        adata.var.keys()))  # available QC metrics
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
-    sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None,
-                               log1p=log1p, inplace=True)  # QC metrics
-    qc_vars = list(np.array(qc_vars)[np.where([adata.obs[
-        f"pct_counts_{q}"].max() > 0 for q in qc_vars])[0]])  # plot if > 0
+    sc.pp.calculate_qc_metrics(adata, qc_vars=patterns.keys(), log1p=log1p,
+                               percent_top=None, inplace=True)  # metrics
+    nonzero = [adata.obs[f"total_counts_{q}"].max() > 0 for q in patterns]
+    qc_vars = list(np.array(patterns.keys())[np.where(nonzero)[0]]) if any(
+        nonzero) else []  # only plot MT, RB, HB if present
     pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
     for x in pct_n:  # replace NaN % (in case no mt, rb, hb) wth 0
         adata.obs.loc[adata.obs[x].isnull(), x] = 0
@@ -549,15 +546,17 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             fff = err
             print(traceback.format_exc())
         figs[f"pairplot_by_{h}" if yes else "pairplot"] = fff
-    try:  # KDE of % of counts ~ QC variable
-        mets_df = adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
-            patterns_names, axis=1).stack().rename_axis(["bc", "Metric"])
-        figs["pct_counts_kde"] = seaborn.displot(
-            mets_df.to_frame("Percent Counts"), x="Percent Counts",
-            hue="Metric", kind="kde", cut=0, fill=True)  # KDE plot
-    except Exception as err:
-        print(traceback.format_exc())
-        figs["pct_counts_kde"] = err
+    if len(pct_ns) > 0:  # if any QC vars (e.g., MT RNA) present...
+        try:  # KDE of % of counts ~ QC variable
+            mets_df = adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
+                patterns_names, axis=1).stack().rename_axis(["bc", "Metric"])
+            figs["pct_counts_kde"] = seaborn.displot(
+                mets_df.to_frame("Percent Counts"), x="Percent Counts",
+                hue="Metric", kind="kde", cut=0, fill=True)  # KDE plot
+        except Exception as err:
+            print(traceback.format_exc())
+            figs["pct_counts_kde"] = err
+    figs["pct_counts_kde"] = None
     try:  # log1p genes by counts (x) vs. total counts (y)
         figs["qc_log"] = seaborn.jointplot(
             data=adata.obs, x="log1p_total_counts",
@@ -643,7 +642,7 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
 
 
 def remove_batch_effects(adata, col_cell_type="leiden",
-                         col_batch="orig.ident", plot=True, **kws_train):
+                         col_sample_id="orig.ident", plot=True, **kws_train):
     """Remove batch effects (IN PROGRESS)."""
     if not kws_train:
         kws_train = dict(max_epochs=100, batch_size=32,
