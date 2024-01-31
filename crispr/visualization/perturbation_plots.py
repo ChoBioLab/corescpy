@@ -5,6 +5,7 @@ import scanpy as sc
 import pertpy as pt
 import decoupler
 import matplotlib.pyplot as plt
+from scipy.cluster.hierarchy import linkage, dendrogram
 import warnings
 import functools
 import pandas as pd
@@ -237,4 +238,55 @@ def plot_pathway_interference_results(adata, pathway, col_cell_type=None,
             colorbar_title="X-Scaled Scores", cmap=cmap)
     else:
         figs["umap"] = sc.pl.umap(acts, color=[pathway], cmap=cmap, vcenter=0)
+    return figs
+
+
+def plot_distance(res_pairwise_genes=None, res_pairwise_clusters=None,
+                  res_linkage=None, col_cell_type=None, res_contrasts=None,
+                  distance_type="edistance", p_adjust=True, **kwargs):
+    """Plot distance metrics (partially adapted from Pertpy tutorial)."""
+    figs = {}
+    palette = kwargs.pop("palette", {True: "green", False: "red"})
+    kwargs = {"cmap": "Reds_r", "figsize": (20, 20), **kwargs}
+
+    highlight_real_range = kwargs.pop("highlight_real_range", True)
+
+    # Heatmap of Distances
+    if highlight_real_range is True:
+        vmin = np.min(np.ravel(res_pairwise_genes.values)[np.ravel(
+            res_pairwise_genes.values) != 0])
+        if "vmin" in kwargs:
+            warnings.warn("vmin already set in kwargs plot. Setting to "
+                          f" {vmin} as highlight_real_range is True.")
+        kwargs.update(dict(vmin=vmin))
+    figs[f"distance_heat_{distance_type}_conditions"] = sns.clustermap(
+        res_pairwise_genes, **kwargs)  # cluster heatmap
+    plt.show()
+
+    # Dendrogram of Linkages/Hierarchies
+    if res_pairwise_clusters is not None and res_linkage is not None:
+        plt.figure(figsize=kwargs["figsize"])
+        _ = dendrogram(res_linkage, labels=res_pairwise_clusters.index,
+                       orientation="left", color_threshold=0)  # dendrogram
+        plt.xlabel(f"Distance ({distance_type})")
+        plt.ylabel(col_cell_type)
+        plt.gca().yaxis.set_label_position("right")
+        figs[f"distance_cluster_hierarchies_{distance_type}"] = plt.gcf()
+        figs[f"distance_cluster_hierarchies_{distance_type}"].tight_layout()
+        plt.show()
+
+    # Contrast Distance & Signifance
+    suff = "_adj" if p_adjust is True else ""
+    if res_contrasts is not None:
+        for x in res_contrasts:
+            tab, ref = res_contrasts[x], x.split(" = ")[1]
+            with sns.axes_style("darkgrid"):
+                sns.scatterplot(
+                    data=tab[tab.index != ref], x=f"pvalue{suff}" + str(),
+                    y="distance", hue=f"significant{suff}", palette=palette)
+            plt.title(f"{distance_type} Distance: Contrast Results ({x})")
+            plt.xlabel(f"P" + str(" Adjusted" if p_adjust is True else ""))
+            plt.ylabel(f"Distance to Contrast Group")
+            figs[f"contrast_{distance_type}_{x}"] = plt.gcf()
+            plt.show()
     return figs

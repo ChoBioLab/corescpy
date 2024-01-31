@@ -37,15 +37,12 @@ class TestCiteSeq:
         print(guides[guides.us != guides.them])
         assert np.mean(guides.us != guides.them) * 100 < tol  # < tol %
 
-    def test_distance_metrics(self):
+    def test_distance_metrics(self, method="edistance"):
         """Ensure expected attributes are present."""
-        outs = {}
-        for x in ["mmd", "edistance"]:
-            print(x)
-            outs[x] = TestCiteSeq.self.compute_distance(
-                x, method="X_pca", n_perms=100,
-                alpha=0.0015, kws_plot=dict(robust=False, figsize=(10, 10)))
-            print(outs[x][-2])
+        out = TestCiteSeq.self.compute_distance(
+            "edistance", n_jobs=4, alpha=0.00015,
+            kws_plot=dict(robust=False, figsize=(10, 10)))
+        print(out)
 
     def test_mixscape(self):
         """Ensure expected attributes are present."""

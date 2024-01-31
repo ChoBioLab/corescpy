@@ -82,7 +82,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
     # Integrate
     if kws_harmony is not None:
         print("\n<<< INTEGRATING WITH HARMONY >>>")
-        sc.tl.pca(adata)  # PCA
+        # sc.tl.pca(adata)  # PCA
         sc.external.pp.harmony_integrate(
             adata, col_id, basis="X_pca",
             adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
@@ -424,8 +424,8 @@ def normalize_genes(adata, zero_center=True, max_value=None,
 
 def rename_var_index(adata, assay=None, col_gene_symbols="gene_symbols"):
     """Make sure `.var` index name is same as `gene_symbols`."""
-    ixn = (adata.var if assay is None else adata.mod[assay] if "mod" in dir(
-        adata) else adata[assay].var).var.index.names[0]  # var index name
+    ixn = (adata if assay is None else adata.mod[assay] if "mod" in dir(
+        adata) else adata[assay]).var.index.names[0]  # var index name
     if "mod" in dir(adata) and ixn != col_gene_symbols:
         for x in adata.mod.keys():
             adata.mod[x].var = adata.mod[x].var.reset_index().set_index(

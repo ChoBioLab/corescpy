@@ -594,6 +594,8 @@ class Omics(object):
         col_cell_type, col_condition = [x[1] if x[1] else self._columns[
             x[0]] for x in zip(["col_cell_type", "col_condition"],
                                [col_cell_type, col_condition])]  # defaults
+        col_sample_id = kws_plot.pop("col_sample_id", self._columns[
+            "col_sample_id"])
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         if col_condition is None:
@@ -637,6 +639,10 @@ class Omics(object):
                 dff, x=col_cell_type, y="MCP", col="Program",  kind="violin",
                 hue=col_condition, col_wrap=col_wrap, split=col_condition,
                 aspect=figsize[0] / figsize[1], height=figsize[1])  # plot
+            for x in mcp_cols:
+                figs[f"conditions_pair_{x}"] = d_l.plot_pairplot(
+                    adata, celltype_key=col_cell_type, color=col_condition,
+                    mcp=x, sample_id=col_sample_id)
         self.results["dialogue"] = pdata, mcps, w_s, ct_subs
         self.figures["dialogue"] = figs
         return figs

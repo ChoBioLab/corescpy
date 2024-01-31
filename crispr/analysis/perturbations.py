@@ -9,14 +9,13 @@ Analyzing CRISPR experiment data.
 
 import pertpy as pt
 import scanpy as sc
-from seaborn import clustermap
 from warnings import warn
 import decoupler
 from pydeseq2.dds import DeseqDataSet
 from pydeseq2.ds import DeseqStats
 import traceback
 import matplotlib.pyplot as plt
-from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.cluster.hierarchy import linkage
 import os
 import crispr as cr
 import pandas as pd
@@ -438,50 +437,48 @@ def perform_differential_prioritization(adata, col_perturbed="perturbation",
     return pvals, figs
 
 
-def compute_distance(adata, col_target_genes="target_genes",
-                     col_cell_type="leiden", obsm_key="X_pca",
-                     distance_type="edistance", method="X_pca",
-                     kws_plot=None, highlight_real_range=False,
-                     plot=True, **kwargs):
+def compute_distance(adata, distance_type="edistance",
+                     col_target_genes="target_genes",
+                     col_cell_type=None, key_target_genes=None,
+                     key_cell_type=None,  obsm_key="X_pca", method="X_pca",
+                     kws_plot=None, highlight_real_range=True,
+                     alpha=0.05, correction="holm-sidak",
+                     plot=True, n_jobs=1, n_perms=1000, **kwargs):
     """Compute distance & hierarchies; (optionally) make heatmaps."""
-    figs = {}
+    figs, dff, res_linkage, data, res_contrasts = {}, None, None, None, {}
     if kws_plot is None:
         kws_plot = dict(robust=True, figsize=(10, 10))
-    if kwargs:
-        print(f"\nUn-used Keyword Arguments: {kwargs}")
-    print(col_cell_type, col_target_genes)
+    kwargs = {"n_jobs": n_jobs, **kwargs}
 
-    # Distance Metrics
-    distance = pt.tl.Distance(distance_type, obsm_key=method)
-    data = distance.pairwise(adata, groupby=col_target_genes)
-    if plot is True:  # cluster heatmaps
-        if highlight_real_range is True:
-            vmin = np.min(np.ravel(data.values)[np.ravel(data.values) != 0])
-            if "vmin" in kws_plot:
-                warn(f"vmin already set in kwargs plot: {kws_plot['vmin']}\n"
-                     f" Setting to {vmin} as highlight_real_range is True.")
-            kws_plot.update(dict(vmin=vmin))
-        if "figsize" not in kws_plot:
-            kws_plot["figsize"] = (20, 20)
-        if "cmap" not in kws_plot:
-            kws_plot["cmap"] = "Reds_r"
-        figs[f"distance_heat_{distance_type}"] = clustermap(
-            data, **kws_plot)
-        plt.show()
+    # Initialize Distance Object
+    model = pt.tl.Distance(distance_type, obsm_key=method)
+
+    # Distance Metrics (Target Genes/Conditions)
+    data = model.pairwise(adata, groupby=col_target_genes, **kwargs)
 
     # Cluster Hierarchies
-    dff = distance.pairwise(adata, groupby=col_cell_type, verbose=True)
-    mat = linkage(dff, method="ward")
+    if col_cell_type is not None:
+        dff = model.pairwise(adata, groupby=col_cell_type, **kwargs)
+        res_linkage = linkage(dff, method="ward")  # linkage
+
+    # Contrasts (vs. Reference Cell Type &/or Target Gene)
+    cont = pt.tl.DistanceTest(distance_type, obsm_key=method, alpha=alpha,
+                              correction=correction, n_perms=n_perms)
+    for x in zip([col_cell_type, col_target_genes], [
+            key_cell_type, key_target_genes]):  # iterate cell, gene reference
+        if x[1] is not None:
+            ref = x[1] if isinstance(x[1], str) else x[1][0]
+            ann = adata if isinstance(x[1], str) else ann[
+                ann.obs[x[0]].isin(x[1])].copy()  # subset if list of groups
+            res_contrasts[" = ".join([x[0], ref])] = cont(
+                ann, x[0], contrast=ref)  # contrast
+    # Plot
     if plot is True:  # cluster hierarchies
-        _ = dendrogram(mat, labels=dff.index, orientation='left',
-                       color_threshold=0)
-        plt.xlabel('E-distance')
-        plt.ylabel('Leiden clusters')
-        plt.gca().yaxis.set_label_position("right")
-        figs[f"distance_cluster_hierarchies_{distance_type}"] = plt.gcf()
-        figs[f"distance_cluster_hierarchies_{distance_type}"].tight_layout()
-        plt.show()
-    return distance, data, dff, mat, figs
+        figs = cr.pl.plot_distance(
+            res_pairwise_genes=data, res_pairwise_clusters=dff,
+            res_linkage=res_linkage, distance_type=distance_type,
+            res_contrasts=res_contrasts, **kws_plot)  # plots
+    return model, data, dff, res_linkage, res_contrasts, figs
 
 
 def perform_gsea(pdata, adata_sc=None,

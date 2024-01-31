@@ -785,8 +785,10 @@ class Crispr(Omics):
         return data, results, figs_aug
 
     def compute_distance(self, distance_type="edistance", method="X_pca",
-                         layer=None, kws_plot=None, copy=True,
-                         col_condition=None, col_cell_type=None,
+                         layer=None, kws_plot=None, col_cell_type=None,
+                         col_condition=None, copy=True, subset=None,
+                         key_condition=None, key_cell_type=None,
+                         alpha=0.05, correction="holm-sidak",
                          highlight_real_range=False, plot=True, **kwargs):
         """
         Compute and visualize distance metrics.
@@ -798,10 +800,22 @@ class Crispr(Omics):
                 conditions between which to test distances
                 (e.g., perturbed vs. non-perturbed, target genes names,
                 guide RNA IDs).
+            key_cell_type (str, optional): Define to compare to
+                a reference cell type (key within `col_cell_type`).
+                Defaults to None.
+            key_condition (str, optional): Define to compare to
+                a reference condition (key within `col_condition`).
+                Defaults to None (will use "key_control"). Set to False
+                to avoid the additional steps running contrasts.
             method (str, optional): The method to use for
                 dimensionality reduction. Defaults to "X_pca".
             kws_plot (dict, optional): Additional keyword arguments
                 for plotting. Defaults to None.
+            subset (pd.Series, optional): A series of boolean
+                indicators by which to subset the data, e.g., to test
+                a limited set of conditions to reduce the issues with
+                multiple comparisons testing, or to focus on a set
+                of specific contrasts.
             highlight_real_range (bool, optional): Whether to highlight
                 the real range by setting minimum and maximum color
                 scaling based on properties of the data.
@@ -821,13 +835,16 @@ class Crispr(Omics):
                 See function documentation.
 
         """
-        col_condition, col_cell_type = [x[1] if x[1] else self._columns[x[
-            0]] for x in zip(["col_condition", "col_cell_type"], [
-                col_condition, col_cell_type])]  # default column labels
-        adata = self.rna.copy() if copy is True else self.rna
+        args = zip(["col_condition", "col_cell_type"],
+                   [col_condition, col_cell_type])
+        col_condition, col_cell_type = [
+            None if x[1] is False else self._columns[x[0]] if x[
+                1] is None else x[1] for x in args]  # default column labels
+        if key_condition in [None, False]:
+            key_condition = self._keys["key_control"] if (
+                key_condition is None) else None
+        adata = (self.rna[subset] if subset else self.rna).copy()
         if self.rna.obs[col_condition].isna().any():  # if any missing , drop
-            if copy is False:
-                warnings.warn(f"NAs in {col_condition}. Setting copy=True.")
             adata = adata[adata.obs[col_condition].dropna().index].copy()
         if layer:
             print(f"Using layer {layer} for distance calculation.")
@@ -837,7 +854,9 @@ class Crispr(Omics):
             adata, distance_type=distance_type, method=method,
             kws_plot=kws_plot, highlight_real_range=highlight_real_range,
             plot=plot, col_target_genes=col_condition,
-            col_cell_type=col_cell_type, **kwargs)  # compute/plot distance
+            alpha=alpha, correction=correction,
+            key_target_genes=key_condition, col_cell_type=col_cell_type,
+            key_cell_type=key_cell_type, **kwargs)  # compute/plot distance
         if plot is True:
             for x in [self.results, self.figures]:
                 if "distances" not in x:
