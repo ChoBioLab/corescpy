@@ -501,10 +501,10 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             print(traceback.format_exc())
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
-    sc.pp.calculate_qc_metrics(adata, qc_vars=patterns.keys(), log1p=log1p,
+    sc.pp.calculate_qc_metrics(adata, qc_vars=list(patterns), log1p=log1p,
                                percent_top=None, inplace=True)  # metrics
     nonzero = [adata.obs[f"total_counts_{q}"].max() > 0 for q in patterns]
-    qc_vars = list(np.array(patterns.keys())[np.where(nonzero)[0]]) if any(
+    qc_vars = list(np.array(list(patterns))[np.where(nonzero)[0]]) if any(
         nonzero) else []  # only plot MT, RB, HB if present
     pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
     for x in pct_n:  # replace NaN % (in case no mt, rb, hb) wth 0
