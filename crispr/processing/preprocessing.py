@@ -492,6 +492,8 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                      ["Mitochondrial", "Ribosomal", "Hemoglobin"]))
     p_names = [names[k] if k in names else k for k in patterns]  # "pretty"
     patterns_names = dict(zip(patterns, p_names))  # map abbreviated to pretty
+    rename_perc = dict(zip([f"pct_counts_{p}" for p in names], [
+        names[p] + " " + "%" + " of Counts" for p in names]))
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...")
     for k in patterns:
         try:
@@ -522,13 +524,14 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         fff, axs = plt.subplots(rrs, ccs, figsize=(
             5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
         try:
-            axf = axs.ravel() if rrs > 1 or ccs > 1 else [axs]
+            axf = axs.ravel() if rrs > 1 or ccs > 1 else axs
             for a, v in zip(axf, pct_n + ["n_genes_by_counts"]):
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a,
                                   show=False, color=h if yes else None,
                                   frameon=False)
-                    a.legend_.set_bbox_to_anchor((-0.2, -0.7))
+                    if a.legend_ is not None:
+                        a.legend_.set_bbox_to_anchor((-0.2, -0.7))
                     plt.show()
                 except Exception:
                     print(traceback.format_exc())
@@ -539,7 +542,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
                 [h] if yes else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
-                {"total_counts": "Total Counts in Cell",
+                {"total_counts": "Total Counts in Cell", **rename_perc,
                  "n_genes_by_counts": "Number of Genes Detected in Cell",
                  **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(

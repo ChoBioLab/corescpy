@@ -67,26 +67,40 @@ class Spatial(Omics):
             kwargs (dict, optional): Keyword arguments to pass to the
                 Omics class initialization method.
         """
+        # Initialize Omics Class
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
         if isinstance(visium, dict) or visium is True:
             if not isinstance(visium, dict):
                 visium = {}  # unpack file path & arguments
             file_path = sq.read.visium(file_path, **visium)  # read Visium
         super().__init__(file_path, **kwargs)  # Omics initialization
+
+        # Try to Infer Spatial File Path for Xenium (if unspecified)
         self._assay_spatial = "spatial"
+        if file_path_spatial is None and visium is False and (
+                self._assay_spatial not in self.adata.obsm) and isinstance(
+                    file_path, (str, os.PathLike)):
+            f_s = os.path.join(os.path.dirname(file_path), "cells.csv")
+            file_path_spatial = f_s if os.path.exists(
+                f_s) else f_s + ".gz" if os.path.exists(f_s + ".gz") else None
+
+        # Get Spatial Data
         if file_path_spatial:  # if need to read in additional spatial data
+            print("\n*** Retrieving spatial data from {file_path_spatial}\n")
             comp = "gzip" if ".gz" in file_path_spatial[-3:] else None
             dff = pd.read_csv(file_path_spatial, compression=comp,
                               index_col=0)  # read in spatial information
             self.adata.obs = self.adata.obs.join(dff, how="left")
             self.adata.obsm["spatial"] = self.adata.obs[
                 ["x_centroid", "y_centroid"]].copy().to_numpy()  # coordinates
+
+        # Print Information
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
-        print("\n\n", self.rna)
-        if "raw" not in dir(self.rna):
-            self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
+        # print("\n\n", self.rna)
+        # if "raw" not in dir(self.rna):
+        #     self.rna.raw = self.rna.copy()  # freeze normalized, filtered
         self._library_id = None
 
     def plot_spatial(self, color, include_umap=True,

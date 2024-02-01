@@ -468,8 +468,8 @@ def compute_distance(adata, distance_type="edistance",
             key_cell_type, key_target_genes]):  # iterate cell, gene reference
         if x[1] is not None:
             ref = x[1] if isinstance(x[1], str) else x[1][0]
-            ann = adata if isinstance(x[1], str) else ann[
-                ann.obs[x[0]].isin(x[1])].copy()  # subset if list of groups
+            ann = adata if isinstance(x[1], str) else adata[
+                adata.obs[x[0]].isin(x[1])].copy()  # subset if list of groups
             res_contrasts[" = ".join([x[0], ref])] = cont(
                 ann, x[0], contrast=ref)  # contrast
     # Plot

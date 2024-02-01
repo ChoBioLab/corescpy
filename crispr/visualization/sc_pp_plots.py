@@ -6,7 +6,7 @@ from matplotlib import pyplot as pl
 from matplotlib import rcParams
 from anndata import AnnData
 from adjustText import adjust_text
-from scanpy import _utils
+from scanpy.pl import _utils
 
 # ----------------------------------------------------------------------------
 # Plot result of preprocessing functions
@@ -52,7 +52,8 @@ def plot_hvgs(
     highly_variable_genes: bool = True,
     palette: Optional[Union[list, None]] = None
 ):
-    """Plot dispersions or normalized variance versus means for genes.
+    """
+    Plot dispersions or normalized variance versus means for genes.
 
     Produces Supp. Fig. 5c of Zheng et al. (2017) and MeanVarPlot() and
     VariableFeaturePlot() of Seurat.
@@ -123,8 +124,7 @@ def plot_hvgs(
             + (" (normalized)" if idx == 0 else " (not normalized)")
         )
 
-    _utils.savefig_or_show("filter_genes_dispersion", show=show, save=save,
-                           palette=palette)
+    _utils.savefig_or_show("filter_genes_dispersion", show=show, save=save)
     if show is False:
         return pl.gca()
 
@@ -137,7 +137,7 @@ def filter_genes_dispersion(
     save: Union[bool, str, None] = None,
     palette: Optional[Union[list, None]] = None
 ):
-    """\
+    """
     Plot dispersions versus means for genes.
 
     Produces Supp. Fig. 5c of Zheng et al. (2017) and MeanVarPlot()

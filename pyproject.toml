@@ -19,27 +19,31 @@ urls.Documentation = "https://github.com/easlinger/crispr/README.md"
 urls.Source = "https://github.com/easlinger/crispr"
 urls.Home-page = "https://github.com/easlinger/crispr"
 dependencies = [
+    # Base
     "anndata",
     "scanpy[leiden]",
     "muon",
-    # "pertpy >= 0.5.0 , !=0.6.0",
+    "celltypist",
+    # Perturbations/Conditions
     "pertpy >= 0.6.0",
     "ete3",
     "PyQt5",
     "harmonypy",
-    "squidpy",
     "pydeseq2",
+    "decoupler",
     "liana >= 1.0.4",
     "corneto",
     "graphviz",
     "cvxpy",
     "cylp",
-    # "pydeseq2,
     "arviz",
-    "celltypist",
+    # Spatial
+    "squidpy",
+    "tifffile",
+    "cellpose",
+    # Other
     "numpy >= 1.24.4",
     "seaborn >= 0.13.0",
-    "ete3",
     "scipy",
     "rich",
     "requests",
@@ -52,7 +56,6 @@ dependencies = [
     "toytree",
     "numpyro",
     "statannotations",
-    "decoupler",
     "ott-jax",
     "sparsecca",
     "numba",
