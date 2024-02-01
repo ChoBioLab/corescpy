@@ -4,9 +4,10 @@
 """
 Processing spatial data.
 
-Some functions adapted fromh www.10xgenomics.com/analysis-guides/<URL>
-(replace <URL> with page(s) noted in docstrings).
-long-url:
+Functions adapted from
+'https://www.10xgenomics.com/analysis-guides/performing-3d-nucleus-
+segmentation-with-cellpose-and-generating-a-feature-cell-matrix'.
+
 @author: E. N. Aslinger
 """
 
@@ -15,38 +16,77 @@ import csv
 import os
 import sys
 import re
+import crispr as cr
+import squidpy as sq
+import scanpy as sc
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
 import pandas as pd
 import numpy as np
+
+# Define constant.
+# z-slices are 3 microns apart
+Z_SLICE_MICRON = 3
+
+
+def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
+                 visium=False, spatial_key="spatial", library_id="tissue",
+                 col_gene_symbols="gene_symbols", prefix=None, gex_only=False,
+                 col_sample_id="library_key_spatial", **kwargs):
+    """Read Xenium or Visium spatial data into an AnnData object."""
+    missing_fps = file_path_spatial is None and visium is False
+    uns_spatial = kwargs.pop("uns_spatial", None)
+    _ = kwargs.pop("spatial", None)
+    if col_sample_id is None:
+        col_sample_id = "library_key_spatial"
+    if missing_fps:
+        f_s = os.path.join(os.path.dirname(file_path), "cells.csv")
+        file_path_spatial = f_s if os.path.exists(
+            f_s) else f_s + ".gz" if os.path.exists(f_s + ".gz") else None
+    if file_path_image is not None:
+        os.path.abspath(file_path_image)  # absolute path for reproducibility
+    if isinstance(visium, dict) or visium is True:
+        if not isinstance(visium, dict):
+            visium = {}  # unpack file path & arguments
+        adata = sq.read.visium(file_path, **visium)  # read Visium
+    else:
+        if isinstance(file_path, (str, os.PathLike)):
+            file_path = os.path.abspath(
+                file_path)  # absolute path for reproducibility
+            adata = sc.read_10x_mtx(
+                file_path, var_names=col_gene_symbols, cache=True,
+                gex_only=gex_only, prefix=prefix)  # read 10x
+        else:
+            adata = file_path.copy()
+        print(f"\n*** Retrieving spatial data from {file_path_spatial}\n")
+        comp = "gzip" if ".gz" in file_path_spatial[-3:] else None
+        dff = pd.read_csv(file_path_spatial, compression=comp, index_col=0)
+        adata.obs = adata.obs.join(dff, how="left")
+        adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]
+                                          ].copy().to_numpy()  # coordinates
+    if spatial_key not in adata.uns:
+        if uns_spatial is not None and "scalefactors" in uns_spatial:
+            uns_spatial["scalefactors"] = cr.tl.merge({
+                "tissue_hires_scalef": 1, "spot_diameter_fullres": 0.5
+                }, uns_spatial["scalefactors"])
+        adata.uns[spatial_key] = {library_id: cr.tl.merge(
+            {"images": {}, "metadata": {
+                "file_path": file_path, "source_image_path": file_path_image
+                }},  uns_spatial)}  # default spatial .uns merge w/ specified
+    if col_sample_id not in adata.obs:
+        adata.obs.loc[:, col_sample_id] = library_id
+    return adata
 
 
 def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):
     """Map Xenium transcripts to cells using CellPose."""
-#!/usr/bin/env python3
-
-import argparse
-import csv
-import os
-import sys
-import numpy as np
-import pandas as pd
-import re
-import scipy.sparse as sparse
-import scipy.io as sio
-import subprocess
-
-
-# Define constant.
-# z-slices are 3 microns apart i
-
-n morphology.ome.tif
-Z_SLICE_MICRON = 3
+    pass
 
 
 def segment(nuc_exp=10, file_cellpose=None, file_transcript=None,
-            rep_interval=10000, qv_cutoff=20):
+            rep_interval=10000, qv_cutoff=20, pix_size=1.7):
+    """Segment cells in spatial data."""
     # Check for existence of input file.
     if (not os.path.exists(file_cellpose)):
         raise ValueError(
@@ -151,10 +191,8 @@ def nearest_cell(x_pixel, y_pixel, z_slice,
                  pix_size=1.7, nuc_exp=10):
     """
     Check if nearest nucleus is within user-specified distance.
-    If function returns 0, it means no suitable nucleus was found.
 
-    Adapted: 10xgenomics page: `performing-3d-nucleus-segmentation-with
-    -cellpose-and-generating-a-feature-cell-matrix`
+    If function returns 0, it means no suitable nucleus was found.
     """
     # For Euclidean distance, we need to convert z-slice to z-micron
     slice_to_pixel = Z_SLICE_MICRON / pix_size
@@ -189,11 +227,7 @@ def nearest_cell(x_pixel, y_pixel, z_slice,
 
 def write_sparse_mtx(directory, matrix, cells, features):
     """
-    Write Xenium feature-cell matrix in
-    Seurat/Scanpy-compatible MTX format.
-
-    Adapted: 10xgenomics page: `performing-3d-nucleus-segmentation-with
-    -cellpose-and-generating-a-feature-cell-matrix`
+    Write Xenium feature-cell matrix in Seurat/Scanpy-compatible MTX.
     """
     # Create the matrix folder.
     os.mkdir(directory)
@@ -213,7 +247,7 @@ def write_sparse_mtx(directory, matrix, cells, features):
 
     # Write features as features.tsv. Write 3 columns to ensure
     # compatibility with Seurat/Scanpy.
-    with open(os.path.join(directory, "features.tsv", "w", newline="") as t:
+    with open(os.path.join(directory, "features.tsv"), "w", newline="") as t:
         writer = csv.writer(t, delimiter="\t", lineterminator="\n")
         for f in features:
             feature = str(f, "utf-8")
@@ -236,9 +270,6 @@ def extract_tiff(file_path="morphology.ome.tif", level=6, **kwargs):
 
     File path can be specified as a full file path or as the
     directory containing the file 'morphology.ome.tif'.
-
-    See 10xgenomics page: `performing-3d-nucleus-segmentation-with
-    -cellpose-and-generating-a-feature-cell-matrix`
     """
     if level < 0 or level > 6:
         raise ValueError("`level` must be between 0 and 6.")
@@ -259,9 +290,6 @@ def describe_tiff(file_path="morphology.ome.tif"):
 
     File path can be specified as a full file path or as the
     directory containing the file 'morphology.ome.tif'.
-
-    See 10xgenomics page: `performing-3d-nucleus-segmentation-with
-    -cellpose-and-generating-a-feature-cell-matrix`
     """
 
     if os.path.isdir(file_path):

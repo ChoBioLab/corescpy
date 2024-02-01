@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=line-too-long, invalid-name
 """
 @author: E. N. Aslinger
 """
 
 import os
+# import traceback
 import squidpy as sq
 import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
 from .class_sc import Omics
 import pandas as pd
+import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -69,30 +70,16 @@ class Spatial(Omics):
         """
         # Initialize Omics Class
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
-        if isinstance(visium, dict) or visium is True:
-            if not isinstance(visium, dict):
-                visium = {}  # unpack file path & arguments
-            file_path = sq.read.visium(file_path, **visium)  # read Visium
-        super().__init__(file_path, **kwargs)  # Omics initialization
+        self._file_path = file_path
+        self._spatial_key = "spatial"
+        super().__init__(file_path, spatial=True, visium=visium,
+                         file_path_spatial=file_path_spatial,
+                         **kwargs)  # Omics initialization
+        self.rna.uns["file_path"] = self._file_path
 
         # Try to Infer Spatial File Path for Xenium (if unspecified)
-        self._assay_spatial = "spatial"
-        if file_path_spatial is None and visium is False and (
-                self._assay_spatial not in self.adata.obsm) and isinstance(
-                    file_path, (str, os.PathLike)):
-            f_s = os.path.join(os.path.dirname(file_path), "cells.csv")
-            file_path_spatial = f_s if os.path.exists(
-                f_s) else f_s + ".gz" if os.path.exists(f_s + ".gz") else None
-
-        # Get Spatial Data
-        if file_path_spatial:  # if need to read in additional spatial data
-            print("\n*** Retrieving spatial data from {file_path_spatial}\n")
-            comp = "gzip" if ".gz" in file_path_spatial[-3:] else None
-            dff = pd.read_csv(file_path_spatial, compression=comp,
-                              index_col=0)  # read in spatial information
-            self.adata.obs = self.adata.obs.join(dff, how="left")
-            self.adata.obsm["spatial"] = self.adata.obs[
-                ["x_centroid", "y_centroid"]].copy().to_numpy()  # coordinates
+        self.figures["spatial"], self.results["spatial"] = {}, {}
+        self._library_id = list(self.rna.uns[self._spatial_key].keys())[0]
 
         # Print Information
         print("\n\n")
@@ -101,7 +88,33 @@ class Spatial(Omics):
         # print("\n\n", self.rna)
         # if "raw" not in dir(self.rna):
         #     self.rna.raw = self.rna.copy()  # freeze normalized, filtered
-        self._library_id = None
+        try:
+            self.print_tiff()
+        except Exception:
+            # print(traceback.format_exc())
+            print("\n\n\nCOULD NOT PRINT TIFF INFORMATION\n\n")
+
+    def read_parquet(self, directory=None, kind="transcripts"):
+        """
+        Read parquet file.
+
+        Specify 'transcripts', 'cell_boundaries', 'nucleus_boundaries'
+        or another file stem preceding '.parquet' as `kind`.
+        """
+        if directory is None:
+            directory = self._dir
+        for x in self.adata.uns["spatial"]:
+            file_parquet = os.path.join(os.path.dirname(self.rna.uns[
+                "spatial"][x]["metadata"]["file_path"]), f"{kind}.parquet")
+            return pd.read_parquet(file_parquet)
+
+    def print_tiff(self):
+        """Print information from tiff file."""
+        print(f"\n\n\n{'=' * 80}\nTIFF INFORMATION\n{'=' * 80}\n\n")
+        for x in self.adata.uns["spatial"]:
+            print(f"\n\t\t{'-' * 40}\n{x}\n{'-' * 40}\n\n")
+            cr.pp.describe_tiff(os.path.dirname(self.rna.uns[
+                "spatial"][x]["metadata"]["file_path"]))
 
     def plot_spatial(self, color, include_umap=True,
                      col_sample_id=None, library_id=None,
@@ -186,10 +199,8 @@ class Spatial(Omics):
 
         # Output
         if copy is False:
-            if "spatial" not in self.results:
-                self.results["spatial"] = {}
             self.results["spatial"]["receptor_ligand"] = res_rl
-            self.figures["spatial"] = figs
+            self.figures["spatial"]["receptor_ligand"] = figs
             self.rna = adata
             return figs
         else:
@@ -219,7 +230,7 @@ class Spatial(Omics):
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.spatial_neighbors(
             adata, coord_type=coord_type, delaunay=delaunay,
-            spatial_key=self._assay_spatial)  # spatial neighbor calculation
+            spatial_key=self._spatial_key)  # spatial neighbor calculation
         print("\t*** Computing & plotting centrality scores...")
         sq.gr.centrality_scores(adata, cluster_key=col_cell_type,
                                 n_jobs=n_jobs)  # centrality scores
@@ -233,10 +244,6 @@ class Spatial(Omics):
             fig.suptitle(title)
         print("\t*** Computing interaction matrix...")
         sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
-        if self._library_id is None and len(list(self.adata.uns[
-                self._assay_spatial].keys())) == 1:
-            print("<<< UPDATING SELF._LIBRARY_ID >>>")
-            self._library_id = list(adata.uns[self._assay_spatial].keys())[0]
         if copy is False:
             self.figures["centrality"] = fig
         return fig
@@ -304,7 +311,7 @@ class Spatial(Omics):
         if layer:
             adata.X = adata.layers[self._layers[layer]].X.copy()
         sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs,
-                            spatial_key=self._assay_spatial, **kwargs)
+                            spatial_key=self._spatial_key, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
             adata, color=col_cell_type, **kws_plot, groups=key_cell_type,

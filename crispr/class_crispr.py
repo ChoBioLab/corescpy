@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=line-too-long, invalid-name
 """
 @author: E. N. Aslinger
 """

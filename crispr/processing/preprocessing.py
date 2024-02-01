@@ -16,6 +16,7 @@ import traceback
 import seaborn
 import matplotlib.pyplot as plt
 # import anndata
+from copy import deepcopy
 from anndata import AnnData
 import crispr as cr
 from crispr.class_sc import Omics
@@ -47,37 +48,46 @@ def get_layer_dict():
 
 
 def create_object_multi(file_path, kws_init=None, kws_pp=None,
-                        kws_cluster=None, kws_harmony=True):
+                        kws_cluster=None, kws_harmony=True, spatial=False):
     """Create objects, then preprocess, cluster, & integrate them."""
     # Arguments
     ids = list(file_path.keys())
+    [kws_init, kws_pp, kws_cluster] = [
+        deepcopy(x) for x in [kws_init, kws_pp, kws_cluster]]
     [kws_init, kws_pp, kws_cluster] = [dict(zip(ids, x)) if isinstance(
         x, list) else dict(zip(ids, [x] * len(ids))) for x in [
             kws_init, kws_pp, kws_cluster]]  # dictionaries for each
 
+    if spatial is True:
+        for x in kws_init:
+            if "col_sample_id" not in kws_init[x]:
+                kws_init[x]["col_sample_id"] = "unique.idents"
+            # kws_init[x]["spatial"] = spatial
+
     # Create AnnData Objects
-    selves = dict(zip(file_path, [
-        Omics(file_path[f], **kws_init[f]) if (
+    selves = dict(zip(ids, [cr.pp.read_spatial(
+        file_path[f], **kws_init[f], library_id=f
+        ) if spatial is True else Omics(file_path[f], **kws_init[f]) if (
             "kws_process_guide_rna" not in kws_init) else cr.Crispr(
                 file_path[f], **kws_init[f]) for f in file_path])
                   )  # create individual objects
 
     # Preprocessing & Clustering
     for x in selves:  # preprocess & cluster each object
-        if kws_pp is not None:
+        if kws_pp[x] is not None:
             print(f"\n<<< PREPROCESSING {x} >>>")
             selves[x].preprocess(**kws_pp[x])
-        if kws_cluster is not None:
+        if kws_cluster[x] is not None:
             print(f"\n<<< CLUSTERING {x} >>>")
-            selves[x].cluster()
+            selves[x].cluster(**kws_cluster[x])
     print(f"\n<<< CONCATENATING OBJECTS: {', '.join(ids)} >>>")
-    col_id = selves[ids[0]]._columns["col_sample_id"]
-    if col_id is None:
-        col_id = "unique.idents"
+    col_id = kws_init[list(kws_init.keys())[0]]["col_sample_id"] if (
+        spatial is True) else selves[ids[0]]._columns["col_sample_id"]
     adata = AnnData.concatenate(
-        *[selves[x].adata for x in selves], join="outer", batch_key=col_id,
-        batch_categories=ids, uns_merge="same",
-        index_unique="-", fill_value=None)  # concatenate AnnData objects
+        *[selves[x] if spatial is True else selves[x].adata for x in selves],
+        join="outer", batch_key=col_id if col_id else "unique.idents",
+        batch_categories=ids, index_unique="-", fill_value=None,
+        uns_merge="unique" if spatial is True else "unique")  # concatenate
 
     # Integrate
     if kws_harmony is not None:
@@ -93,13 +103,23 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   kws_process_guide_rna=None, assay_gdo=None, raw=False,
-                  gex_only=False, prefix=None, **kwargs):
+                  gex_only=False, prefix=None, spatial=False, **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
     # Load Object (or Copy if Already AnnData or MuData)
-    _ = kwargs.pop("col_sample_id", None)
-    if isinstance(file, (str, os.PathLike)) and os.path.splitext(
+    csid = kwargs.pop("col_sample_id", None)
+
+    # Spatial Data
+    if spatial not in [None, False]:
+        kwargs = {**dict(file_path_spatial=None, file_path_image=None,
+                         visium=False, spatial_key="spatial", gex_only=False,
+                         library_id="Tissue", prefix=None, col_sample_id=csid,
+                         col_gene_symbols="gene_symbols"), **kwargs}
+        adata = cr.pp.read_spatial(file_path=file, **kwargs)
+
+    # Non-Spatial Data
+    elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
             file)[1] == ".h5mu":  # MuData
         print(f"\n\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
@@ -164,7 +184,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         cct = kws_process_guide_rna["col_cell_type"] if "col_cell_type" in (
             kws_process_guide_rna) else None  # to group counts ~ cell type
         cr.tl.print_counts(adata, title="Post-gRNA Processing", group_by=cct)
-        # TODO: FIGURE
 
     # Layers & QC
     layers = cr.pp.get_layer_dict()  # standard layer names

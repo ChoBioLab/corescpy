@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=line-too-long, invalid-name
 """
 @author: E. N. Aslinger
 """
@@ -141,7 +140,7 @@ class Omics(object):
             cr.tl.print_pretty_dictionary(q)
 
         # Create Object & Store Raw Counts
-        if kws_multi:
+        if kws_multi not in [False, None]:
             self._integrated = True
             self.adata = cr.pp.create_object_multi(
                 file_path, kws_init=dict(
@@ -253,8 +252,8 @@ class Omics(object):
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
         if "highly_variable" in self.rna.var:
-            print(f"\n\n{'=' * 80}\nHighly Variable Genes\n{'=' * 80}\n\n",
-                  self.rna.var.highly_variable.describe())
+            print(f"\n\n{'=' * 80}\nHighly Variable Genes\n{'=' * 80}\n\n")
+            print(self.rna.var.highly_variable.value_counts().to_markdown())
         print("\n\n\n")
 
     def describe(self, group_by=None, plot=False):
