@@ -18,7 +18,8 @@ import sys
 import re
 import crispr as cr
 import squidpy as sq
-import scanpy as sc
+# import scanpy as sc
+import spatialdata_io as sdio
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
@@ -33,49 +34,58 @@ Z_SLICE_MICRON = 3
 def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
                  visium=False, spatial_key="spatial", library_id="tissue",
                  col_gene_symbols="gene_symbols", prefix=None, gex_only=False,
-                 col_sample_id="library_key_spatial", **kwargs):
+                 col_sample_id="library_key_spatial", n_jobs=1, **kwargs):
     """Read Xenium or Visium spatial data into an AnnData object."""
-    missing_fps = file_path_spatial is None and visium is False
-    uns_spatial = kwargs.pop("uns_spatial", None)
-    _ = kwargs.pop("spatial", None)
-    if col_sample_id is None:
-        col_sample_id = "library_key_spatial"
-    if missing_fps:
-        f_s = os.path.join(os.path.dirname(file_path), "cells.csv")
-        file_path_spatial = f_s if os.path.exists(
-            f_s) else f_s + ".gz" if os.path.exists(f_s + ".gz") else None
-    if file_path_image is not None:
-        os.path.abspath(file_path_image)  # absolute path for reproducibility
+    # missing_fps = file_path_spatial is None and visium is False
+    # uns_spatial = kwargs.pop("uns_spatial", None)
+    # _ = kwargs.pop("spatial", None)
+    # if col_sample_id is None:
+    #     col_sample_id = "library_key_spatial"
+    # if missing_fps:
+    #     f_s = os.path.join(os.path.dirname(file_path), "cells.csv")
+    #     file_path_spatial = f_s if os.path.exists(
+    #         f_s) else f_s + ".gz" if os.path.exists(f_s + ".gz") else None
+    # if file_path_image is not None:
+    #     os.path.abspath(file_path_image)  # absolute for reproducibility
+    # if isinstance(visium, dict) or visium is True:
+    #     if not isinstance(visium, dict):
+    #         visium = {}  # unpack file path & arguments
+    #     adata = sq.read.visium(file_path, **visium)  # read Visium
+    # else:
+    #     if isinstance(file_path, (str, os.PathLike)):
+    #         file_path = os.path.abspath(
+    #             file_path)  # absolute path for reproducibility
+    #         adata = sc.read_10x_mtx(
+    #             file_path, var_names=col_gene_symbols, cache=True,
+    #             gex_only=gex_only, prefix=prefix)  # read 10x
+    #     else:
+    #         adata = file_path.copy()
+    #     print(f"\n*** Retrieving spatial data from {file_path_spatial}\n")
+    #     comp = "gzip" if ".gz" in file_path_spatial[-3:] else None
+    #     dff = pd.read_csv(file_path_spatial, compression=comp, index_col=0)
+    #     adata.obs = adata.obs.join(dff, how="left")
+    #     adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]
+    #                                       ].copy().to_numpy()  # coordinates
+    # if spatial_key not in adata.uns:
+    #     if uns_spatial is not None and "scalefactors" in uns_spatial:
+    #         uns_spatial["scalefactors"] = cr.tl.merge({
+    #             "tissue_hires_scalef": 1, "spot_diameter_fullres": 0.5
+    #             }, uns_spatial["scalefactors"])
+    #     adata.uns[spatial_key] = {library_id: cr.tl.merge(
+    #         {"images": {}, "metadata": {
+    #             "file_path": file_path, "source_image_path": file_path_image
+    #             }},  uns_spatial)}  # default spatial .uns merge w/ specified
+    # if col_sample_id not in adata.obs:
+    #     adata.obs.loc[:, col_sample_id] = library_id
     if isinstance(visium, dict) or visium is True:
         if not isinstance(visium, dict):
             visium = {}  # unpack file path & arguments
         adata = sq.read.visium(file_path, **visium)  # read Visium
     else:
-        if isinstance(file_path, (str, os.PathLike)):
-            file_path = os.path.abspath(
-                file_path)  # absolute path for reproducibility
-            adata = sc.read_10x_mtx(
-                file_path, var_names=col_gene_symbols, cache=True,
-                gex_only=gex_only, prefix=prefix)  # read 10x
-        else:
-            adata = file_path.copy()
-        print(f"\n*** Retrieving spatial data from {file_path_spatial}\n")
-        comp = "gzip" if ".gz" in file_path_spatial[-3:] else None
-        dff = pd.read_csv(file_path_spatial, compression=comp, index_col=0)
-        adata.obs = adata.obs.join(dff, how="left")
-        adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]
-                                          ].copy().to_numpy()  # coordinates
-    if spatial_key not in adata.uns:
-        if uns_spatial is not None and "scalefactors" in uns_spatial:
-            uns_spatial["scalefactors"] = cr.tl.merge({
-                "tissue_hires_scalef": 1, "spot_diameter_fullres": 0.5
-                }, uns_spatial["scalefactors"])
-        adata.uns[spatial_key] = {library_id: cr.tl.merge(
-            {"images": {}, "metadata": {
-                "file_path": file_path, "source_image_path": file_path_image
-                }},  uns_spatial)}  # default spatial .uns merge w/ specified
-    if col_sample_id not in adata.obs:
-        adata.obs.loc[:, col_sample_id] = library_id
+        # sdata = sdio.xenium(file_path, n_jobs=n_jobs)
+        # adata = sdata.table
+        # adata.uns["sdata"] = sdata
+        adata = sdio.xenium(file_path, n_jobs=n_jobs)
     return adata
 
 

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pertpy as pt
 import liana
 import decoupler
+import spatialdata
 import traceback
 from warnings import warn
 import functools
@@ -159,8 +160,10 @@ class Omics(object):
         print(self.adata.obs, "\n\n") if assay else None
 
         # Let Property Setters Run
-        self.rna = self.adata[self._assay] if self._assay else self.adata
-        self.obs = self.adata.obs
+        self.rna = self.adata.table if isinstance(
+            self.adata, spatialdata.SpatialData) else self.adata[
+                self._assay] if self._assay else self.adata
+        self.obs = self.rna.obs
         self.uns = self.rna.uns
         self.var = self.rna.var
         if "raw" not in dir(self.rna):
@@ -168,15 +171,18 @@ class Omics(object):
         if self._columns["col_cell_type"] in self.rna.obs and not isinstance(
                 self.rna.obs[self._columns["col_cell_type"]], pd.Categorical):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
-                self._columns["col_cell_type"]].astype("category")  # object -> category
-        print("\n\n", self.rna)
-        print(self.rna.var.head())
-        print(self.rna.obs.head())
+                self._columns["col_cell_type"]].astype("category")  # category
+        print("\n\n", self.rna, "\n\n", self.rna.var.head(),
+              "\n\n", self.rna.obs.head())
 
     @property
     def rna(self):
         """Get RNA modality of AnnData."""
-        return self.adata[self._assay] if self._assay else self.adata
+        if isinstance(self.adata, spatialdata.SpatialData):
+            rna = self.adata.table
+        else:
+            rna = self.adata[self._assay] if self._assay else self.adata
+        return rna
 
     @rna.setter
     def rna(self, value) -> None:
@@ -187,6 +193,10 @@ class Omics(object):
             # self.adata = muon.MuData({**dict(zip(self.adata.mod.keys(), [
             #     self.adata[x] for x in self.adata.mod.keys()])),
             #                           self._assay: value})
+        elif isinstance(self.adata, spatialdata.SpatialData):
+            if self.adata.table is not None:
+                del(self.adata.table)
+            self.adata.table = value
         else:
             if self._assay:
                 self.adata[self._assay] = value
@@ -196,11 +206,11 @@ class Omics(object):
     @property
     def obs(self):
         """Get `.obs` attribute of AnnData."""
-        return self.adata.obs
+        return self.rna.obs
 
     @obs.setter
     def obs(self, value) -> None:
-        self.adata.obs = value
+        self.rna.obs = value
 
     @property
     def gex(self):
@@ -220,11 +230,13 @@ class Omics(object):
     @property
     def uns(self):
         """Get `.uns` attribute of adata's gene expression modality."""
-        return (self.adata[self._assay] if self._assay else self.adata).uns
+        return self.rna.uns
 
     @uns.setter
     def uns(self, value) -> None:
-        if self._assay:
+        if isinstance(self.adata, spatialdata.SpatialData):
+            self.adata.table.uns = value
+        elif self._assay:
             self.adata[self._assay].uns = value
         else:
             self.adata.uns = value
@@ -234,17 +246,29 @@ class Omics(object):
     @property
     def var(self):
         """Get `.var` attribute of .adata's gene expression modality."""
-        return (self.adata[self._assay] if self._assay else self.adata).var
+        return self.rna.var
 
     @var.setter
     def var(self, value) -> None:
-        if isinstance(self.adata, muon.MuData):
+        if isinstance(self.adata, spatialdata.SpatialData):
+            self.adata.table.var = value
+        elif isinstance(self.adata, muon.MuData):
             self.adata.mod[self._assay].var = value
             self.adata.update()
         elif self._assay:
             self.adata[self._assay].var = value
         else:
             self.adata.var = value
+
+    def get_layer(self, layer=None, subset=None, inplace=False):
+        """Get layer (and optionally, subset)."""
+        rna = self.rna.copy() if inplace is False else self.rna
+        if layer:
+            layer = layer if layer in rna.layers else self._layers[layer]
+        rna.X = rna.layers[layer].copy()
+        if subset not in [None, False]:
+            rna = rna[subset]
+        return rna
 
     def print(self):
         print(self.rna.obs.head(), "\n\n")
@@ -380,10 +404,7 @@ class Omics(object):
         condition(s) (string for 1 condition or list for 2, or None
         to default to `self._columns["col_condition"]`).
         """
-        ann = (self.rna if subset is None else self.rna[subset]).copy()
-        if layer:
-            ann.X = (ann.layers[layer] if layer in ann.layers else ann.layers[
-                self._layers[layer]]).copy()
+        ann = self.get_layer(layer=layer, inplace=False)
         con, cct = [x[1] if x[1] else self._columns[x[0]]
                     for x in zip(["col_condition", "col_cell_type"], [
                         col_condition, col_cell_type])]  # specs v. default
@@ -434,8 +455,7 @@ class Omics(object):
             kws_scale = {**znorm_default, **kws_scale}  # merge arguments
         self.info["methods"]["scale"] = kws_scale
         kws.update(dict(kws_scale=kws_scale))
-        adata = self.rna.copy()
-        adata.X = adata.layers[layer]  # use specified layer
+        adata = self.get_layer(layer=layer, inplace=False)
         adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
         # if assay_protein is not None:  # if includes protein assay
         #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
@@ -449,10 +469,12 @@ class Omics(object):
             #     self.adata[assay_protein] = ad_p
         return adata, figs
 
-    def downsample(self, subset=None, assay=None, counts_per_cell=None,
+    def downsample(self, subset=None, counts_per_cell=None,
                    total_counts=None, replace=False, seed=1618, **kwargs):
         """Downsample counts/`.X` (optionally, of a subset). NOT IN-PLACE."""
-        adata = self.adata[assay].copy() if assay else self.adata.copy()
+        adata = self.rna.copy()
+        if kwargs:
+            pass
         if subset is not None:
             adata = adata[subset]  # subset if desired
         kws = dict(counts_per_cell=counts_per_cell, total_counts=total_counts,
@@ -493,13 +515,10 @@ class Omics(object):
             for x in ["col_sample_id", "col_batch", "col_subject"]:
                 if self._columns[x]:  # add UMAPs ~ ID
                     colors += [self._columns[x]]
-        ann = self.rna.copy()
+        ann = self.get_layer(layer=layer, inplace=False)
         if copy is False:
             self.info["methods"]["clustering"] = method_cluster
         ann.obs.loc[:, "method_cluster"] = method_cluster
-        if layer is not None:
-            ann.X = ann.layers[layer if (
-                layer in self._layers) else self._layers[layer]].copy()
         kws = dict(
             method_cluster=method_cluster, kws_pca=kws_pca,
             kws_neighbors=kws_neighbors, kws_umap=kws_umap,
@@ -605,9 +624,7 @@ class Omics(object):
         if col_condition is None:
             col_condition = self._columns["col_condition"]
         figsize = (20, 8)  # per facet for violin plots
-        adata, figs = self.rna.copy(), {}
-        if layer is not None:
-            adata.X = adata.layers[layer]
+        adata, figs = self.get_layer(layer=layer, inplace=False), {}
         col = self._columns["col_perturbed" if (
             "col_perturbed" in self._columns) else "col_condition"]
         d_l = pt.tl.Dialogue(
@@ -747,9 +764,7 @@ class Omics(object):
             None if col_kws[x] is False else self._columns[x] if col_kws[
                 x] in [None, True] else col_kws[x] for x in col_kws
             ]  # ignore ID/condition if argue False; else use default if need
-        if layer and layer not in self.adata.layers:
-            layer = self.adata._layers[layer]
-        adata = (self.rna[subset] if subset is not None else self.rna).copy()
+        adata = self.get_layer(layer=layer, inplace=False, subset=subset)
 
         # Differential Expression Analysis (DEA), Optionally
         if col_condition is not None:

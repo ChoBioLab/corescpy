@@ -14,6 +14,7 @@ import muon
 from warnings import warn
 import traceback
 import seaborn
+import spatialdata
 import matplotlib.pyplot as plt
 # import anndata
 from copy import deepcopy
@@ -47,8 +48,8 @@ def get_layer_dict():
     return lays
 
 
-def create_object_multi(file_path, kws_init=None, kws_pp=None,
-                        kws_cluster=None, kws_harmony=True, spatial=False):
+def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
+                        kws_cluster=None, kws_harmony=True, n_jobs=1):
     """Create objects, then preprocess, cluster, & integrate them."""
     # Arguments
     ids = list(file_path.keys())
@@ -83,11 +84,18 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None,
     print(f"\n<<< CONCATENATING OBJECTS: {', '.join(ids)} >>>")
     col_id = kws_init[list(kws_init.keys())[0]]["col_sample_id"] if (
         spatial is True) else selves[ids[0]]._columns["col_sample_id"]
-    adata = AnnData.concatenate(
-        *[selves[x] if spatial is True else selves[x].adata for x in selves],
-        join="outer", batch_key=col_id if col_id else "unique.idents",
-        batch_categories=ids, index_unique="-", fill_value=None,
-        uns_merge="unique" if spatial is True else "unique")  # concatenate
+    if isinstance(selves[list(selves.keys())[0]], spatialdata.SpatialData):
+        adata = spatialdata.concatenate(
+            [selves[x] for x in selves], region_key=col_id, join="outer",
+            batch_key=col_id if col_id else "unique.idents",
+            batch_categories=ids, index_unique="-", fill_value=None,
+            uns_merge="unique")  # concatenate spatial
+    else:
+        adata = AnnData.concatenate(
+            *[selves[x].adata for x in selves],
+            join="outer", batch_key=col_id if col_id else "unique.idents",
+            batch_categories=ids, index_unique="-", fill_value=None,
+            uns_merge="same")  # concatenate adata
 
     # Integrate
     if kws_harmony is not None:
@@ -161,16 +169,24 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
             warn("Unable to set adata to adata.raw (attribute not in adata).")
 
     # Formatting & Initial Counts
-    adata.var_names_make_unique()
     try:
-        adata.obs_names_make_unique()
+        (adata.table if isinstance(adata, spatialdata.SpatialData) else adata
+         ).var_names_make_unique()
+    except Exception:
+        print(traceback.format_exc())
+        warn("\n\n\nCould not make var names unique.")
+    try:
+        (adata.table if isinstance(adata, spatialdata.SpatialData) else adata
+         ).obs_names_make_unique()
     except Exception:
         print(traceback.format_exc())
         warn("\n\n\nCould not make obs names unique.")
     cr.tl.print_counts(adata, title="Initial")
 
     # Gene Symbols -> Index of .var
-    rename_var_index(adata, assay=assay, col_gene_symbols=col_gene_symbols)
+    rename_var_index(adata.table if isinstance(
+        adata, spatialdata.SpatialData) else adata,
+                     assay=assay, col_gene_symbols=col_gene_symbols)
 
     # Process Guide RNA
     if kws_process_guide_rna not in [None, False]:
@@ -187,8 +203,12 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
 
     # Layers & QC
     layers = cr.pp.get_layer_dict()  # standard layer names
-    if layers["counts"] not in (adata[assay] if assay else adata).layers:
-        if assay:
+    rna = adata.table if isinstance(adata, spatialdata.SpatialData
+                                    ) else adata[assay] if assay else adata
+    if layers["counts"] not in rna.layers:
+        if isinstance(adata, spatialdata.SpatialData):
+            adata.table.layers[layers["counts"]] = adata.table.X.copy()
+        elif assay:
             adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
         else:
             adata.layers[layers["counts"]] = adata.X.copy()
@@ -543,7 +563,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         fff, axs = plt.subplots(rrs, ccs, figsize=(
             5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
         try:
-            axf = axs.ravel() if rrs > 1 or ccs > 1 else axs
+            axf = axs.ravel() if rrs > 1 or ccs > 1 else [axs]
             for a, v in zip(axf, pct_n + ["n_genes_by_counts"]):
                 try:  # facet "v" of scatterplot
                     sc.pl.scatter(adata, x="total_counts", y=v, ax=a,

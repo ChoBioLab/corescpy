@@ -24,7 +24,7 @@ class Spatial(Omics):
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(self, file_path, file_path_spatial=None,
-                 visium=False, **kwargs):
+                 visium=False, library_id="tissue", **kwargs):
         """
         Initialize Crispr class object.
 
@@ -75,24 +75,15 @@ class Spatial(Omics):
         super().__init__(file_path, spatial=True, visium=visium,
                          file_path_spatial=file_path_spatial,
                          **kwargs)  # Omics initialization
-        self.rna.uns["file_path"] = self._file_path
 
         # Try to Infer Spatial File Path for Xenium (if unspecified)
         self.figures["spatial"], self.results["spatial"] = {}, {}
-        self._library_id = list(self.rna.uns[self._spatial_key].keys())[0]
+        self._library_id = library_id
 
         # Print Information
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
-        # print("\n\n", self.rna)
-        # if "raw" not in dir(self.rna):
-        #     self.rna.raw = self.rna.copy()  # freeze normalized, filtered
-        try:
-            self.print_tiff()
-        except Exception:
-            # print(traceback.format_exc())
-            print("\n\n\nCOULD NOT PRINT TIFF INFORMATION\n\n")
 
     def read_parquet(self, directory=None, kind="transcripts"):
         """
@@ -104,7 +95,7 @@ class Spatial(Omics):
         if directory is None:
             directory = self._dir
         for x in self.adata.uns["spatial"]:
-            file_parquet = os.path.join(os.path.dirname(self.rna.uns[
+            file_parquet = os.path.join(os.path.dirname(self.adata.uns[
                 "spatial"][x]["metadata"]["file_path"]), f"{kind}.parquet")
             return pd.read_parquet(file_parquet)
 
@@ -113,7 +104,7 @@ class Spatial(Omics):
         print(f"\n\n\n{'=' * 80}\nTIFF INFORMATION\n{'=' * 80}\n\n")
         for x in self.adata.uns["spatial"]:
             print(f"\n\t\t{'-' * 40}\n{x}\n{'-' * 40}\n\n")
-            cr.pp.describe_tiff(os.path.dirname(self.rna.uns[
+            cr.pp.describe_tiff(os.path.dirname(self.adata.uns[
                 "spatial"][x]["metadata"]["file_path"]))
 
     def plot_spatial(self, color, include_umap=True,
@@ -142,7 +133,7 @@ class Spatial(Omics):
             color=[color] if isinstance(color, str) else color,
             cmap=cmap, alt_var=self._columns["col_gene_symbols"] if (
                 self._columns["col_gene_symbols"
-                              ] != self.rna.var.index.names[0]) else None,
+                              ] != self.adata.var.index.names[0]) else None,
             **kwargs)
         return figs
 
@@ -154,9 +145,7 @@ class Spatial(Omics):
                         seed=1618, cmap="magma", copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
-        adata = self.rna if copy is False else self.rna.copy()
-        layer = self._layers[layer] if layer in self._layers else layer
-        adata.X = adata.layers[layer]  # set data layer
+        adata = self.get_layer(layer=layer, subset=None, inplace=False)
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         if not library_id:
@@ -201,7 +190,7 @@ class Spatial(Omics):
         if copy is False:
             self.results["spatial"]["receptor_ligand"] = res_rl
             self.figures["spatial"]["receptor_ligand"] = figs
-            self.rna = adata
+            self.adata = adata
             return figs
         else:
             return adata, figs
@@ -215,7 +204,7 @@ class Spatial(Omics):
         """
         # Connectivity & Centrality
         print("\t*** Building connectivity matrix...")
-        adata = self.rna.copy() if copy is True else self.rna
+        adata = self.adata.copy() if copy is True else self.adata
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         figsize = (figsize, figsize) if isinstance(figsize, (
@@ -237,7 +226,7 @@ class Spatial(Omics):
         # adata.uns["spatial"][
         #     "library_id"] = col_sample_id if col_sample_id not in [
         #         None, False] else self._columns["col_sample_id"]  # library ID
-        sq.pl.centrality_scores(adata, cluster_key=col_cell_type,
+        sq.pl.centrality_scores(adata.table, cluster_key=col_cell_type,
                                 figsize=figsize)
         fig = plt.gcf()
         if title:
@@ -255,7 +244,7 @@ class Spatial(Omics):
                                figsize=None, cmap="magma", vcenter=0,
                                cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
-        adata = self.rna.copy() if copy is True else self.rna
+        adata = self.adata
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         if cbar_range is None:
@@ -275,14 +264,14 @@ class Spatial(Omics):
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         sq.pl.nhood_enrichment(
-            adata, cluster_key=col_cell_type, title=title, vcenter=vcenter,
-            cmap=cmap, vmin=cbar_range[0], vmax=cbar_range[1],
-            ax=axs[0])  # matrix/heat of enrichment scores (panel 1)
-        sq.pl.spatial_scatter(adata, color=col_cell_type, shape=shape,
+            adata.table, cluster_key=col_cell_type, title=title,
+            vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
+            cmap=cmap, ax=axs[0])  # matrix/heat: enrichment scores (panel 1)
+        sq.pl.spatial_scatter(adata.table, color=col_cell_type, shape=shape,
                               ax=axs[1], **kws_plot)  # scatterplot (panel 2)
         if copy is False:
             self.figures["neighborhood_enrichment"] = plt.gcf()
-        return fig
+        return adata, fig
 
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
                           layer=None, copy=False, n_jobs=None,
@@ -293,9 +282,10 @@ class Spatial(Omics):
         enrichment analysis, but uses original spatial coordinates rather
         than connectivity matrix).
         """
+        adata = self.adata
         if isinstance(key_cell_type, str):
             key_cell_type = [key_cell_type]
-        figs, adata = {}, self.rna.copy() if copy is True else self.rna
+        figs = {}
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
@@ -308,45 +298,36 @@ class Spatial(Omics):
             col_cell_type = self._columns["col_cell_type"]
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
-        if layer:
-            adata.X = adata.layers[self._layers[layer]].X.copy()
         sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs,
                             spatial_key=self._spatial_key, **kwargs)
         figs["co_occurrence"] = {}
         figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata, color=col_cell_type, **kws_plot, groups=key_cell_type,
-            figsize=figsize, return_ax=True, shape=shape)  # cell types plot
+            adata.table, color=col_cell_type, groups=key_cell_type,
+            figsize=figsize, return_ax=True, shape=shape,
+            **kws_plot)  # cell types plot
         if title:
             figs["spatial_scatter"].suptitle(title)
         # figs["co_occurrence"] = sq.pl.co_occurrence(
         #     adata, cluster_key=col_cell_type, legend=False,
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         figs["co_occurrence"] = cr.pl.plot_cooccurrence(
-            adata, col_cell_type=col_cell_type, **kws_plot,
-            key_cell_type=key_cell_type, figsize=figsize)  # plot
+            adata.table, col_cell_type=col_cell_type, **kws_plot,
+            key_cell_type=key_cell_type, figsize=figsize)  # lines plot
         if title:
             figs["co_occurrence"].suptitle(title)
         if copy is False:
             self.figures["co_occurrence"] = figs["co_occurrence"]
         return adata, figs
 
-    def find_svgs(self, genes=None, method="moran", n_perms=10, layer=None,
-                  library_id=None, copy=False, col_cell_type=None, title=None,
-                  col_sample_id=None, n_jobs=None, figsize=15,
-                  shape="hex", kws_plot=None):
+    def find_svgs(self, genes=10, method="moran", shape="hex", n_perms=10,
+                  layer=None, library_id=None, col_cell_type=None, title=None,
+                  col_sample_id=None, n_jobs=2, figsize=15, kws_plot=None):
         """Find spatially-variable genes."""
-        adata = self.rna.copy() if copy else self.rna
-        if layer:
-            adata.X = adata.layers[layer if layer in adata else self._layers[
-                layer]].X.copy()
-        kws_plot = {"cmap": "magma", "use_raw": False,
-                    "layer": layer, **dict(kws_plot if kws_plot else {})}
-        if not library_id:
-            library_id = self._library_id
-        if n_jobs is None and n_jobs is not False:
+        adata = self.adata
+        adata.table = self.get_layer(layer=layer, subset=None, inplace=False)
+        kws_plot = cr.tl.merge({"cmap": "magma", "use_raw": False}, kws_plot)
+        if n_jobs == -1:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
-        if genes is None:
-            genes = 10  # plot top 10 variable genes if un-specified
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         figsize = (figsize, figsize) if isinstance(figsize, (
@@ -359,12 +340,12 @@ class Spatial(Omics):
         #             **dict(kws_plot if kws_plot else {})}
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
         sq.gr.spatial_autocorr(
-            self.rna, mode=method, layer=layer, n_perms=n_perms,
+            adata, mode=method, layer=layer, n_perms=n_perms,
             n_jobs=n_jobs)  # auto-correlate
         if isinstance(genes, int):
-            genes = adata.uns["moranI"].head(genes).index.values
+            genes = self.rna.uns["moranI"].head(genes).index.values
         ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
-        sq.pl.spatial_scatter(adata, color=genes + [col_cell_type],
+        sq.pl.spatial_scatter(adata.table, color=genes + [col_cell_type],
                               figsize=figsize, shape=shape, ncols=ncols,
                               library_id=library_id, **kws_plot)  # cell type
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
@@ -372,19 +353,16 @@ class Spatial(Omics):
         fig = plt.gcf()
         if title:
             fig.suptitle(title)
-        if copy is False:
-            self.figures["svg"] = fig
-        return fig
+        return adata, fig
 
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):
         """
         Use Ripley's statistics to determine whether distributions are
         random, dispersed, or clustered.
         """
+        adata = self.adata
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        sq.gr.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
-        fig = sq.pl.ripley(self.rna, cluster_key=col_cell_type, mode=mode)
-        if copy is False:
-            self.figures["distribution_patterns"] = fig
-        return fig
+        sq.gr.ripley(adata, cluster_key=col_cell_type, mode=mode)
+        fig = sq.pl.ripley(self.adata, cluster_key=col_cell_type, mode=mode)
+        return adata, fig

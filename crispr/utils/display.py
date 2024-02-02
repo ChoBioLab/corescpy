@@ -1,5 +1,6 @@
 import re
 import h5py
+import spatialdata
 import pandas as pd
 import numpy as np
 
@@ -106,6 +107,9 @@ def explore_h5_file(file):
 def print_counts(adata, group_by=None, title="Total", **kwargs):
     if kwargs:
         pass
+    adata = (adata.table if isinstance(adata, spatialdata.SpatialData
+                                       ) else adata).copy()
+    print('dsfasfda', adata)
     print(f"\n\n{'=' * 80}\nCell Counts: {title}\n{'=' * 80}\n")
     print(f"\nObservations: {adata.n_obs}\n")
     if group_by is not None and group_by in adata.obs:
