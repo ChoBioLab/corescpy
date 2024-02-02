@@ -151,7 +151,7 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
             #                 bbox_to_anchor=(3,1), title='Annotation')
             #     # Add back the original Legend (was overwritten by new)
             # _ = plt.gca().add_artist(l_1)
-        return figs
+    return figs
 
 
 def plot_umap_circled(adata, col_cell_type, cell_types_circle,

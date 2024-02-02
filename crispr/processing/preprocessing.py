@@ -337,7 +337,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     n_top = kwargs.pop("n_top", 10)
     sids = [np.nan if f"col_{x}" not in kwargs else np.nan if kwargs[
         f"col_{x}"] is None else kwargs[f"col_{x}"]for x in [
-            "batch", "sample_id", "subject"]]  # batch/sample/subject
+            "sample_id", "subject", "batch"]]  # batch/sample/subject
     sids = list(pd.Series(sids).dropna().unique())  # unique & not None
     if len(sids) == 0:
         sids = None
@@ -552,6 +552,11 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         adata.obs.loc[adata.obs[x].isnull(), x] = 0
     patterns_names = dict(zip(qc_vars, [patterns_names[k] for k in qc_vars]))
     hhh, yes = [hue] if isinstance(hue, str) or hue is None else hue, True
+    if len(hhh) > 1:  # only include sample ID as hue if others only 1 value
+        hht = list(np.array(hhh)[np.where([
+            len(adata.obs[h].unique()) > 1 for h in hhh])[0]])
+        hhh = list(pd.unique(hht if len(hht) > 0 else [hhh[0]])
+                   )  # if no non-unique hues, still color by subject
     for h in hhh:
         if h not in adata.obs and h not in adata.var:
             if h is not None:

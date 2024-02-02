@@ -12,7 +12,7 @@ Correspondence: elizabeth.aslinger@aya.yale.edu
 
 1. Open a Unix terminal (often Ctrl + Alt  + T on Linux).
 
-2. Install conda environment from .yml file (replace "env-crispr" 
+2. Install conda environment from .yml file (replace "env-crispr"
 with desired environment name):
 `conda create -n crispr python=3.10.4  # create python environment`
 
@@ -23,7 +23,7 @@ with desired environment name):
 `git clone https://github.com/ChoBioLab/crispr.git`, or
 look above for the green "Code" button and press it for instructions.
 
-5. Naviate to the repository directory (replace 
+5. Naviate to the repository directory (replace
 <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
@@ -32,14 +32,14 @@ look above for the green "Code" button and press it for instructions.
 
 ## Usage
 
-1. You can now load `crispr` like any other distributed Python package. 
+1. You can now load `crispr` like any other distributed Python package.
 Open a Python terminal and type:
 `import crispr as cr`
 
-2. You can now call functions from the analysis module using 
+2. You can now call functions from the analysis module using
 `cr.ax.<FUNCTION>()`, from the preprocessing using `cr.ax.pp...`, etc.
 in Python; however, you are most likely to interact with the `Crispr`
-class object. Here is example code you might run 
+class object. Here is example code you might run
 (replacing <...> with your argument specifications) to load and
 preprocess your data.
 ```
@@ -71,8 +71,8 @@ Certain arguments used throughout the `crispr` package (including outside the `c
 
 * Arguments starting in `col_` and `key_`
     - The "col_" prefix indicates that an argument refers to a column name (often in `.adata.obs` or `.adata.var`), while the "key_" prefix means you're meant to specify a type of entry in a column. For instance, assume the column "condition" contains the names of different experimental conditions (drug A, drug B, drug C). In a function where you want to compare, for instance, drug A vs. control, you would specify `key_treatment="drug A"` and k
-    - These names may 
-        * already exist (or will exist in the `.adata` attribute immediately upon creating the AnnData object from the data file) or 
+    - These names may
+        * already exist (or will exist in the `.adata` attribute immediately upon creating the AnnData object from the data file) or
         * may yet to be created, namely, after object initialization by running the object's methods. Thus, you may specify what you want certain columns to be named (e.g., the binary perturbed/non-perturbed column) or what entries within a column will be called (e.g., "Control" for rows within the `col_control` corresponding to cells that have control guide RNA IDs in `col_guide_rna`), for aesthetics, customizability to your design/interpretability, and/or to avoid duplicating pre-existing names.
     - These arguments will be entered as items (with the argument names as keys) in dictionaries stored in the object attributes `._columns` and `._keys`, respectively.
     - These arguments will often be passed by default (or will force them as specifications) to various object methods.
@@ -81,7 +81,7 @@ Certain arguments used throughout the `crispr` package (including outside the `c
 <!-- break -->
 
 * `col_perturbed` (binary) vs. `col_condition` (can have >= 3 categories)
-    - In the `Crispr` class object, `col_perturbed` is meant to be a binary column that has `key_control` as the entry for control rows and `key_treatment` for all other experimental conditions. 
+    - In the `Crispr` class object, `col_perturbed` is meant to be a binary column that has `key_control` as the entry for control rows and `key_treatment` for all other experimental conditions.
         * For instance, for a CRISPR design targeting more than one gene, `col_perturbed` would contain only `key_treatment` (i.e., all perturbed cells, regardless of targeted gene) while `col_condition` would contain entries specifying the particular gene(s) targeted (or `key_control`).
         * A drug design targeting more than one gene, `col_perturbed` would contain only `key_treatment` (i.e., all perturbed cells, regardless of targeted gene) while `col_condition` would contain entries specifying the particular gene(s) targeted (or `key_control`).
         * If the design only targets one gene/has one treatment conditions/etc., these columns would simply be equivalent.
@@ -96,7 +96,7 @@ Certain arguments used throughout the `crispr` package (including outside the `c
 
 * `file_path` **(str, AnnData, or dictionary)**: Path or object containing data. Used in initialization to create the initial `self.adata` attribute (an AnnData or MuData object). Either
     - a path to a 10x directory (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz),
-    - a path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible), 
+    - a path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible),
     - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon, or by using `crispr.pp.create_object(file_path)`), or
     - a dictionary containing keyword arguments to pass to  `crispr.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); press the arrow to expand details here),
 
@@ -109,7 +109,7 @@ crd = "<YOUR DIRECTORY HERE>"
 subd = "<YOUR SUB-DIRECTORY WITH THE .mtx, barcodes, features files HERE>"
 # e.g., "filtered_feature_bc_matrix"
 
-proto = "<YOUR PROTOSPACER .csv HERE; file should be under `crdir` directory>" 
+proto = "<YOUR PROTOSPACER .csv HERE; file should be under `crdir` directory>"
 # e.g., "crispr_analysis/protospacer_calls_per_cell.csv"
 
 file_path = dict(directory=crd, subdirectory_mtx=subd, file_protospacer=proto)
@@ -119,7 +119,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 </details>
 
    or
-    - to concatenate multiple datasets, a dictionary (keyed by your desired subject/sample names to be used in `col_sample_id`) consisting of whatever objects you would pass to `create_object()`'s `file` argument for the individual objects. You must also specify `col_sample` (a tuple as described in the documentation below). The other arguments passed to the `crispr.pp.create_object()` function (e.g., `col_gene_symbols`) can be specified as normal if they are common across samples; otherwise, specify them as lists in the same order as the `file` dictionary. 
+    - to concatenate multiple datasets, a dictionary (keyed by your desired subject/sample names to be used in `col_sample_id`) consisting of whatever objects you would pass to `create_object()`'s `file` argument for the individual objects. You must also specify `col_sample` (a tuple as described in the documentation below). The other arguments passed to the `crispr.pp.create_object()` function (e.g., `col_gene_symbols`) can be specified as normal if they are common across samples; otherwise, specify them as lists in the same order as the `file` dictionary.
 
 <!-- break -->
 
@@ -130,8 +130,8 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 * `col_gene_symbols` **(str, optional)**: Column name in `.var` for gene symbols. Defaults to "gene_symbols".
 
 * `col_cell_type` **(str, optional)**: Column name in `.obs` for cell type. Defaults to "leiden" (anticipating that you will run `self.cluster(...)` with `method_cluster="leiden"`). This column may be
-    - pre-existing in data (e.g., pre-run clustering column or manual annotations), or 
-    - expected to be created via `Crispr.cluster()`. 
+    - pre-existing in data (e.g., pre-run clustering column or manual annotations), or
+    - expected to be created via `Crispr.cluster()`.
 
 <!-- break -->
 
@@ -140,7 +140,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 * `col_batch` **(str, optional)**: Column in `.obs` with batch IDs. Defaults to None.
 
 * `col_condition` **(str, optional)**: Either the name of an existing column in `.obs` indicating the experimental condition to which each cell belongs or (for CRISPR designs) the **desired** name of the column that will be created from `col_guide_rna` to indicate the gene(s) targeted in each cell.
-    - If there are multiple conditions besides control (e.g., multiple types of drugs and/or exposure times, multiple target genes in CRISPR), this column distinguishes the different conditions, in contrast to `col_perturbed` (a binary treated/perturbed vs. control indicator). 
+    - If there are multiple conditions besides control (e.g., multiple types of drugs and/or exposure times, multiple target genes in CRISPR), this column distinguishes the different conditions, in contrast to `col_perturbed` (a binary treated/perturbed vs. control indicator).
     - In CRISPR designs (i.e., when `col_guide_rna` is specified), this column will be where each guide RNA's target gene will be stored, whether pre-existing (copied directly from `col_guide_rna` if `kws_process_guide_rna` is None) or created during the Crispr object initialization by passing `col_guide_rna` and `kws_process_guide_rna` to `crispr.pp.filter_by_guide_counts()` in order to convert particular guide RNA IDs to their target(s) (e.g., STAT1-1|CCL8-2-1|NegCtrl32a => STAT1|CCL8|Control). Defaults to None.
     - For non-CRISPR designs (e.g., pharmacological treatment):
         - This column should exist in the AnnData or MuData object (either already available upon simply reading the specified file with no other alterations, or as originally passed to the initialization method if given instead of a file path).
@@ -154,7 +154,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 
 <!-- break -->
 
-* `col_guide_rna` **(str, optional)**: Column in `.obs` with guide RNA IDs. Defaults to "guide_ids". This column should always be specified for CRISPR designs and should NOT be specified for other designs. 
+* `col_guide_rna` **(str, optional)**: Column in `.obs` with guide RNA IDs. Defaults to "guide_ids". This column should always be specified for CRISPR designs and should NOT be specified for other designs.
     - If only one kind of guide RNA is used, then this should be a column containing the name of the gene targeted (for perturbed cells) and the names of any controls, and `key_treatment` should be the name of the gene targeted. Then, `col_condition` will be a direct copy of this column.
     - Entries in this column should be either gene names in `self.adata.var_names` (or `key_control` or one of the patterns in `kws_process_guide_rna["key_control_patterns"]`), plus, optionally, suffixes separating guide #s (e.g., STAT1-1-2, CTRL-1) and/or with a character that splits separate guide RNAs within that cell (if multiply-transfected cells are present). These characters should be specified in `kws_process_guide_rna["guide_split"]` and `kws_process_guide_rna["feature_split"]`, respectively. For instance, they would be "-" and "|", if `col_guide_rna` entries for a cell multiply transfected by two sgRNAs targeting STAT1, two control guide RNAs, and a guide targeting CCL5  would look like "STAT1-1-1|STAT1-1-2|CNTRL-1-1|CCL5-1".
     - Currently, everything after the first dash (or whatever split character is specified) is discarded when creating `col_target_genes`, so keep that in mind.
@@ -164,9 +164,9 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 
 * `col_num_umis` **(str, optional)**: Name of column in `.obs` with the UMI counts. This should be specified if `kws_process_guide_rna` is not None. For designs with multiply-transfected cells, it should follow the same convention established in `kws_process_guide_rna["feature_split"]`. Defaults to "num_umis".
 
-* `key_control` **(str, optional)**: The label that is or will be in `col_condition`, `col_guide_rna`, and `col_perturbed` indicating control rows. Defaults to "NT". Either 
+* `key_control` **(str, optional)**: The label that is or will be in `col_condition`, `col_guide_rna`, and `col_perturbed` indicating control rows. Defaults to "NT". Either
     - exists as entries in pre-existing column(s), or
-    - is the name you want the control entries (detected using `.obs[<col_guide_rna>]` and `kws_process_guide_rna["key_control_patterns"]`) to be categorized as control rows under the new version(s) of `.obs[<col_guide_rna>]`, `.obs[<col_target_genes>]`, and/or `.obs[<col_perturbed>]`. For instance, entries like "CNTRL-1", "NEGCNTRL", "Control", etc. in `col_guide_rna` would all be keyed as "Control" in (the new versions of) `col_target_genes`, `col_guide_rna`, and `col_perturbed` if you specify `key_control="Control` and `kws_process_guide_rna=dict(key_control_patterns=["CTRL", "Control"])`. 
+    - is the name you want the control entries (detected using `.obs[<col_guide_rna>]` and `kws_process_guide_rna["key_control_patterns"]`) to be categorized as control rows under the new version(s) of `.obs[<col_guide_rna>]`, `.obs[<col_target_genes>]`, and/or `.obs[<col_perturbed>]`. For instance, entries like "CNTRL-1", "NEGCNTRL", "Control", etc. in `col_guide_rna` would all be keyed as "Control" in (the new versions of) `col_target_genes`, `col_guide_rna`, and `col_perturbed` if you specify `key_control="Control` and `kws_process_guide_rna=dict(key_control_patterns=["CTRL", "Control"])`.
 
 <!-- break -->
 
@@ -185,8 +185,8 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 
 <!-- break -->
 
-* `remove_multi_transfected` (bool, optional): In designs with multiple guides per cell, remove multiply-transfected cells (i.e., cells where more than one target guide survived 
-    application of any filtering criteria set in `kws_process_guide_rna`). If `kws_process_guide_rna["max_percent_umis_control_drop"]` is greater than 0, then cells with one target guide and control guides which together make up less than `max_percent_umis_control_drop`% of total UMI counts will be considered pseudo-single-transfected for the target guide. Defaults to True. Some functionality may be limited and/or problems occur if set to False and if multiply-transfected cells remain in data. 
+* `remove_multi_transfected` (bool, optional): In designs with multiple guides per cell, remove multiply-transfected cells (i.e., cells where more than one target guide survived
+    application of any filtering criteria set in `kws_process_guide_rna`). If `kws_process_guide_rna["max_percent_umis_control_drop"]` is greater than 0, then cells with one target guide and control guides which together make up less than `max_percent_umis_control_drop`% of total UMI counts will be considered pseudo-single-transfected for the target guide. Defaults to True. Some functionality may be limited and/or problems occur if set to False and if multiply-transfected cells remain in data.
 
 <!-- break -->
 
@@ -198,15 +198,15 @@ The `crispr.crispr_object.Crispr()` class object is an end user's main way of in
 
 * `.adata`: AnnData object. Columns or other objects created in the course of running certain methods may also be stored in its various attributes. Below are listed some of the major attributes of `.adata`. Note that for multi-modal data (self._assay is not None), some of these attributes may need to be accessed by `.adata[self._assay].<attribute>`, but for brevity, we'll refer to `.adata` here. Not all will/have to be present, except `.X`, `.obs`, and `.var`.
     -  `.X`: Sparse matrix of data originally passed to the function to create an AnnData object (e.g., from CellRanger output).
-    -  `.layers`: Contains different versions of `adata.X`, such as scaled data (`adata.layers["scaled"]`) or that created by calculating a 
+    -  `.layers`: Contains different versions of `adata.X`, such as scaled data (`adata.layers["scaled"]`) or that created by calculating a
                   Mixscape perturbation signature (`adata.layers["X_pert"]`, by default).
     -  `.obs`: pandas.DataFrame of observations (rows=cells). You can store additional data about individual cells/samples/etc. here by assigning a new column.
     -  `.obsm`: xxxxxxxxxxxxxxxxxxxxxxxxxx
     -  `.obsm`: xxxxxxxxxxxxxxxxxxxxxxxxxx
-    -  `.var`: pandas.DataFrame of observations (rows=cells). You can store additional data about individual cells/samples/etc. here by assigning a new column. 
+    -  `.var`: pandas.DataFrame of observations (rows=cells). You can store additional data about individual cells/samples/etc. here by assigning a new column.
             Often contains the gene symbols and EnsemblIDs (either of which is often the index/`.var_names`),
             "feature_types" (e.g., "Gene Expression"), and, after preprocessing, may contain columns such as the number of cells expressing that feature ("n_cells"),
-            whether that feature is a mitochonrial ("mt") and/or highly variable ("highly_variable") gene, mean and total counts, percent dropout, means, dispersions, 
+            whether that feature is a mitochonrial ("mt") and/or highly variable ("highly_variable") gene, mean and total counts, percent dropout, means, dispersions,
             and normalized versions of these metrics.
     -  `.obs_names`: Row indices of `.obs` (e.g., cell barcodes). Changing this attribute changes this index, and has other potential benefits/consequences.
     -  `.var_names`: Row indices of `.var` (i.e., gene names). Changing this attribute changes this index, and has other potential benefits/consequences.
@@ -222,9 +222,7 @@ The AnnData object is stored in the attribute `adata`, so if your object is call
 
 If you have multiple modalities, you can access the gene expression modality using either `self.adata[self._assay]` (having specified assay=the name of the RNA modality in your AnnData, which is usually "rna," in the `Cripsr()` initialization method call when you first create your object) or using the alias `self.rna`.
 
-Similarly, you can access the `.obs` attribute of your AnnData using `self.adata.obs` directly, or simply `self.obs`. The same holds true for `.var`, `.uns`, and `.obsm`, except that while `self.obs` for multi-modal objects holds the overall `.obs` attribute (with prefixes by assay on the column names, e.g., rna:num_umis, adt:num_umis), the others listed call the gene expression modality attribute directly (e.g., `self.adata[self._assay].uns`).
-
-If you have multi-modal data in `self.adata`, it's convenient to access the `.obs` attribute specifically of your AnnData's gene expression modality using the alias `self.rna.obs` instead of the long-form `self.adata[self._assay].obs`.
+Thus, if you have multi-modal data in `self.adata`, it's convenient to access the AnnData attributes specifically of your AnnData's gene expression modality using, for instance, the alias `self.rna.obs` instead of the long-form `self.adata[self._assay].obs`.
 
 These aliases are not only convenient for their brevity, but also allow for a more generalizable way to call specific objects. For instance, if you wanted to write a script that frequently calls the `.obs` attribute of the RNA data, and you want it to work for both uni- and multi-modal data, instead of repeatedly writing, for example:
 
@@ -234,6 +232,7 @@ if self._assay is None:
 else:
     custom_function(self.adata[self._assay].obs)
 ```
+
 you may simply say `self.rna.obs`, knowing it will work whether or not multiple assays exist in the object's AnnData attribute.
 
 Finally, this approach saves memory: All these versions of the attribute are stored in a single place in memory so you can call the attributes in various ways without duplicating them and taking up more space.

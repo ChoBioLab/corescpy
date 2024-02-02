@@ -162,7 +162,7 @@ class Omics(object):
         # Let Property Setters Run
         self.rna = self.adata.table if isinstance(
             self.adata, spatialdata.SpatialData) else self.adata[
-                self._assay] if self._assay else self.adat
+                self._assay] if self._assay else self.adata
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
         if self._columns["col_cell_type"] in self.rna.obs and not isinstance(
@@ -199,21 +199,6 @@ class Omics(object):
                 self.adata = value
             self._rna = self.adata[self._assay] if self._assay else self.adata
 
-    @property
-    def gex(self):
-        """Get gene expression modality with prefix-less index."""
-        return self._gex
-
-    @gex.setter
-    def gex(self, value) -> None:
-        if isinstance(self.adata, muon.MuData):
-            ann = self.adata.mod[self._assay].copy()
-            ann.index = ann.obs.reset_index()[
-                self._columns["col_gene_symbol"]]  # prefix-less gene names
-        else:
-            ann = self.rna
-        self._gex = ann
-
     def get_layer(self, layer=None, subset=None, inplace=False):
         """Get layer (and optionally, subset)."""
         adata = self.rna.copy() if inplace is False else self.copy
@@ -233,6 +218,7 @@ class Omics(object):
         return adata
 
     def print(self):
+        """Print information."""
         print(self.rna.obs.head(), "\n\n")
         print(self.adata, "\n\n")
         for q in [self._columns, self._keys]:
@@ -346,14 +332,24 @@ class Omics(object):
                 print("\n<<< UMAP NOT AVAILABLE. RUN `.cluster()`.>>>")
         return figs
 
-    def plot_umap(self, color=None, group=None, cmap="magma", **kwargs):
+    def plot_umap(self, color=None, group=None, cmap="magma",
+                  multi=False, plot_clusters=True, **kwargs):
         """Plot UMAP."""
         if color is None:  # if color-coding column unspecified...
             color = self._columns["col_cell_type"]  # ...color by cell type
+        if plot_clusters is True:
+            color = list(pd.unique(list([color] if isinstance(
+                color, str) else color) + [self._columns["col_cell_type"]]))
+        color_original = color.copy()
+        for c in color_original:
+            if c not in self.rna.obs and c not in self.rna.var_names:
+                warn(f"'{c}' not found in `.obs` or `.var`.")
+                color.remove(c)
         kws = {"frameon": False, "use_raw": False, "cmap": cmap, **kwargs}
         if group:  # if separating by group, return this plot
             return cr.pl.plot_umap_split(self.rna, group, color=color, **kws)
-        if not isinstance(color, str) and color[0] in self.rna.var_names:
+        if multi is True and not isinstance(color, str) and color[
+                0] in self.rna.var_names:
             fig = cr.pl.plot_umap_multi(self.rna, color, **kws)  # multi-gene
         else:  # ...or single UMAP embedding (categorical or continous)
             fig = sc.pl.umap(self.rna, color=color, **kws)  # UMAP

@@ -30,7 +30,7 @@ class TestOmics:
 
     def test_var(self):
         """Ensure `.var` meets expectations."""
-        var_ixn = TestOmics.self.obs.index.names[0]
+        var_ixn = TestOmics.self.rna.obs.index.names[0]
         assert var_ixn == TestOmics.self._columns["col_gene_symbols"]
 
     def test_obs(self):

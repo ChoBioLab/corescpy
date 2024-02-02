@@ -7,6 +7,7 @@
 import os
 # import traceback
 import squidpy as sq
+import scanpy as sc
 import traceback
 import matplotlib
 import matplotlib.pyplot as plt
@@ -85,6 +86,20 @@ class Spatial(Omics):
         print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
+
+    def update_from_h5ad(self, file=None):
+        """Update SpatialData object `.table` from h5ad file."""
+        if file is None:
+            file = out_files[i]
+        self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
+
+    def write(self, file, mode="h5ad", **kwargs):
+        """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
+        if mode == "h5ad":
+            self.adata.table.write_h5ad(
+                os.path.splitext(file)[0] + ".h5ad", **kwargs)
+        else:
+            self.adata.write(file, **{"overwrite": True, **kwargs})
 
     def read_parquet(self, directory=None, kind="transcripts"):
         """
