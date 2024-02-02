@@ -123,7 +123,7 @@ class Spatial(Omics):
             cr.pp.describe_tiff(os.path.dirname(self.adata.uns[
                 "spatial"][x]["metadata"]["file_path"]))
 
-    def plot_spatial(self, color, include_umap=True,
+    def plot_spatial(self, color, include_umap=False,
                      col_sample_id=None, library_id=None,
                      shape="hex", figsize=30, cmap="magma", **kwargs):
         """Create basic spatial plots."""
@@ -144,10 +144,13 @@ class Spatial(Omics):
             col_sample_id = self._columns["col_sample_id"]
         cgs = self._columns["col_gene_symbols"] if (self._columns[
             "col_gene_symbols"] != self.rna.var.index.names[0]) else None
+        color = list(set([color] if isinstance(color, str) else color
+                         ).intersection(set(list(s.rna.var_names) + list(
+                             s.rna.obs.columns))))
         figs["spatial"] = sq.pl.spatial_scatter(
             self.rna, library_id=library_id, figsize=figsize, shape=shape,
-            color=[color] if isinstance(color, str) else color,
-            cmap=cmap, alt_var=cgs, library_key=col_sample_id, **kwargs)
+            color=color, cmap=cmap, alt_var=cgs,
+            library_key=col_sample_id, **kwargs)  # spatial scatter plot
         return figs
 
     def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
