@@ -503,7 +503,7 @@ class Crispr(Omics):
         if group_by:  # join group_by variables from adata
             cols += group_by
         cols = list(pd.unique(cols))
-        dff = self.uns["grna_feats_n"].reset_index(
+        dff = self.rna.uns["grna_feats_n"].reset_index(
             "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
             dff = dff[dff[self._columns["col_target_genes"]].isin(

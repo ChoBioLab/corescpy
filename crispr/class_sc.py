@@ -162,10 +162,7 @@ class Omics(object):
         # Let Property Setters Run
         self.rna = self.adata.table if isinstance(
             self.adata, spatialdata.SpatialData) else self.adata[
-                self._assay] if self._assay else self.adata
-        self.obs = self.rna.obs
-        self.uns = self.rna.uns
-        self.var = self.rna.var
+                self._assay] if self._assay else self.adat
         if "raw" not in dir(self.rna):
             self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
         if self._columns["col_cell_type"] in self.rna.obs and not isinstance(
@@ -178,11 +175,7 @@ class Omics(object):
     @property
     def rna(self):
         """Get RNA modality of AnnData."""
-        if isinstance(self.adata, spatialdata.SpatialData):
-            rna = self.adata.table
-        else:
-            rna = self.adata[self._assay] if self._assay else self.adata
-        return rna
+        return self._rna
 
     @rna.setter
     def rna(self, value) -> None:
@@ -193,24 +186,18 @@ class Omics(object):
             # self.adata = muon.MuData({**dict(zip(self.adata.mod.keys(), [
             #     self.adata[x] for x in self.adata.mod.keys()])),
             #                           self._assay: value})
+            self._rna = self.adata.mod[self._assay]
         elif isinstance(self.adata, spatialdata.SpatialData):
             if self.adata.table is not None:
                 del(self.adata.table)
             self.adata.table = value
+            self._rna = self.adata.table
         else:
             if self._assay:
                 self.adata[self._assay] = value
             else:
                 self.adata = value
-
-    @property
-    def obs(self):
-        """Get `.obs` attribute of AnnData."""
-        return self.rna.obs
-
-    @obs.setter
-    def obs(self, value) -> None:
-        self.rna.obs = value
+            self._rna = self.adata[self._assay] if self._assay else self.adata
 
     @property
     def gex(self):
@@ -227,48 +214,23 @@ class Omics(object):
             ann = self.rna
         self._gex = ann
 
-    @property
-    def uns(self):
-        """Get `.uns` attribute of adata's gene expression modality."""
-        return self.rna.uns
-
-    @uns.setter
-    def uns(self, value) -> None:
-        if isinstance(self.adata, spatialdata.SpatialData):
-            self.adata.table.uns = value
-        elif self._assay:
-            self.adata[self._assay].uns = value
-        else:
-            self.adata.uns = value
-        self._uns = value
-        return self._uns
-
-    @property
-    def var(self):
-        """Get `.var` attribute of .adata's gene expression modality."""
-        return self.rna.var
-
-    @var.setter
-    def var(self, value) -> None:
-        if isinstance(self.adata, spatialdata.SpatialData):
-            self.adata.table.var = value
-        elif isinstance(self.adata, muon.MuData):
-            self.adata.mod[self._assay].var = value
-            self.adata.update()
-        elif self._assay:
-            self.adata[self._assay].var = value
-        else:
-            self.adata.var = value
-
     def get_layer(self, layer=None, subset=None, inplace=False):
         """Get layer (and optionally, subset)."""
-        rna = self.rna.copy() if inplace is False else self.rna
+        adata = self.rna.copy() if inplace is False else self.copy
+        # if isinstance(self.adata, spatialdata.SpatialData):
+        #     if inplace is False:
+        #         warn("Non-inplace spatialdata layers not supported")
+        #     del(self.adata.table)
+        #     adata = adata.table
+        # else:
+        #     adata = self.adata.copy() if inplace is False else self.adata
+        #     adata = adata[self._assay] if self._assay else adata
         if layer:
-            layer = layer if layer in rna.layers else self._layers[layer]
-        rna.X = rna.layers[layer].copy()
+            layer = layer if layer in adata.layers else self._layers[layer]
+            adata.X = adata.layers[layer].copy()
         if subset not in [None, False]:
-            rna = rna[subset]
-        return rna
+            adata = adata[subset]
+        return adata
 
     def print(self):
         print(self.rna.obs.head(), "\n\n")
@@ -764,7 +726,10 @@ class Omics(object):
             None if col_kws[x] is False else self._columns[x] if col_kws[
                 x] in [None, True] else col_kws[x] for x in col_kws
             ]  # ignore ID/condition if argue False; else use default if need
-        adata = self.get_layer(layer=layer, inplace=False, subset=subset)
+        if isinstance(self.adata, spatialdata.SpatialData):
+            adata = self.rna
+        else:
+            adata = self.get_layer(layer=layer, inplace=False, subset=subset)
 
         # Differential Expression Analysis (DEA), Optionally
         if col_condition is not None:

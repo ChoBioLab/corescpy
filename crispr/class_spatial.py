@@ -7,6 +7,7 @@
 import os
 # import traceback
 import squidpy as sq
+import traceback
 import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
@@ -145,7 +146,7 @@ class Spatial(Omics):
                         seed=1618, cmap="magma", copy=False):
         """Analyze spatial (adapted Squidpy tutorial)."""
         figs = {}
-        adata = self.get_layer(layer=layer, subset=None, inplace=False)
+        # adata = self.get_layer(layer=layer, subset=None, inplace=True)
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         if not library_id:
@@ -226,8 +227,11 @@ class Spatial(Omics):
         # adata.uns["spatial"][
         #     "library_id"] = col_sample_id if col_sample_id not in [
         #         None, False] else self._columns["col_sample_id"]  # library ID
-        sq.pl.centrality_scores(adata.table, cluster_key=col_cell_type,
-                                figsize=figsize)
+        try:
+            sq.pl.centrality_scores(adata.table, cluster_key=col_cell_type,
+                                    figsize=figsize)
+        except Exception:
+            traceback.print_exc()
         fig = plt.gcf()
         if title:
             fig.suptitle(title)
@@ -263,12 +267,15 @@ class Spatial(Omics):
                                # n_jobs=n_jobs,  # not working for some reason
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
-        sq.pl.nhood_enrichment(
-            adata.table, cluster_key=col_cell_type, title=title,
-            vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
-            cmap=cmap, ax=axs[0])  # matrix/heat: enrichment scores (panel 1)
-        sq.pl.spatial_scatter(adata.table, color=col_cell_type, shape=shape,
-                              ax=axs[1], **kws_plot)  # scatterplot (panel 2)
+        try:
+            sq.pl.nhood_enrichment(
+                adata.table, cluster_key=col_cell_type, title=title,
+                vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
+                cmap=cmap, ax=axs[0])  # matrix: enrichment scores (panel 1)
+            sq.pl.spatial_scatter(adata.table, color=col_cell_type, shape=shape,
+                                ax=axs[1], **kws_plot)  # scatter (panel 2)
+        except Exception:
+            traceback.print_exc()
         if copy is False:
             self.figures["neighborhood_enrichment"] = plt.gcf()
         return adata, fig
@@ -301,18 +308,24 @@ class Spatial(Omics):
         sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs,
                             spatial_key=self._spatial_key, **kwargs)
         figs["co_occurrence"] = {}
-        figs["spatial_scatter"] = sq.pl.spatial_scatter(
-            adata.table, color=col_cell_type, groups=key_cell_type,
-            figsize=figsize, return_ax=True, shape=shape,
-            **kws_plot)  # cell types plot
-        if title:
-            figs["spatial_scatter"].suptitle(title)
+        try:
+            figs["spatial_scatter"] = sq.pl.spatial_scatter(
+                adata.table, color=col_cell_type, groups=key_cell_type,
+                figsize=figsize, return_ax=True, shape=shape,
+                **kws_plot)  # cell types plot
+            if title:
+                figs["spatial_scatter"].suptitle(title)
+        except Exception:
+            traceback.print_exc()
         # figs["co_occurrence"] = sq.pl.co_occurrence(
         #     adata, cluster_key=col_cell_type, legend=False,
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
-        figs["co_occurrence"] = cr.pl.plot_cooccurrence(
-            adata.table, col_cell_type=col_cell_type, **kws_plot,
-            key_cell_type=key_cell_type, figsize=figsize)  # lines plot
+        try:
+            figs["co_occurrence"] = cr.pl.plot_cooccurrence(
+                adata.table, col_cell_type=col_cell_type, **kws_plot,
+                key_cell_type=key_cell_type, figsize=figsize)  # lines plot
+        except Exception:
+            traceback.print_exc()
         if title:
             figs["co_occurrence"].suptitle(title)
         if copy is False:
@@ -324,7 +337,7 @@ class Spatial(Omics):
                   col_sample_id=None, n_jobs=2, figsize=15, kws_plot=None):
         """Find spatially-variable genes."""
         adata = self.adata
-        adata.table = self.get_layer(layer=layer, subset=None, inplace=False)
+        # adata.table = self.get_layer(layer=layer, subset=None, inplace=True)
         kws_plot = cr.tl.merge({"cmap": "magma", "use_raw": False}, kws_plot)
         if n_jobs == -1:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
@@ -345,9 +358,12 @@ class Spatial(Omics):
         if isinstance(genes, int):
             genes = self.rna.uns["moranI"].head(genes).index.values
         ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
-        sq.pl.spatial_scatter(adata.table, color=genes + [col_cell_type],
-                              figsize=figsize, shape=shape, ncols=ncols,
-                              library_id=library_id, **kws_plot)  # cell type
+        try:
+            sq.pl.spatial_scatter(adata.table, color=genes + [col_cell_type],
+                                figsize=figsize, shape=shape, ncols=ncols,
+                                library_id=library_id, **kws_plot)  # cell
+        except Exception:
+            traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
         fig = plt.gcf()

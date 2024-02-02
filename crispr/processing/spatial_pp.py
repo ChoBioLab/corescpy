@@ -94,7 +94,7 @@ def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):
     pass
 
 
-def segment(nuc_exp=10, file_cellpose=None, file_transcript=None,
+def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
             rep_interval=10000, qv_cutoff=20, pix_size=1.7):
     """Segment cells in spatial data."""
     # Check for existence of input file.
