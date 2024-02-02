@@ -30,6 +30,8 @@ import numpy as np
 # z-slices are 3 microns apart
 Z_SLICE_MICRON = 3
 SPATIAL_KEY = "spatial"
+STORE_UNS_SQUIDPY = True  # for back-compatibility with Squidpy
+# store images from SpatialData object in SpatialData.table.uns (AnnData.uns)
 
 
 def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
@@ -89,11 +91,14 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
         if library_id is None:
             library_id = str(file_path)
         adata = sdio.xenium(file_path, n_jobs=n_jobs)
-        imgs = {}
-        for x in adata.images:
-            for i in adata.images[x]:
-                imgs.update({f"{x}_{i}": adata.images[x][i].image})
-        adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
+        if STORE_UNS_SQUIDPY:
+            imgs = {}
+            for x in adata.images:
+                for i in adata.images[x]:
+                    imgs.update({f"{x}_{i}": adata.images[x][i].image})
+                    # imgs.update({f"{library_id}_{x}_{i}": adata.images[
+                    #     x][i].image})
+            adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
     return adata
 
 

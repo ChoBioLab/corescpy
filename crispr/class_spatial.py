@@ -93,7 +93,10 @@ class Spatial(Omics):
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
         if mode == "h5ad":
-            self.adata.table.write_h5ad(
+            adata = self.adata.table.copy()
+            if self._spatial_key in adata.uns:
+                _ = adata.uns.pop(self._spatial_key)
+            adata.write_h5ad(
                 os.path.splitext(file)[0] + ".h5ad", **kwargs)
         else:
             self.adata.write(file, **{"overwrite": True, **kwargs})
@@ -137,17 +140,14 @@ class Spatial(Omics):
             color = list(pd.unique(color))
         if "title" not in kwargs:
             kwargs.update({"title": color})
-        if "library_key" not in kwargs:
-            kwargs.update({"library_key": self._columns["col_sample_id"]})
-        # libid = col_sample_id if col_sample_id not in [
-        #     None, False] else self._columns["col_sample_id"]  # library ID
+        if col_sample_id is None:
+            col_sample_id = self._columns["col_sample_id"]
+        cgs = self._columns["col_gene_symbols"] if (self._columns[
+            "col_gene_symbols"] != self.rna.var.index.names[0]) else None
         figs["spatial"] = sq.pl.spatial_scatter(
-            self.adata, library_id=library_id, figsize=figsize, shape=shape,
+            self.rna, library_id=library_id, figsize=figsize, shape=shape,
             color=[color] if isinstance(color, str) else color,
-            cmap=cmap, alt_var=self._columns["col_gene_symbols"] if (
-                self._columns["col_gene_symbols"
-                              ] != self.adata.var.index.names[0]) else None,
-            **kwargs)
+            cmap=cmap, alt_var=cgs, library_key=col_sample_id, **kwargs)
         return figs
 
     def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
@@ -284,8 +284,12 @@ class Spatial(Omics):
                 vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
                 library_id=library_id, library_key=library_key,
                 cmap=cmap, ax=axs[0])  # matrix: enrichment scores (panel 1)
-            sq.pl.spatial_scatter(adata.table, color=col_cell_type, ax=axs[1],
-                                  shape=shape, **kws_plot)  # cells (panel 2)
+        except Exception:
+            traceback.print_exc()
+        try:
+            self.plot_spatial(self, col_cell_type, include_umap=True,
+                              ax=axs[1], shape=shape, figsize=figsize,
+                              cmap=cmap)  # cells (panel 2)
         except Exception:
             traceback.print_exc()
         if copy is False:
@@ -320,11 +324,10 @@ class Spatial(Omics):
                             spatial_key=self._spatial_key, **kwargs)
         figs["co_occurrence"] = {}
         try:
-            figs["spatial_scatter"] = sq.pl.spatial_scatter(
-                adata.table, color=col_cell_type, groups=key_cell_type,
-                figsize=figsize, return_ax=True, shape=shape,
-                library_key=self._columns["col_sample_id"],
-                library_id=library_id, **kws_plot)  # cell types plot
+            figs["spatial_scatter"] = self.plot_spatial(
+                col_cell_type, groups=key_cell_type, include_umap=True,
+                shape=shape, figsize=figsize, cmap=cmap,
+                library_id=library_id, return_ax=True)  # cell types plot
             if title:
                 figs["spatial_scatter"].suptitle(title)
         except Exception:
@@ -371,16 +374,16 @@ class Spatial(Omics):
             genes = self.rna.uns["moranI"].head(genes).index.values
         ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
         try:
-            sq.pl.spatial_scatter(adata.table, color=genes + [col_cell_type],
-                                figsize=figsize, shape=shape, ncols=ncols,
-                                library_id=library_id, **kws_plot)  # cell
+            fig = self.plot_spatial(
+                genes + [col_cell_type], include_umap=False,
+                shape=shape, figsize=figsize, cmap=cmap, return_ax=True,
+                library_id=library_id, **kws_plot)  # cell types plot
+            if title:
+                fig.suptitle(title)
         except Exception:
             traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
-        fig = plt.gcf()
-        if title:
-            fig.suptitle(title)
         return adata, fig
 
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):

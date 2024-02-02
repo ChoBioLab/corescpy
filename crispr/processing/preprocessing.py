@@ -92,7 +92,8 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
     print(f"\n<<< CONCATENATING OBJECTS: {', '.join(ids)} >>>")
     col_id = kws_init[list(kws_init.keys())[0]]["col_sample_id"] if (
         spatial is True) else selves[ids[0]]._columns["col_sample_id"]
-    if isinstance(selves[list(selves.keys())[0]], spatialdata.SpatialData):
+    if isinstance(selves[list(selves.keys())[0]].adata,
+                  spatialdata.SpatialData):
         adata = spatialdata.concatenate(
             [selves[x].adata for x in selves], region_key=col_id,
             join="outer", batch_key=col_id if col_id else "unique.idents",
@@ -345,7 +346,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)
     sids = [np.nan if f"col_{x}" not in kwargs else np.nan if kwargs[
-        f"col_{x}"] is None else kwargs[f"col_{x}"]for x in [
+        f"col_{x}"] is None else kwargs.pop(f"col_{x}") for x in [
             "sample_id", "subject", "batch"]]  # batch/sample/subject
     sids = list(pd.Series(sids).dropna().unique())  # unique & not None
     if len(sids) == 0:

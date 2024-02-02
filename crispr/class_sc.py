@@ -154,9 +154,9 @@ class Omics(object):
                 **kws_multi)  # create integrated object
         else:
             self.adata = cr.pp.create_object(
-                self._file_path, prefix=prefix, assay=assay, raw=raw,
+                self._file_path, prefix=prefix, col_sample_id=col_sample_id,
                 col_gene_symbols=col_gene_symbols, kws_process_guide_rna=kpg,
-                col_sample_id=col_sample_id, **kwargs)  # make AnnData
+                spatial=spatial, assay=assay, raw=raw, **kwargs)  # object
         print(self.adata.obs, "\n\n") if assay else None
 
         # Let Property Setters Run
