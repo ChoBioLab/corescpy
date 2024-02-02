@@ -499,15 +499,12 @@ class Crispr(Omics):
             group_by = [group_by]
         if isinstance(target_gene_idents, str):
             target_gene_idents = [target_gene_idents]
-        cols = [self._columns["col_target_genes"]]
-        if group_by:  # join group_by variables from adata
-            cols += group_by
-        cols = list(pd.unique(cols))
+        cols = list(pd.unique([self._columns["col_target_genes"]] + list(
+            [] if group_by is None else group_by))) # group + adata variables
         dff = self.rna.uns["grna_feats_n"].reset_index(
             "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
-            dff = dff[dff[self._columns["col_target_genes"]].isin(
-                target_gene_idents)]
+            dff = dff[dff[self._columns["col_target_genes"]].isin(target_gene_idents)]
         kws_plot = dict(
             # share_x=True, share_y=False,
             # figsize=(30, 30),

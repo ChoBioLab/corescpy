@@ -31,7 +31,7 @@ class Omics(object):
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(self, file_path, prefix=None, assay=None, assay_protein=None,
-                 raw=False, col_gene_symbols="gene_symbols",
+                 raw=False, col_gene_symbols="gene_symbols", spatial=False,
                  col_cell_type="leiden", col_sample_id=None, col_subject=None,
                  col_condition=None, key_control=None, key_treatment=None,
                  kws_multi=None, **kwargs):
@@ -150,7 +150,7 @@ class Omics(object):
                     col_condition=col_condition, kws_process_guide_rna=kpg,
                     key_control=key_control, key_treatment=key_treatment,
                     col_cell_type=col_cell_type, raw=raw,
-                    col_sample_id=col_sample_id, **kwargs),
+                    col_sample_id=col_sample_id, **kwargs), spatial=spatial,
                 **kws_multi)  # create integrated object
         else:
             self.adata = cr.pp.create_object(
@@ -163,8 +163,6 @@ class Omics(object):
         self.rna = self.adata.table if isinstance(
             self.adata, spatialdata.SpatialData) else self.adata[
                 self._assay] if self._assay else self.adata
-        if "raw" not in dir(self.rna):
-            self.rna.raw = self.rna.copy()  # freeze normalized, filtered data
         if self._columns["col_cell_type"] in self.rna.obs and not isinstance(
                 self.rna.obs[self._columns["col_cell_type"]], pd.Categorical):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
@@ -353,6 +351,8 @@ class Omics(object):
             fig = cr.pl.plot_umap_multi(self.rna, color, **kws)  # multi-gene
         else:  # ...or single UMAP embedding (categorical or continous)
             fig = sc.pl.umap(self.rna, color=color, **kws)  # UMAP
+            # if title:
+            #     fig
         return fig
 
     def plot_compare(self, genes, col_condition=None, col_cell_type=None,

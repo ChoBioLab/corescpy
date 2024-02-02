@@ -23,20 +23,20 @@ def to_list(arg, unique=False):
     return arg
 
 
-def merge(arg_override=None, arg_fill_in=None, how="union"):
+def merge(arg_overriden=None, arg_fill_in=None, how="union"):
     """
-    Merge two dictionaries, giving precedence to
-    arg_override in case of overlap. Use empty dictionary in place of "None."
+    Merge two dictionaries, giving precedence to arg_overriden in case
+    of overlap. Use empty dictionary in place of "None."
     """
-    arg_override, arg_fill_in = [{**x} if x else {}
-                                 for x in [arg_override, arg_fill_in]]
-    joined = {**arg_override, **arg_fill_in}
-    if how.lower() == "left":  # only include keys in `arg_override`
-        joined = dict(zip(arg_override.keys(), [joined[x]
-                                                for x in arg_fill_in]))
-    elif how.lower() == "right":  # only include keys in `arg_override`
+    arg_overriden, arg_fill_in = [{**x} if x else {}
+                                  for x in [arg_overriden, arg_fill_in]]
+    joined = {**arg_overriden, **arg_fill_in}
+    if how.lower() == "left":  # only include keys in `arg_overriden`
+        joined = dict(zip(arg_overriden.keys(), [joined[x]
+                                                 for x in arg_fill_in]))
+    elif how.lower() == "right":  # only include keys in `arg_overriden`
         joined = dict(zip(arg_fill_in.keys(), [joined[x]
-                                                for x in arg_fill_in]))
+                                               for x in arg_fill_in]))
     elif how.lower() == "union":
         pass
     else:

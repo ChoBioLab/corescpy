@@ -29,10 +29,11 @@ import numpy as np
 # Define constant.
 # z-slices are 3 microns apart
 Z_SLICE_MICRON = 3
+SPATIAL_KEY = "spatial"
 
 
 def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
-                 visium=False, spatial_key="spatial", library_id="tissue",
+                 visium=False, spatial_key="spatial", library_id=None,
                  col_gene_symbols="gene_symbols", prefix=None, gex_only=False,
                  col_sample_id="library_key_spatial", n_jobs=1, **kwargs):
     """Read Xenium or Visium spatial data into an AnnData object."""
@@ -85,7 +86,14 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
         # sdata = sdio.xenium(file_path, n_jobs=n_jobs)
         # adata = sdata.table
         # adata.uns["sdata"] = sdata
+        if library_id is None:
+            library_id = str(file_path)
         adata = sdio.xenium(file_path, n_jobs=n_jobs)
+        imgs = {}
+        for x in adata.images:
+            for i in adata.images[x]:
+                imgs.update({f"{x}_{i}": adata.images[x][i].image})
+        adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
     return adata
 
 

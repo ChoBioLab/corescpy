@@ -13,6 +13,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
 from .class_sc import Omics
+from crispr.pp.spatial_pp import SPATIAL_KEY
 import pandas as pd
 import numpy as np
 
@@ -26,7 +27,7 @@ class Spatial(Omics):
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
     def __init__(self, file_path, file_path_spatial=None,
-                 visium=False, library_id="tissue", **kwargs):
+                 visium=False, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -73,14 +74,12 @@ class Spatial(Omics):
         # Initialize Omics Class
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
         self._file_path = file_path
-        self._spatial_key = "spatial"
-        super().__init__(file_path, spatial=True, visium=visium,
-                         file_path_spatial=file_path_spatial,
-                         **kwargs)  # Omics initialization
+        self._spatial_key = SPATIAL_KEY
+        super().__init__(file_path, spatial=True, **kwargs, visium=visium,
+                         file_path_spatial=file_path_spatial)  # Omics init
 
         # Try to Infer Spatial File Path for Xenium (if unspecified)
         self.figures["spatial"], self.results["spatial"] = {}, {}
-        self._library_id = library_id
 
         # Print Information
         print("\n\n")
@@ -89,8 +88,6 @@ class Spatial(Omics):
 
     def update_from_h5ad(self, file=None):
         """Update SpatialData object `.table` from h5ad file."""
-        if file is None:
-            file = out_files[i]
         self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
 
     def write(self, file, mode="h5ad", **kwargs):
@@ -138,10 +135,10 @@ class Spatial(Omics):
             color = list([color] if isinstance(color, str) else color) + [
                 self._columns["col_cell_type"]]
             color = list(pd.unique(color))
-        if not library_id:
-            library_id = self._library_id
         if "title" not in kwargs:
             kwargs.update({"title": color})
+        if "library_key" not in kwargs:
+            kwargs.update({"library_key": self._columns["col_sample_id"]})
         # libid = col_sample_id if col_sample_id not in [
         #     None, False] else self._columns["col_sample_id"]  # library ID
         figs["spatial"] = sq.pl.spatial_scatter(
@@ -164,8 +161,6 @@ class Spatial(Omics):
         # adata = self.get_layer(layer=layer, subset=None, inplace=True)
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
-        if not library_id:
-            library_id = self._library_id
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
 
@@ -220,7 +215,7 @@ class Spatial(Omics):
         """
         # Connectivity & Centrality
         print("\t*** Building connectivity matrix...")
-        adata = self.adata.copy() if copy is True else self.adata
+        adata = self.adata
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         figsize = (figsize, figsize) if isinstance(figsize, (
@@ -256,14 +251,16 @@ class Spatial(Omics):
             self.figures["centrality"] = fig
         return fig
 
-    def calculate_neighborhood(self, col_cell_type=None, library_id=None,
-                               mode="zscore", seed=1618, layer=None,
-                               palette=None, size=None, shape="hex",
-                               title="Neighborhood Enrichment", kws_plot=None,
-                               figsize=None, cmap="magma", vcenter=0,
-                               cbar_range=None, copy=False):
+    def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
+                               library_id=None, library_key=None, seed=1618,
+                               layer=None, palette=None, size=None,
+                               shape="hex", title="Neighborhood Enrichment",
+                               kws_plot=None, figsize=None, cmap="magma",
+                               vcenter=0, cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.adata
+        if library_key is None:
+            library_key = self._columns["col_sample_id"]
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         if cbar_range is None:
@@ -274,9 +271,8 @@ class Spatial(Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(palette=palette, size=size,
-                           use_raw=False, layer=layer),
-                    **dict(kws_plot if kws_plot else {})}
+        kws_plot = cr.tl.merge(dict(palette=palette, size=size, use_raw=False,
+                                    layer=layer), kws_plot)
         sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type,
                                n_jobs=None,
                                # n_jobs=n_jobs,  # not working for some reason
@@ -286,9 +282,10 @@ class Spatial(Omics):
             sq.pl.nhood_enrichment(
                 adata.table, cluster_key=col_cell_type, title=title,
                 vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
+                library_id=library_id, library_key=library_key,
                 cmap=cmap, ax=axs[0])  # matrix: enrichment scores (panel 1)
-            sq.pl.spatial_scatter(adata.table, color=col_cell_type, shape=shape,
-                                ax=axs[1], **kws_plot)  # scatter (panel 2)
+            sq.pl.spatial_scatter(adata.table, color=col_cell_type, ax=axs[1],
+                                  shape=shape, **kws_plot)  # cells (panel 2)
         except Exception:
             traceback.print_exc()
         if copy is False:
@@ -296,8 +293,8 @@ class Spatial(Omics):
         return adata, fig
 
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
-                          layer=None, copy=False, n_jobs=None,
-                          figsize=15, palette=None, title=None,
+                          layer=None, library_id=None, copy=False,
+                          n_jobs=None, figsize=15, palette=None, title=None,
                           kws_plot=None, shape="hex", size=None, **kwargs):
         """
         Find co-occurrence using spatial data. (similar to neighborhood
@@ -314,8 +311,7 @@ class Spatial(Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(palette=palette, size=size),
-                    **dict(kws_plot if kws_plot else {})}
+        kws_plot = cr.tl.merge(dict(palette=palette, size=size), kws_plot)
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         if n_jobs is None and n_jobs is not False:
@@ -327,7 +323,8 @@ class Spatial(Omics):
             figs["spatial_scatter"] = sq.pl.spatial_scatter(
                 adata.table, color=col_cell_type, groups=key_cell_type,
                 figsize=figsize, return_ax=True, shape=shape,
-                **kws_plot)  # cell types plot
+                library_key=self._columns["col_sample_id"],
+                library_id=library_id, **kws_plot)  # cell types plot
             if title:
                 figs["spatial_scatter"].suptitle(title)
         except Exception:

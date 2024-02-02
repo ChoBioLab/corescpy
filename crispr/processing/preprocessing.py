@@ -66,12 +66,20 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
             # kws_init[x]["spatial"] = spatial
 
     # Create AnnData Objects
-    selves = dict(zip(ids, [cr.pp.read_spatial(
-        file_path[f], **kws_init[f], library_id=f
-        ) if spatial is True else Omics(file_path[f], **kws_init[f]) if (
+    # selves = dict(zip(ids, [cr.pp.read_spatial(
+    #     file_path[f], **kws_init[f], library_id=f
+    #     ) if spatial is True else Omics(file_path[f], **kws_init[f]) if (
+    #         "kws_process_guide_rna" not in kws_init) else cr.Crispr(
+    #             file_path[f], **kws_init[f]) for f in file_path])
+    #               )  # create individual objects
+    if spatial is True:
+        selves = dict(zip(file_path.keys(), [cr.Spatial(
+            cr.pp.read_spatial(file_path[f], **kws_init[f], library_id=f),
+            **kws_init[f], library_id=f) for f in file_path]))
+    else:
+        selves = dict(zip(ids, [Omics(file_path[f], **kws_init[f]) if (
             "kws_process_guide_rna" not in kws_init) else cr.Crispr(
-                file_path[f], **kws_init[f]) for f in file_path])
-                  )  # create individual objects
+                file_path[f], **kws_init[f]) for f in file_path]))
 
     # Preprocessing & Clustering
     for x in selves:  # preprocess & cluster each object
@@ -86,8 +94,8 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
         spatial is True) else selves[ids[0]]._columns["col_sample_id"]
     if isinstance(selves[list(selves.keys())[0]], spatialdata.SpatialData):
         adata = spatialdata.concatenate(
-            [selves[x] for x in selves], region_key=col_id, join="outer",
-            batch_key=col_id if col_id else "unique.idents",
+            [selves[x].adata for x in selves], region_key=col_id,
+            join="outer", batch_key=col_id if col_id else "unique.idents",
             batch_categories=ids, index_unique="-", fill_value=None,
             uns_merge="unique")  # concatenate spatial
     else:
@@ -118,12 +126,16 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     # Load Object (or Copy if Already AnnData or MuData)
     csid = kwargs.pop("col_sample_id", None)
 
+
+    if isinstance(file, (AnnData, spatialdata.SpatialData,
+                         muon.MuData)):  # if already data object
+        print("\n\n<<< LOADING OBJECT >>>")
+        adata = file.copy() if "copy" in dir(file) else file
     # Spatial Data
-    if spatial not in [None, False]:
-        kwargs = {**dict(file_path_spatial=None, file_path_image=None,
-                         visium=False, spatial_key="spatial", gex_only=False,
-                         library_id="Tissue", prefix=None, col_sample_id=csid,
-                         col_gene_symbols="gene_symbols"), **kwargs}
+    elif spatial not in [None, False]:
+        kwargs = {**dict(prefix=prefix, col_sample_id=csid,
+                         col_gene_symbols=col_gene_symbols),
+                  **kwargs}  # user-specified + variable keyword arguments
         adata = cr.pp.read_spatial(file_path=file, **kwargs)
 
     # Non-Spatial Data
@@ -136,9 +148,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata = cr.pp.combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, gex_only=gex_only,
             prefix=prefix, **kwargs)  # + metadata from protospacer
-    elif not isinstance(file, (str, os.PathLike)):  # if already AnnData
-        print("\n\n<<< LOADING OBJECT >>>")
-        adata = file.copy()
     elif os.path.isdir(file):  # if directory, assume 10x format
         print(f"\n\n<<< LOADING 10X FILE {file} >>>")
         adata = sc.read_10x_mtx(
