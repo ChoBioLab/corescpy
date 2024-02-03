@@ -419,7 +419,6 @@ class Omics(object):
         #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
         for x in kws:
             adata.obs.loc[:, x] = str(kws[x])  # store parameters in `.obs`
-        print(type(adata))
         if copy is False:
             self.rna = adata
             self.figures["preprocessing"] = figs

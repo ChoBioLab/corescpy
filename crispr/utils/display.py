@@ -58,6 +58,7 @@ def make_printable_object(obj, show=False, numpy_alias="np"):
 
 def print_pretty_dictionary(dct, show=True, numpy_alias="np"):
     """Print a dictionary to allow copy-pasting code for object assignment."""
+    print("\n\n")
     if isinstance(dct, str):
         # items = re.sub(", ", ",", dct).split(",")
         # if "dict(" == dct[:5]:

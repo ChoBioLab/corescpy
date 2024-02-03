@@ -12,8 +12,6 @@ import traceback
 import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
-from .class_sc import Omics
-from crispr.pp.spatial_pp import SPATIAL_KEY
 import pandas as pd
 import numpy as np
 
@@ -21,13 +19,13 @@ COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 
 
-class Spatial(Omics):
+class Spatial(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
     _columns_created = dict(guide_percent="Percent of Cell Guides")
 
-    def __init__(self, file_path, file_path_spatial=None,
-                 visium=False, **kwargs):
+    def __init__(self, file_path, col_sample_id="Sample", library_id="A",
+                 file_path_spatial=None, visium=False, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -60,8 +58,6 @@ class Spatial(Omics):
                         specified as normal if they are common across
                         samples; otherwise, specify them as lists in
                         the same order as the `file` dictionary.
-            file_path_spatial (str, optional): Path to spatial
-                information csv file, if needed.
             visium (bool or dict, optional): File path provided is to
                 10x Visium data? Provide as a dictionary of keyword
                 arguments to pass to `scanpy.read_visium()` or simply
@@ -71,33 +67,33 @@ class Spatial(Omics):
             kwargs (dict, optional): Keyword arguments to pass to the
                 Omics class initialization method.
         """
-        # Initialize Omics Class
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
-        self._file_path = file_path
-        self._spatial_key = SPATIAL_KEY
-        super().__init__(file_path, spatial=True, **kwargs, visium=visium,
-                         file_path_spatial=file_path_spatial)  # Omics init
-
-        # Try to Infer Spatial File Path for Xenium (if unspecified)
+        super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
+                         library_id=library_id, visium=visium, **kwargs)
+        self._spatial_key = cr.pp.SPATIAL_KEY
+        if self._columns["col_sample_id"] not in self.rna.obs:
+            self.rna.obs.loc[:, self._columns["col_sample_id"]] = library_id
         self.figures["spatial"], self.results["spatial"] = {}, {}
-
-        # Print Information
-        print("\n\n")
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
 
     def update_from_h5ad(self, file=None):
         """Update SpatialData object `.table` from h5ad file."""
         self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
+        if isinstance(self.adata, spatialdata.SpatialData):  # update `.uns`
+            csid = self._columns["col_sample_id"]
+            for s in self.rna.obs[csid].unique():
+                self.rna[self.rna.obs[csid] == s] = cr.pp.update_spatial_uns(
+                    self.rna[self.rna.obs[csid] == s], library_id)
 
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
         if mode == "h5ad":
-            adata = self.adata.table.copy()
-            if self._spatial_key in adata.uns:
-                _ = adata.uns.pop(self._spatial_key)
-            adata.write_h5ad(
-                os.path.splitext(file)[0] + ".h5ad", **kwargs)
+            file = os.path.splitext(file)[0] + ".h5ad"
+            adata = self.adata.table.copy()  # copy so don't alter self
+            if self._spatial_key in adata.uns:  # can't write all SpatialData
+                _ = adata.uns.pop(self._spatial_key)  # have to remove .images
+            adata.write_h5ad(file, **kwargs)
         else:
             self.adata.write(file, **{"overwrite": True, **kwargs})
 
@@ -138,8 +134,6 @@ class Spatial(Omics):
             color = list([color] if isinstance(color, str) else color) + [
                 self._columns["col_cell_type"]]
             color = list(pd.unique(color))
-        if "title" not in kwargs:
-            kwargs.update({"title": color})
         if col_sample_id is None:
             col_sample_id = self._columns["col_sample_id"]
         cgs = self._columns["col_gene_symbols"] if (self._columns[
@@ -147,6 +141,8 @@ class Spatial(Omics):
         color = list(set([color] if isinstance(color, str) else color
                          ).intersection(set(list(self.rna.var_names) + list(
                              self.rna.obs.columns))))
+        if "title" not in kwargs:
+            kwargs.update({"title": color})
         figs["spatial"] = sq.pl.spatial_scatter(
             self.rna, library_id=library_id, figsize=figsize, shape=shape,
             color=color, cmap=cmap, alt_var=cgs, img_res_key=key_image,
@@ -382,11 +378,12 @@ class Spatial(Omics):
         if isinstance(genes, int):
             genes = self.rna.uns["moranI"].head(genes).index.values
         ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
+        fig = None
         try:
             fig = self.plot_spatial(
                 genes + [col_cell_type], include_umap=False,
                 shape=shape, figsize=figsize, return_ax=True,
-                img_res_key=key_image, library_id=library_id, **kws_plot)
+                key_image=key_image, library_id=library_id, **kws_plot)
             if title:
                 fig.suptitle(title)
         except Exception as err:

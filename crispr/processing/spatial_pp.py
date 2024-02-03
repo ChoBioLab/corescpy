@@ -30,6 +30,7 @@ import numpy as np
 # z-slices are 3 microns apart
 Z_SLICE_MICRON = 3
 SPATIAL_KEY = "spatial"
+SPATIAL_IMAGE_KEY_SEP = "___"
 STORE_UNS_SQUIDPY = True  # for back-compatibility with Squidpy
 # store images from SpatialData object in SpatialData.table.uns (AnnData.uns)
 
@@ -89,16 +90,24 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
         # adata = sdata.table
         # adata.uns["sdata"] = sdata
         if library_id is None:
+            print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
             library_id = str(file_path)
         adata = sdio.xenium(file_path, n_jobs=n_jobs)
         if STORE_UNS_SQUIDPY:
-            imgs = {}
-            for x in adata.images:
-                for i in adata.images[x]:
-                    imgs.update({f"{x}_{i}": adata.images[x][i].image})
-                    # imgs.update({f"{library_id}_{x}_{i}": adata.images[
-                    #     x][i].image})
-            adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
+            adata = update_spatial_uns(adata, library_id, col_sample_id)
+    return adata
+
+
+def update_spatial_uns(adata, library_id, col_sample_id):
+    """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
+    imgs = {}
+    for x in adata.images:
+        for i in adata.images[x]:
+            key = f"{library_id}{SPATIAL_IMAGE_KEY_SEP}{x}_{i}"
+            imgs.update({key: adata.images[x][i].image})
+    adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
+    if col_sample_id not in adata.table.obs:
+        adata.table.obs.loc[:, col_sample_id] = library_id
     return adata
 
 
