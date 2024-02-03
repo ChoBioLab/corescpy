@@ -123,7 +123,7 @@ class Spatial(Omics):
             cr.pp.describe_tiff(os.path.dirname(self.adata.uns[
                 "spatial"][x]["metadata"]["file_path"]))
 
-    def plot_spatial(self, color, include_umap=False,
+    def plot_spatial(self, color, include_umap=False, key_image=None,
                      col_sample_id=None, library_id=None,
                      shape="hex", figsize=30, cmap="magma", **kwargs):
         """Create basic spatial plots."""
@@ -145,11 +145,11 @@ class Spatial(Omics):
         cgs = self._columns["col_gene_symbols"] if (self._columns[
             "col_gene_symbols"] != self.rna.var.index.names[0]) else None
         color = list(set([color] if isinstance(color, str) else color
-                         ).intersection(set(list(s.rna.var_names) + list(
-                             s.rna.obs.columns))))
+                         ).intersection(set(list(self.rna.var_names) + list(
+                             self.rna.obs.columns))))
         figs["spatial"] = sq.pl.spatial_scatter(
             self.rna, library_id=library_id, figsize=figsize, shape=shape,
-            color=color, cmap=cmap, alt_var=cgs,
+            color=color, cmap=cmap, alt_var=cgs, img_res_key=key_image,
             library_key=col_sample_id, **kwargs)  # spatial scatter plot
         return figs
 
@@ -257,7 +257,8 @@ class Spatial(Omics):
     def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
                                library_id=None, library_key=None, seed=1618,
                                layer=None, palette=None, size=None,
-                               shape="hex", title="Neighborhood Enrichment",
+                               key_image=None, shape="hex",
+                               title="Neighborhood Enrichment",
                                kws_plot=None, figsize=None, cmap="magma",
                                vcenter=0, cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
@@ -268,6 +269,11 @@ class Spatial(Omics):
             col_cell_type = self._columns["col_cell_type"]
         if cbar_range is None:
             cbar_range = [None, None]
+        if library_id is None:
+            library_id = list(self.rna.uns[self._spatial_key].keys())[0]
+        if key_image is None:
+            key_image = list(self.rna.uns[self._spatial_key][library_id][
+                "images"].keys())[0]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
@@ -286,11 +292,11 @@ class Spatial(Omics):
                 adata.table, cluster_key=col_cell_type, title=title,
                 vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
                 library_id=library_id, library_key=library_key,
-                cmap=cmap, ax=axs[0])  # matrix: enrichment scores (panel 1)
+                img_res_key=key_image, cmap=cmap, ax=axs[0])  # matrix
         except Exception:
             traceback.print_exc()
         try:
-            self.plot_spatial(self, col_cell_type, include_umap=True,
+            self.plot_spatial(col_cell_type, include_umap=True,
                               ax=axs[1], shape=shape, figsize=figsize,
                               cmap=cmap)  # cells (panel 2)
         except Exception:
@@ -300,7 +306,7 @@ class Spatial(Omics):
         return adata, fig
 
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
-                          layer=None, library_id=None, copy=False,
+                          layer=None, library_id=None, cmap="magma",
                           n_jobs=None, figsize=15, palette=None, title=None,
                           kws_plot=None, shape="hex", size=None, **kwargs):
         """
@@ -346,13 +352,13 @@ class Spatial(Omics):
             traceback.print_exc()
         if title:
             figs["co_occurrence"].suptitle(title)
-        if copy is False:
-            self.figures["co_occurrence"] = figs["co_occurrence"]
+        self.figures["co_occurrence"] = figs["co_occurrence"]
         return adata, figs
 
     def find_svgs(self, genes=10, method="moran", shape="hex", n_perms=10,
                   layer=None, library_id=None, col_cell_type=None, title=None,
-                  col_sample_id=None, n_jobs=2, figsize=15, kws_plot=None):
+                  col_sample_id=None, n_jobs=2, figsize=15,
+                  key_image=None, kws_plot=None):
         """Find spatially-variable genes."""
         adata = self.adata
         # adata.table = self.get_layer(layer=layer, subset=None, inplace=True)
@@ -379,11 +385,12 @@ class Spatial(Omics):
         try:
             fig = self.plot_spatial(
                 genes + [col_cell_type], include_umap=False,
-                shape=shape, figsize=figsize, cmap=cmap, return_ax=True,
-                library_id=library_id, **kws_plot)  # cell types plot
+                shape=shape, figsize=figsize, return_ax=True,
+                img_res_key=key_image, library_id=library_id, **kws_plot)
             if title:
                 fig.suptitle(title)
-        except Exception:
+        except Exception as err:
+            fig = err
             traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
