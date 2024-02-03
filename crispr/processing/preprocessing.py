@@ -597,7 +597,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                 [h] if yes else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
                 {"total_counts": "Total Counts in Cell", **rename_perc,
-                 "n_genes_by_counts": "Number of Genes Detected in Cell",
+                 "n_genes_by_counts": "Genes Detected in Cell",
                  **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(
                 mets_df, diag_kind="kde", hue=h if yes else None,
