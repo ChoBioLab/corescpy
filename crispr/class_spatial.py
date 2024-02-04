@@ -143,6 +143,13 @@ class Spatial(cr.Omics):
                              self.rna.obs.columns))))
         if "title" not in kwargs:
             kwargs.update({"title": color})
+        if isinstance(self.adata, spatialdata.SpatialData):
+            if library_id is None:
+                library_id = list(self.adata.uns[self._spatial_key].keys())[0]
+            if key_image not in self.rna.uns[self._spatial_key][library_id][
+                "images"]:
+                key_image = list(self.rna.uns[self._spatial_key][library_id][
+                    "images"].keys())[0]
         figs["spatial"] = sq.pl.spatial_scatter(
             self.rna, library_id=library_id, figsize=figsize, shape=shape,
             color=color, cmap=cmap, alt_var=cgs, img_res_key=key_image,

@@ -574,7 +574,7 @@ def perform_gsea(pdata, adata_sc=None,
         key=[key_condition] * gsea_results.shape[0]
         )  # DO NOT CHANGE THESE NAMES. Plotting fx depends on it
     print(gsea_results.head(20))
-    score_sort = gsea_results[gsea_results.pval < p_threshold]  # filter by p
+    score_sort = gsea_results[gsea_results.pval < p_threshold]  # filter ~ p
     score_sort = score_sort.loc[score_sort.score.abs().sort_values(
         ascending=False).index]  # sort by absolute score
 

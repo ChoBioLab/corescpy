@@ -8,6 +8,7 @@ import scanpy as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pertpy as pt
+import blitzgsea as blitz
 import liana
 import decoupler
 import spatialdata
@@ -625,47 +626,71 @@ class Omics(object):
         self.figures["dialogue"] = figs
         return figs
 
-    def run_gsea(self, key_condition, col_condition=None, layer="log1p",
-                 copy=False, filter_by_highly_variable=True,
-                 pseudobulk=True, **kwargs):
+    def run_gsea(self, key_condition=None, mode="pertpy", library_blitz=None,
+                 layer="log1p", absolute=False, direction="both", copy=False,
+                 pseudobulk=True, filter_by_highly_variable=True, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
-        if col_condition is None:
-            col_condition = self._columns["col_cell_type"]
-            if self._columns["col_condition"] is not None:
-                col_condition = [col_condition, self._columns[
-                    "col_condition"]]
-        csid = kwargs.pop("col_sample_id", self._columns["col_sample_id"])
-        for x in [self._columns, self._keys]:
-            for c in x:  # iterate column/key name attributes
-                if c not in kwargs and c not in [
-                        "col_condition", "col_sample_id"]:
-                    kwargs.update({c: x[c]})  # & use object attribute
-        if pseudobulk not in [None, False]:
-            if isinstance(pseudobulk, anndata.AnnData):
-                data = pseudobulk.copy()  # if pseudobulk provided as data
-            elif self.pdata is None:  # if pseudobulk not already an attribute
-                if not isinstance(pseudobulk, dict):
-                    pseudobulk = {}
-                data = self.bulk(**pseudobulk)  # ...create pseudobulk
-                if copy is False:
-                    self.pdata = data  # store pseudobulk data in `self.pdata`
-            else:  # otherwise, use existing pseudobulk data in `self.pdata`
-                data = self.pdata.copy()
+        cct, csid, ccond = [kwargs.pop(x, self._columns[x]) for x in [
+            "col_cell_type", "col_sample_id", "col_condition"]]
+        if mode == "pertpy":
+            enr, fig, key_add = {}, {}, "pertpy_enrichment"  # for results
+            corr_method = kwargs.pop("corr_method", "benjamini-hochberg")
+            adata = self.rna.copy() if copy is True else self.rna
+            mod = pt.tl.Enrichment()
+            targets =
+            kws = cr.tl.merge(dict(
+                nested=False, categories=None, method="mean", n_bins=25,
+                ctrl_size=50), {**kwargs, "key_added": key_add}, how="left")
+            kws["targets"] = blitz.enrichr.get_library(
+                library_blitz) if library_blitz else None  # custom resource?
+            mod.score(adata, layer=layer, key_added=key_add, **kws)  # ~ cell
+            sc.tl.rank_genes_groups(adata, method="wilcoxon", groupby=cct)
+            pt_enricher.plot_dotplot(adata, groupby=cct)  # GEX dotplot
+            enr["gsea"] = model.gsea(absolute=absolute)  # run blitzgsea GSEA
+            mod.plot_gsea(adata, enr["gsea"], interactive_plot=True)  # plot
+            fig["gsea"] = plt.gcf()
+            overrep = pt_enricher.hypergeometric(
+                adata, absolute=absolute)  # test for significance
+            enrich["hypergeometric"] = pt_enricher.gsea(adata)
+            mod.plot_gsea(adata, enr["hypergeometric"], interactive_plot=True)
+            fig["hypergeometric"] = plt.gcf()
+            fig["blitz"] = {}
+            for x in adata.obs[cct].unique():  # iterate cell types
+                try:
+                    fig["blitz"][x] = blitz.plot.running_sum(
+                        signature=adata.uns[f"{key_add}_gsea"]["scores"][x],
+                        library=adata.uns["{key_add}_gsea"]["targets"],
+                        geneset="MHC class II receptor activity (GO:0032395)",
+                        result=enr[x], interactive_plot=True)
+                    fig["blitz"].show()
+                except:
+                    print(traceback.format_exc(), "\n\nGSEA plot failed!")
+            if copy is False:
+                self.results["gsea"], self.figures["gsea"] = enr, fig
+                self.rna = adata
+            output = enr, fig
         else:
-            data = self.rna.copy()
-        output = cr.ax.perform_gsea(
-            data, adata_sc=self.rna.copy(), col_sample_id=csid,
-            filter_by_highly_variable=filter_by_highly_variable,
-            col_condition=col_condition, key_condition=key_condition,
-            layer=layer if layer in self.rna.layers else self._layers[layer],
-            copy=copy, pseudobulk=pseudobulk, **kwargs)  # GSEA
-        if copy is False:
-            if pseudobulk is True:
-                self.pdata = output[0]
-            else:
-                self.rna = output[0]
-            self.results["gsea"] = output[1]
-            self.figures["gsea"] = output[-1]
+            adata = self.get_layer(layer=layer, inplace=False)
+            for x in [self._columns, self._keys]:
+                for c in x:  # iterate column/key name attributes
+                    if c not in kwargs and c not in [
+                            "col_condition", "col_sample_id"]:
+                        kwargs.update({c: x[c]})  # & use object attribute
+            if pseudobulk not in [None, False]:  # use if anndata or create
+                data = pseudobulk.copy() if isinstance(
+                    pseudobulk, anndata.AnnData) else self.bulk(**pseudobulk)
+            output = cr.ax.perform_gsea(
+                data, adata_sc=adata, col_sample_id=csid, col_cell_type=cct,
+                layer=None, col_condition=cond, key_condition=key_condition,
+                filter_by_highly_variable=filter_by_highly_variable,
+                copy=False, pseudobulk=pseudobulk, **kwargs)  # GSEA
+            if copy is False:
+                if pseudobulk is True:
+                    self.pdata = output[0]
+                else:
+                    self.rna = output[0]
+                self.results["gsea"] = output[1]
+                self.figures["gsea"] = output[-1]
         return output
 
     def plot_gsea(self, ifn_pathways=True, p_threshold=0.0001, **kwargs):
