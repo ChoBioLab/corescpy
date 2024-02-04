@@ -23,8 +23,6 @@ COLOR_MAP = "coolwarm"
 class Spatial(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
-    _columns_created = dict(guide_percent="Percent of Cell Guides")
-
     def __init__(self, file_path, col_sample_id="Sample", library_id="A",
                  file_path_spatial=None, visium=False, **kwargs):
         """
@@ -82,11 +80,19 @@ class Spatial(cr.Omics):
     def update_from_h5ad(self, file=None):
         """Update SpatialData object `.table` from h5ad file."""
         self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
-        if isinstance(self.adata, spatialdata.SpatialData):  # update `.uns`
-            csid = self._columns["col_sample_id"]
+        csid = self._columns["col_sample_id"]
+        if isinstance(self.adata, spatialdata.SpatialData) and (
+                len(self.rna.obs[csid].unique()) > 1):  # multi-sample
+            print("\n\n<<< RESTORING MULTI-SAMPLE FROM h5ad >>>\n")
             for s in self.rna.obs[csid].unique():
                 self.rna[self.rna.obs[csid] == s] = cr.pp.update_spatial_uns(
-                    self.rna[self.rna.obs[csid] == s], self._library_id)
+                    self.adata, self._library_id, csid, rna_only=True)
+        elif isinstance(self.adata, spatialdata.SpatialData):  # single-sample
+            print("\n\n<<< RESTORING SINGLE-SAMPLE FROM h5ad >>>\n")
+            self.rna = cr.pp.update_spatial_uns(
+                self.adata, self._library_id, csid, rna_only=True)
+        else:  # if not SpatialData object
+            print("\n\n<<< RESTORED FROM h5ad >>>\n")
 
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
@@ -135,8 +141,8 @@ class Spatial(cr.Omics):
             shape = None
         cgs = self._columns["col_gene_symbols"] if (self._columns[
             "col_gene_symbols"] != self.rna.var.index.names[0]) else None
-        if library_id is None:  # all libraries if unspecified
-            library_id = list(self.rna.obs[col_sample_id].unique())
+        # if library_id is None:  # all libraries if unspecified
+        #     library_id = list(self.rna.obs[col_sample_id].unique())
         adata = self.rna.copy()
         _ = adata.uns.pop("leiden_colors", None)
         color = None if color is False else color if color else self._columns[
@@ -239,7 +245,9 @@ class Spatial(cr.Omics):
         #     "library_id"] = col_sample_id if col_sample_id not in [
         #         None, False] else self._columns["col_sample_id"]  # library ID
         try:
-            sq.pl.centrality_scores(adata.table, cluster_key=col_cell_type,
+            ann = adata.table.copy()
+            _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+            sq.pl.centrality_scores(ann, cluster_key=col_cell_type,
                                     figsize=figsize)
         except Exception:
             traceback.print_exc()
@@ -258,7 +266,7 @@ class Spatial(cr.Omics):
                                key_image=None, shape="hex",
                                title="Neighborhood Enrichment",
                                kws_plot=None, figsize=None, cmap="magma",
-                               vcenter=0, cbar_range=None, copy=False):
+                               vcenter=None, cbar_range=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.adata
         if library_key is None:
@@ -268,7 +276,7 @@ class Spatial(cr.Omics):
         if cbar_range is None:
             cbar_range = [None, None]
         if library_id is None:
-            library_id = list(self.rna.uns[self._spatial_key].keys())[0]
+            library_id = self._library_id
         if key_image is None:
             key_image = list(self.rna.uns[self._spatial_key][library_id][
                 "images"].keys())[0]
@@ -286,15 +294,17 @@ class Spatial(cr.Omics):
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         try:
+            ann = adata.table.copy()
+            _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
             sq.pl.nhood_enrichment(
-                adata.table, cluster_key=col_cell_type, title=title,
+                ann, cluster_key=col_cell_type, title=title,
                 vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
                 library_id=library_id, library_key=library_key,
                 img_res_key=key_image, cmap=cmap, ax=axs[0])  # matrix
         except Exception:
             traceback.print_exc()
         try:
-            self.plot_spatial(col_cell_type, ax=axs[1], shape=shape,
+            self.plot_spatial(color=col_cell_type, ax=axs[1], shape=shape,
                               figsize=figsize, cmap=cmap)  # cells (panel 2)
         except Exception:
             traceback.print_exc()
@@ -331,7 +341,7 @@ class Spatial(cr.Omics):
         figs["co_occurrence"] = {}
         try:
             figs["spatial_scatter"] = self.plot_spatial(
-                col_cell_type, groups=key_cell_type,
+                color=col_cell_type, groups=key_cell_type,
                 shape=shape, figsize=figsize, cmap=cmap,
                 library_id=library_id, return_ax=True)  # cell types plot
             if title:
@@ -342,8 +352,10 @@ class Spatial(cr.Omics):
         #     adata, cluster_key=col_cell_type, legend=False,
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         try:
+            ann = adata.table.copy()
+            _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
             figs["co_occurrence"] = cr.pl.plot_cooccurrence(
-                adata.table, col_cell_type=col_cell_type, **kws_plot,
+                ann, col_cell_type=col_cell_type, **kws_plot,
                 key_cell_type=key_cell_type, figsize=figsize)  # lines plot
         except Exception:
             traceback.print_exc()

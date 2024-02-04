@@ -593,9 +593,12 @@ class Omics(object):
         adata, figs = self.get_layer(layer=layer, inplace=False), {}
         col = self._columns["col_perturbed" if (
             "col_perturbed" in self._columns) else "col_condition"]
+        print(col_cell_type, col)
+        kws = dict(n_counts_key=self._columns["col_num_umis"]) if (
+            self._columns["col_num_umis"]) else {}
         d_l = pt.tl.Dialogue(
             sample_id=col, n_mpcs=n_programs, celltype_key=col_cell_type,
-            n_counts_key=self._columns["col_num_umis"])  # run Dialogue
+            **kws)  # run Dialogue
         pdata, mcps, w_s, ct_subs = d_l.calculate_multifactor_PMD(
             adata, normalize=True)
         mcp_cols = list(set(pdata.obs.columns).difference(adata.obs.columns))
@@ -696,17 +699,14 @@ class Omics(object):
             output = enr, fig
         else:
             adata = self.get_layer(layer=layer, inplace=False)
-            for x in [self._columns, self._keys]:
-                for c in x:  # iterate column/key name attributes
-                    if c not in kwargs and c not in [
-                            "col_condition", "col_sample_id"]:
-                        kwargs.update({c: x[c]})  # & use object attribute
             if pseudobulk not in [None, False]:  # use if anndata or create
+                if isinstance(pseudobulk, bool) and pseudobulk is True:
+                    pseudobulk = dict(col_cell_type=cct, col_sample_id=csid)
                 data = pseudobulk.copy() if isinstance(
                     pseudobulk, anndata.AnnData) else self.bulk(**pseudobulk)
             output = cr.ax.perform_gsea(
                 data, adata_sc=adata, col_sample_id=csid, col_cell_type=cct,
-                layer=None, col_condition=cond, key_condition=key_condition,
+                layer=None, col_condition=ccond, key_condition=key_condition,
                 filter_by_highly_variable=filter_by_highly_variable,
                 copy=False, pseudobulk=pseudobulk, **kwargs)  # GSEA
             if copy is False:

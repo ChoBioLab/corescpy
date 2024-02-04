@@ -13,9 +13,9 @@ class TestVisium:
     library_id = "V1_Human_Brain_Section_2"
     adata = sq.datasets.visium(library_id, include_hires_tiff=False)
     kwargs = dict(col_gene_symbols="gene_symbol", col_cell_type="leiden",
-                  col_sample_id=None, col_batch=None,
-                  col_subject="", visium=True, library_id=library_id)
-    self = cr.Spatial(adata, **kwargs, kws_process_guide_rna=kws_pga)
+                  col_sample_id="Sample", col_batch=None, col_subject=None,
+                  visium=True, library_id=library_id)
+    self = cr.Spatial(adata, **kwargs)
 
     def test_visium_plots(self):
         """Basic plots."""

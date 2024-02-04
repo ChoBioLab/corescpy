@@ -714,6 +714,7 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition, key_control,
         dds.deseq2()  # estimate dispersion & logfold change
         dea[t] = DeseqStats(dds, alpha=p_threshold, contrast=[
             col_condition, key_treatment, key_control], quiet=quiet,
+
                             cooks_filter=filt_c, independent_filter=filt_i)
         dea[t].quiet = quiet
         dea[t].summary()  # print Wald test summary

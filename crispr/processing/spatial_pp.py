@@ -98,7 +98,7 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
     return adata
 
 
-def update_spatial_uns(adata, library_id, col_sample_id):
+def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
     """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
     imgs = {}
     for x in adata.images:
@@ -106,11 +106,18 @@ def update_spatial_uns(adata, library_id, col_sample_id):
             key = f"{library_id}{SPATIAL_IMAGE_KEY_SEP}{x}_{i}"
             imgs[key] = sq.im.ImageContainer(
                 adata.images[x][i].image, library_id=library_id)
-    adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-    adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
-    if col_sample_id not in adata.table.obs:
-        adata.table.obs.loc[:, col_sample_id] = library_id
-    return adata
+    if rna_only is True:
+        if col_sample_id in adata.table.obs:
+            rna = adata.table[adata.table.obs[col_sample_id] == library_id]
+        rna.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
+        rna.uns[SPATIAL_KEY]["library_id"] = library_id
+        return rna
+    else:
+        adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
+        adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
+        if col_sample_id not in adata.table.obs:
+            adata.table.obs.loc[:, col_sample_id] = library_id
+        return adata
 
 
 def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):
