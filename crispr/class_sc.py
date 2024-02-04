@@ -633,19 +633,27 @@ class Omics(object):
         cct, csid, ccond = [kwargs.pop(x, self._columns[x]) for x in [
             "col_cell_type", "col_sample_id", "col_condition"]]
         if mode == "pertpy":
-            enr, fig, key_add = {}, {}, "pertpy_enrichment"  # for results
-            corr_method = kwargs.pop("corr_method", "benjamini-hochberg")
             adata = self.rna.copy() if copy is True else self.rna
+            enr, fig, key_add = {}, {}, "pertpy_enrichment"  # for results
+            ref = "rest" if key_condition is None else key_condition if (
+                isinstance(key_condition, str)) else None
+            if isinstance(key_condition, (list, np.ndarray)):  # if subsetting
+                adata = adata[adata.obs[ccond].isin(key_condition)
+                              ]  # only keep condition set in key_condition
+            if "rank_genes_groups" in adata.uns:
+                adata.uns["rank_genes_groups_o"] = adata.uns[
+                    "rank_genes_groups"]  # preserve original rank genes
+            corr_method = kwargs.pop("corr_method", "benjamini-hochberg")
             mod = pt.tl.Enrichment()
-            targets =
             kws = cr.tl.merge(dict(
                 nested=False, categories=None, method="mean", n_bins=25,
                 ctrl_size=50), {**kwargs, "key_added": key_add}, how="left")
             kws["targets"] = blitz.enrichr.get_library(
                 library_blitz) if library_blitz else None  # custom resource?
             mod.score(adata, layer=layer, key_added=key_add, **kws)  # ~ cell
-            sc.tl.rank_genes_groups(adata, method="wilcoxon", groupby=cct)
-            pt_enricher.plot_dotplot(adata, groupby=cct)  # GEX dotplot
+            sc.tl.rank_genes_groups(adata, method="wilcoxon", groupby=ccond,
+                                    reference=ref)
+            pt_enricher.plot_dotplot(adata, groupby=ccond)  # GEX dotplot
             enr["gsea"] = model.gsea(absolute=absolute)  # run blitzgsea GSEA
             mod.plot_gsea(adata, enr["gsea"], interactive_plot=True)  # plot
             fig["gsea"] = plt.gcf()
@@ -655,7 +663,7 @@ class Omics(object):
             mod.plot_gsea(adata, enr["hypergeometric"], interactive_plot=True)
             fig["hypergeometric"] = plt.gcf()
             fig["blitz"] = {}
-            for x in adata.obs[cct].unique():  # iterate cell types
+            for x in adata.obs[ccond].unique():  # iterate cell types
                 try:
                     fig["blitz"][x] = blitz.plot.running_sum(
                         signature=adata.uns[f"{key_add}_gsea"]["scores"][x],
@@ -666,8 +674,17 @@ class Omics(object):
                 except:
                     print(traceback.format_exc(), "\n\nGSEA plot failed!")
             if copy is False:
+                rgg = "rank_genes_groups"  # rank genes key (cell types RGG)
+                adata.uns[f"{rgg}_{ccond}"] = adata.uns[rgg]  # condition RGG
+                if f"{rgg}_o" in adata.uns:  # if originally had rank~cluster
+                    adata.uns[rgg] = adata.uns[f"{rgg}_o"]  # restore RGG
+                    _ = adata.uns.pop(f"{rgg}_o")  # remove placeholder RGG
                 self.results["gsea"], self.figures["gsea"] = enr, fig
-                self.rna = adata
+                if adata.n_obs != self.rna.n_obs:
+                    warn("Cannot save GSEA results as anndata object",
+                         "because Anndata was subsetted during GSEA.")
+                else:  # store ranked genes in different RGG key; assign adata
+                    self.rna = adata
             output = enr, fig
         else:
             adata = self.get_layer(layer=layer, inplace=False)

@@ -44,12 +44,11 @@ dependencies = [
 
     # Spatial
     "squidpy",
+    "spatialdata-plot",
     "tifffile",
     "cellpose",
-    "napari",
     "napari[pyqt5]; platform_system != 'Windows'",
     "napari[pyside2]; platform_system == 'Windows'",
-    "pyqt",
 
     # Other
     "numpy >= 1.24.4",
