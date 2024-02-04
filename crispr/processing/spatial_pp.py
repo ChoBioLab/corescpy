@@ -104,8 +104,10 @@ def update_spatial_uns(adata, library_id, col_sample_id):
     for x in adata.images:
         for i in adata.images[x]:
             key = f"{library_id}{SPATIAL_IMAGE_KEY_SEP}{x}_{i}"
-            imgs.update({key: adata.images[x][i].image})
+            imgs[key] = sq.im.ImageContainer(
+                adata.images[x][i].image, library_id=library_id)
     adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
+    adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
     if col_sample_id not in adata.table.obs:
         adata.table.obs.loc[:, col_sample_id] = library_id
     return adata

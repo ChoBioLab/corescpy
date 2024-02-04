@@ -216,6 +216,14 @@ class Omics(object):
             adata = adata[subset]
         return adata
 
+    def get_variables(self, variables=None):
+        """Get `.obs` & `.var` variables/intersection with list."""
+        valids = list(self.rna.var_names) + list(self.rna.obs.columns)
+        variables = valids if variables is None else list(set(
+            [variables] if isinstance(variables, str) else variables
+            ).intersection(set(valids)))
+        return variables
+
     def print(self):
         """Print information."""
         print(self.rna.obs.head(), "\n\n")

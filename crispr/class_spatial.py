@@ -5,10 +5,11 @@
 """
 
 import os
-# import traceback
 import squidpy as sq
+import spatialdata
 import scanpy as sc
 import traceback
+from warnings import warn
 import matplotlib
 import matplotlib.pyplot as plt
 import crispr as cr
@@ -74,6 +75,7 @@ class Spatial(cr.Omics):
         if self._columns["col_sample_id"] not in self.rna.obs:
             self.rna.obs.loc[:, self._columns["col_sample_id"]] = library_id
         self.figures["spatial"], self.results["spatial"] = {}, {}
+        self._library_id = library_id
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
 
@@ -84,7 +86,7 @@ class Spatial(cr.Omics):
             csid = self._columns["col_sample_id"]
             for s in self.rna.obs[csid].unique():
                 self.rna[self.rna.obs[csid] == s] = cr.pp.update_spatial_uns(
-                    self.rna[self.rna.obs[csid] == s], library_id)
+                    self.rna[self.rna.obs[csid] == s], self._library_id)
 
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
@@ -119,42 +121,35 @@ class Spatial(cr.Omics):
             cr.pp.describe_tiff(os.path.dirname(self.adata.uns[
                 "spatial"][x]["metadata"]["file_path"]))
 
-    def plot_spatial(self, color, include_umap=False, key_image=None,
-                     col_sample_id=None, library_id=None,
-                     shape="hex", figsize=30, cmap="magma", **kwargs):
+    def plot_spatial(self, color=None, kind="scatter", key_image=None,
+                     col_sample_id=None, library_id=None, title="",
+                     shape="hex", figsize=30, cmap="magma", wspace=0.4,
+                     **kwargs):
         """Create basic spatial plots."""
-        figs = {}
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
-        if "wspace" not in kwargs:
-            kwargs["wspace"] = 0.4
-        if color is None:
-            color = self._columns["col_cell_type"]
-        if include_umap is True:
-            color = list([color] if isinstance(color, str) else color) + [
-                self._columns["col_cell_type"]]
-            color = list(pd.unique(color))
         if col_sample_id is None:
             col_sample_id = self._columns["col_sample_id"]
+        if isinstance(self.adata, spatialdata.SpatialData) and shape:
+            warn("Can't currently use `shape` parameter with SpatialData.")
+            shape = None
         cgs = self._columns["col_gene_symbols"] if (self._columns[
             "col_gene_symbols"] != self.rna.var.index.names[0]) else None
-        color = list(set([color] if isinstance(color, str) else color
-                         ).intersection(set(list(self.rna.var_names) + list(
-                             self.rna.obs.columns))))
-        if "title" not in kwargs:
-            kwargs.update({"title": color})
-        if isinstance(self.adata, spatialdata.SpatialData):
-            if library_id is None:
-                library_id = list(self.adata.uns[self._spatial_key].keys())[0]
-            if key_image not in self.rna.uns[self._spatial_key][library_id][
-                "images"]:
-                key_image = list(self.rna.uns[self._spatial_key][library_id][
-                    "images"].keys())[0]
-        figs["spatial"] = sq.pl.spatial_scatter(
-            self.rna, library_id=library_id, figsize=figsize, shape=shape,
-            color=color, cmap=cmap, alt_var=cgs, img_res_key=key_image,
-            library_key=col_sample_id, **kwargs)  # spatial scatter plot
-        return figs
+        if library_id is None:  # all libraries if unspecified
+            library_id = list(self.rna.obs[col_sample_id].unique())
+        adata = self.rna.copy()
+        _ = adata.uns.pop("leiden_colors", None)
+        color = None if color is False else color if color else self._columns[
+            "col_cell_type"]  # no color if False; clusters if unspecified
+        if color is not None:
+            color = list(pd.unique(self.get_variables(color)))
+        kws = dict(figsize=figsize, shape=shape, title=title, color=color,
+                   # img_res_key=key_image, library_key=col_sample_id,
+                   # library_id=library_id,
+                   cmap=cmap, alt_var=cgs, wspace=wspace, **kwargs)
+        fig = sq.pl.spatial_scatter(adata, **kws) if (
+            kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
+        return fig
 
     def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
                         library_id=None, figsize_multiplier=1, dpi=100,
@@ -299,9 +294,8 @@ class Spatial(cr.Omics):
         except Exception:
             traceback.print_exc()
         try:
-            self.plot_spatial(col_cell_type, include_umap=True,
-                              ax=axs[1], shape=shape, figsize=figsize,
-                              cmap=cmap)  # cells (panel 2)
+            self.plot_spatial(col_cell_type, ax=axs[1], shape=shape,
+                              figsize=figsize, cmap=cmap)  # cells (panel 2)
         except Exception:
             traceback.print_exc()
         if copy is False:
@@ -337,7 +331,7 @@ class Spatial(cr.Omics):
         figs["co_occurrence"] = {}
         try:
             figs["spatial_scatter"] = self.plot_spatial(
-                col_cell_type, groups=key_cell_type, include_umap=True,
+                col_cell_type, groups=key_cell_type,
                 shape=shape, figsize=figsize, cmap=cmap,
                 library_id=library_id, return_ax=True)  # cell types plot
             if title:
@@ -388,9 +382,9 @@ class Spatial(cr.Omics):
         fig = None
         try:
             fig = self.plot_spatial(
-                genes + [col_cell_type], include_umap=False,
-                shape=shape, figsize=figsize, return_ax=True,
-                key_image=key_image, library_id=library_id, **kws_plot)
+                genes + [col_cell_type], shape=shape, figsize=figsize,
+                return_ax=True, key_image=key_image, library_id=library_id,
+                **kws_plot)
             if title:
                 fig.suptitle(title)
         except Exception as err:

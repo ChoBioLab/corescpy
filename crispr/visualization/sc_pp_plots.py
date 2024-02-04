@@ -95,8 +95,7 @@ def plot_hvgs(
         var_or_disp = result.dispersions
         var_or_disp_norm = result.dispersions_norm
     size = rcParams["figure.figsize"]
-    pl.figure(figsize=(2 * size[0], size[1]), dpi=int(
-        200 / (rcParams["figure.figsize"][0] / 200)))
+    pl.figure(figsize=(2 * size[0], size[1]))
     pl.subplots_adjust(wspace=0.3)
     for idx, d in enumerate([var_or_disp_norm, var_or_disp]):
         pl.subplot(1, 2, idx + 1)
