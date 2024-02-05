@@ -603,13 +603,13 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
                  "n_genes_by_counts": "Genes Detected in Cell",
                  **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(
-                mets_df, diag_kind="kde", hue=h if yes else None,
+                mets_df, diag_kind="kde", hue=h if h else None,
                 diag_kws=dict(fill=True, cut=0), plot_kws=dict(
                     marker=".", linewidth=0.05))  # QC pairplot
         except Exception as err:
             fff = err
             print(traceback.format_exc())
-        figs[f"pairplot_by_{h}" if yes else "pairplot"] = fff
+        figs[f"pairplot_by_{h}" if h else "pairplot"] = fff
 
     # % Counts (MT, RB, HB) Distribution (KDE) Plots
     if len(pct_n) > 0:  # if any QC vars (e.g., MT RNA) present...
@@ -715,9 +715,9 @@ def remove_batch_effects(adata, col_cell_type="leiden",
                          early_stopping=True, early_stopping_patience=25)
     train = adata.copy()
     train.obs["cell_type"] = train.obs[col_cell_type].tolist()
-    train.obs["batch"] = train.obs[col_batch].tolist()
+    train.obs["batch"] = train.obs[col_sample_id].tolist()
     if plot is True:
-        sc.pl.umap(train, color=[col_batch, col_cell_type],
+        sc.pl.umap(train, color=[col_sample_id, col_cell_type],
                    wspace=.5, frameon=False)
     print("\n<<< PREPARING DATA >>>")
     pt.tl.SCGEN.setup_anndata(
@@ -730,5 +730,5 @@ def remove_batch_effects(adata, col_cell_type="leiden",
     if plot is True:
         sc.pp.neighbors(corr)
         sc.tl.umap(corr)
-        sc.pl.umap(corr, color=[col_batch, col_cell_type], wspace=0.4)
+        sc.pl.umap(corr, color=[col_sample_id, col_cell_type], wspace=0.4)
     return corr

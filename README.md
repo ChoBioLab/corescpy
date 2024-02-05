@@ -1,4 +1,4 @@
-# CRISPR Pipeline
+# coreSCpy Pipeline
 
 Developer: Elizabeth Aslinger (easlinger)
 
@@ -23,8 +23,7 @@ with desired environment name):
 `git clone https://github.com/ChoBioLab/corescpy.git`, or
 look above for the green "Code" button and press it for instructions.
 
-5. Naviate to the repository directory (replace
-<DIRECTORY> with your path):
+5. Naviate to the repository directory (replace <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
 6. Install the package with pip. (Ensure you have pip installed.)
@@ -38,14 +37,26 @@ Open a Python terminal and type:
 
 2. You can now call functions from the analysis module using
 `cr.ax.<FUNCTION>()`, from the preprocessing using `cr.ax.pp...`, etc.
-in Python; however, you are most likely to interact with the `Crispr`
-class object. Here is example code you might run
-(replacing <...> with your argument specifications) to load and
-preprocess your data.
+in Python; however, you are most likely to interact with the `Omics` class object, or specialized classes that inherit from it, such as `Crispr` and `Spatial`.
+class object. Here is example code you might run (replacing things in < > brackets with your specifications):
 ```
-from corescpy.crispr_class import corescpy
-self = Crispr(adata, <...>)
+self = cr.Omics(<data_object_or_directory>, <...>)
+```
+or
+```
+self = cr.Crispr(<data_object_or_directory>, <...>)
+```
+or
+```
+self = cr.Spatial(<data_object_or_directory>, <...>)
+```
+
+and then run workflows, such as
+```
 self.preprocess(<...>)
+self.cluster(<...>)
+self.annotate_clusters("<CellTypist model.pkl>")
+self.plot(kind=["heat", "matrix", "umap"])
 ```
 etc.
 
@@ -56,6 +67,21 @@ Here are the methods (applicable to scRNA-seq generally, not just perturbations)
 * `self.plot(...)`: Create additional basic plots (e.g., dot, matrix, and violin gene expression plots).
 
 The following perturbation-specific methods can be executed optionally and in any order:
+
+### Spatial Data
+
+Here is an example workflow to analyze spatial data (after preprocessing and clustering as described above):
+
+```
+self.calculate_centrality(n_jobs=4)
+self.find_cooccurrence(figsize=(60, 20), kws_plot=dict(wspace=3))
+self.find_svgs(genes=genes, method="moran", n_perms=10, kws_plot=dict(
+    legend_fontsize="large"), figsize=(15, 15))
+self.calculate_receptor_ligand(col_condition=False, p_threshold=0.001,
+                               remove_ns=True, figsize=(20, 20))
+```
+
+### Perturbation Data
 
 * `self.run_augur(...)`: Score and plot how strongly different cell types responded to perturbation(s). This score is operationalized as the accuracy with which a machine learning model can use gene expression data to predict the perturbation condition to which cells of a given type belong. Augur provides scores aggregated across cells of a given type rather than for individual cells.
 * `self.run_mixscape(...)`: Quantify and plot the extent to which individual cells responded to CRISPR perturbation(s), and identify which perturbation condition cells were not detectibly perturbed in terms of their gene expression.
@@ -95,12 +121,14 @@ Certain arguments used throughout the `corescpy` package (including outside the 
 ### Initialization Method Arguments
 
 * `file_path` **(str, AnnData, or dictionary)**: Path or object containing data. Used in initialization to create the initial `self.adata` attribute (an AnnData or MuData object). Either
-    - a path to a 10x directory (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz),
+    - a path to a 10x directory (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz), the top-level directory of Xenium output (above the CellRanger feature/matrix directory), or the top-level directory of Visium output (that contains the .h5 file),
     - a path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible),
-    - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon, or by using `corescpy.pp.create_object(file_path)`), or
+    - an `AnnData`, `MuData`, or `SpatialData` object (e.g., already loaded with the appropriate `scverse` packages, or by using `corescpy.pp.create_object(file_path)`), or
     - a dictionary containing keyword arguments to pass to  `corescpy.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); press the arrow to expand details here),
 
 <details><summary>Click to expand details</summary>
+    or
+    - a dictionary, keyed by sample name, containing multiple `file_path`-compatible arguments for each sample (for integration).
 
 ```
 crd = "<YOUR DIRECTORY HERE>"
@@ -241,8 +269,12 @@ Finally, this approach saves memory: All these versions of the attribute are sto
 
 ## Resources for Background Knowledge
 
+[Pertpy (Perturbation/Conditions Analysis) Tutorials](https://pertpy.readthedocs.io/en/latest/tutorials/index.html)
 
-[Pertpy Tutorials](https://pertpy.readthedocs.io/en/latest/tutorials/index.html)
+[Squidpy (Spatial) Tutorials](https://squidpy.readthedocs.io/en/stable/notebooks/tutorials/index.html)
+
 [Single Cell Best Practices](https://www.sc-best-practices.org/conditions/perturbation_modeling.html)
+
 [Augur](https://github.com/neurorestore/Augur)
+
 [Mixscape (Seurat)](https://satijalab.org/seurat/articles/mixscape_vignette.html)
