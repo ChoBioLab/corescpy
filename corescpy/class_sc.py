@@ -219,9 +219,7 @@ class Omics(object):
     def get_variables(self, variables=None):
         """Get `.obs` & `.var` variables/intersection with list."""
         valids = list(self.rna.var_names) + list(self.rna.obs.columns)
-        variables = valids if variables is None else list(set(
-            [variables] if isinstance(variables, str) else variables
-            ).intersection(set(valids)))
+        variables = [var for var in variables if var in valids]
         return variables
 
     def print(self):
@@ -408,8 +406,7 @@ class Omics(object):
         """
         if assay_protein is None:
             assay_protein = self._assay_protein
-        layer = layer_in if layer_in in self.rna.layers else self._layers[
-            layer_in]  # detect layer; raw counts if not specified
+        adata = self.get_layer(layer=layer_in, inplace=False)
         kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
         kws_scale = {} if isinstance(kws_scale, str) and kws_scale.lower(
             ) == "z" else deepcopy(kws_scale)  # scale kws processing
@@ -422,7 +419,6 @@ class Omics(object):
             kws_scale = {**znorm_default, **kws_scale}  # merge arguments
         self.info["methods"]["scale"] = kws_scale
         kws.update(dict(kws_scale=kws_scale))
-        adata = self.get_layer(layer=layer, inplace=False)
         adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
         # if assay_protein is not None:  # if includes protein assay
         #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)

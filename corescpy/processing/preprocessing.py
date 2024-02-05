@@ -444,7 +444,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     # Final Data Examination
     cr.tl.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
     figs["qc_metrics_post"] = cr.pp.perform_qc(
-        ann, n_top=n_top, col_gene_symbols=col_gene_symbols, hue=sids)  # QC
+        ann.copy(), n_top=n_top, col_gene_symbols=col_gene_symbols, hue=sids)
     return ann, figs
 
 
@@ -565,7 +565,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     for x in pct_n:  # replace NaN % (in case no mt, rb, hb) wth 0
         adata.obs.loc[adata.obs[x].isnull(), x] = 0
     patterns_names = dict(zip(qc_vars, [patterns_names[k] for k in qc_vars]))
-    hhh, yes = [hue] if isinstance(hue, str) or hue is None else hue, True
+    hhh = [hue] if isinstance(hue, str) or hue is None else hue  # hues
     if len(hhh) > 1:  # only include sample ID as hue if others only 1 value
         hht = list(np.array(hhh)[np.where([
             len(adata.obs[h].unique()) > 1 for h in hhh])[0]])
@@ -594,10 +594,10 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
 
     # All QC Variables versus Each Other (Joint Plots, Scatter & KDE)
     for h in pd.unique(hhh):
-        figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
+        figs[f"qc_scatter_by_{h}" if h else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)
             vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
-                [h] if yes else [])  # QC variable names
+                [h] if h else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
                 {"total_counts": "Total Counts in Cell", **rename_perc,
                  "n_genes_by_counts": "Genes Detected in Cell",

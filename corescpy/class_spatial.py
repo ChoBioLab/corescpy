@@ -157,62 +157,6 @@ class Spatial(cr.Omics):
             kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
         return fig
 
-    def analyze_spatial(self, col_cell_type=None, genes=None, layer="log1p",
-                        library_id=None, figsize_multiplier=1, dpi=100,
-                        palette=None, kws_receptor_ligand=None,
-                        key_source=None, key_targets=None,
-                        method_autocorr="moran", alpha=0.005, n_perms=100,
-                        seed=1618, cmap="magma", copy=False):
-        """Analyze spatial (adapted Squidpy tutorial)."""
-        figs = {}
-        # adata = self.get_layer(layer=layer, subset=None, inplace=True)
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
-        if isinstance(palette, list):
-            palette = matplotlib.colors.Colormap(palette)
-
-        # Connectivity & Centrality + Interaction Matrix
-        print("\n<<< CALCULATING CENTRALITY SCORES >>>")
-        self.calculate_graph(col_cell_type=col_cell_type,
-                             figsize_multiplier=figsize_multiplier)  # run
-
-        # Co-Occurence
-        print("\n<<< QUANTIFYING CELL TYPE CO-OCCURRENCE >>>")
-        adata, figs["cooccurrence"] = self.find_cooccurrence(
-            col_cell_type=col_cell_type, copy=False)
-
-        # Neighbors Enrichment Analysis
-        print("\n<<< PERFORMING NEIGHBORHOOD ENRICHMENT ANALYSIS >>>")
-        figs["enrichment"] = self.calculate_neighborhood(
-            col_cell_type=col_cell_type, copy=False, kws_plot=dict(cmap=cmap))
-
-        # Spatially-Variable Genes
-        if method_autocorr not in [None, False]:
-            figs["svgs_autocorrelation"] = self.find_svgs(
-                genes=genes, method=method_autocorr,
-                layer=layer, n_perms=n_perms, palette=palette)
-
-        # Receptor-Ligand Interaction
-        if kws_receptor_ligand is not False:
-            if not kws_receptor_ligand:
-                kws_receptor_ligand = {}
-            res_rl, figs["receptor_ligand"] = self.calculate_receptor_ligand(
-                col_cell_type=col_cell_type, n_perms=n_perms, alpha=alpha,
-                dpi=dpi, key_source=None, key_targets=None,
-                **kws_receptor_ligand)  # run receptor-ligand analysis
-
-        # Distribution Pattern
-        figs["distribution_pattern"] = self.calculate_distribution_pattern()
-
-        # Output
-        if copy is False:
-            self.results["spatial"]["receptor_ligand"] = res_rl
-            self.figures["spatial"]["receptor_ligand"] = figs
-            self.adata = adata
-            return figs
-        else:
-            return adata, figs
-
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
                              coord_type="generic", n_jobs=None, figsize=None,
                              palette=None, shape="hex", size=None, title=None,
@@ -241,24 +185,22 @@ class Spatial(cr.Omics):
         print("\t*** Computing & plotting centrality scores...")
         sq.gr.centrality_scores(adata, cluster_key=col_cell_type,
                                 n_jobs=n_jobs)  # centrality scores
-        # adata.uns["spatial"][
-        #     "library_id"] = col_sample_id if col_sample_id not in [
-        #         None, False] else self._columns["col_sample_id"]  # library ID
         try:
             ann = adata.table.copy()
             _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
             sq.pl.centrality_scores(ann, cluster_key=col_cell_type,
                                     figsize=figsize)
+            fig = {"centrality": plt.gcf()}
         except Exception:
+            fig = str(traceback.format_exc())
             traceback.print_exc()
-        fig = plt.gcf()
         if title:
             fig.suptitle(title)
         print("\t*** Computing interaction matrix...")
         sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
         if copy is False:
             self.figures["centrality"] = fig
-        return fig
+        return adata, fig
 
     def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
                                library_id=None, library_key=None, seed=1618,
@@ -307,6 +249,7 @@ class Spatial(cr.Omics):
             self.plot_spatial(color=col_cell_type, ax=axs[1], shape=shape,
                               figsize=figsize, cmap=cmap)  # cells (panel 2)
         except Exception:
+            fig = str(traceback.format_exc())
             traceback.print_exc()
         if copy is False:
             self.figures["neighborhood_enrichment"] = plt.gcf()
@@ -324,7 +267,7 @@ class Spatial(cr.Omics):
         adata = self.adata
         if isinstance(key_cell_type, str):
             key_cell_type = [key_cell_type]
-        figs = {}
+        fig = {}
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
@@ -338,31 +281,32 @@ class Spatial(cr.Omics):
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs,
                             spatial_key=self._spatial_key, **kwargs)
-        figs["co_occurrence"] = {}
+        fig["co_occurrence"] = {}
         try:
-            figs["spatial_scatter"] = self.plot_spatial(
+            fig["spatial_scatter"] = self.plot_spatial(
                 color=col_cell_type, groups=key_cell_type,
                 shape=shape, figsize=figsize, cmap=cmap,
                 library_id=library_id, return_ax=True)  # cell types plot
             if title:
-                figs["spatial_scatter"].suptitle(title)
+                fig["spatial_scatter"].suptitle(title)
         except Exception:
             traceback.print_exc()
-        # figs["co_occurrence"] = sq.pl.co_occurrence(
+        # fig["co_occurrence"] = sq.pl.co_occurrence(
         #     adata, cluster_key=col_cell_type, legend=False,
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         try:
             ann = adata.table.copy()
             _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
-            figs["co_occurrence"] = cr.pl.plot_cooccurrence(
+            fig["co_occurrence"] = cr.pl.plot_cooccurrence(
                 ann, col_cell_type=col_cell_type, **kws_plot,
                 key_cell_type=key_cell_type, figsize=figsize)  # lines plot
-        except Exception:
-            traceback.print_exc()
+        except Exception as err:
+            fig["co_occurrence"] = str(traceback.format_exc())
+            print(traceback.format_exc())
         if title:
-            figs["co_occurrence"].suptitle(title)
-        self.figures["co_occurrence"] = figs["co_occurrence"]
-        return adata, figs
+            fig["co_occurrence"].suptitle(title)
+        self.figures["co_occurrence"] = fig["co_occurrence"]
+        return adata, fig
 
     def find_svgs(self, genes=10, method="moran", shape="hex", n_perms=10,
                   layer=None, library_id=None, col_cell_type=None, title=None,
@@ -399,8 +343,8 @@ class Spatial(cr.Omics):
                 **kws_plot)
             if title:
                 fig.suptitle(title)
-        except Exception as err:
-            fig = err
+        except Exception:
+            fig = str(traceback.format_exc())
             traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot

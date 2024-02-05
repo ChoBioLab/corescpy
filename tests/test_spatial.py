@@ -5,11 +5,32 @@ import scipy
 import numpy as np
 
 
+class TestXenium:
+    """Visium data tests."""
+    sdata = sdio.xenium(file, n_jobs=n_jobs)
+    sdata[0].images["morphology_mip"]
+    self = cr.Spatial(adata, **kwargs)
+
+    def test_xenium_ax(self):
+        """Test Xenium analysis."""
+        genes = list(TestXenium.self.rna.var_names[:3])
+        _ = TestXenium.self.preprocess()
+        _ = TestXenium.self.cluster()
+        out_ce = TestXenium.self.calculate_centrality()
+        out_co = TestXenium.self.find_cooccurrence()
+        out_sv = TestXenium.self.find_svgs(genes=genes, method="moran",
+                                           n_perms=10)
+        out_rl = TestXenium.self.calculate_receptor_ligand(
+            col_condition=False, p_threshold=0.001, remove_ns=True)
+        for x in [out_ce, out_co, out_sv, out_rl]:
+            if isinstance(x[-1], dict):  # if figure output is a dictionary
+                for i in x[-1]:
+                    assert not isinstance(x[-1][i], str)  # ensure not error
+            else:
+                assert not isinstance(x[-1], str)  # ensure not error
+
 class TestVisium:
     """Visium data tests."""
-    kws_pga = dict(feature_split=None, guide_split="_",
-                   key_control_patterns=[np.nan],
-                   remove_multi_transfected=True)
     library_id = "V1_Human_Brain_Section_2"
     adata = sq.datasets.visium(library_id, include_hires_tiff=False)
     kwargs = dict(col_gene_symbols="gene_symbol", col_cell_type="leiden",
@@ -17,9 +38,25 @@ class TestVisium:
                   visium=True, library_id=library_id)
     self = cr.Spatial(adata, **kwargs)
 
-    def test_visium_plots(self):
-        """Basic plots."""
+    def test_visium_attributes(self):
+        """Ensure proper attributes."""
         assert "adata" in dir(TestVisium.self)
         assert "rna" in dir(TestVisium.self)
-        sq.spatial_segment(TestVisium.self.rna)
-        sq.spatial_scatter(TestVisium.self.rna)
+
+    def test_visium_ax(self):
+        """Test Visium analysis."""
+        genes = list(TestVisium.self.rna.var_names[:3])
+        _ = TestVisium.self.preprocess()
+        _ = TestVisium.self.cluster()
+        out_ce = TestVisium.self.calculate_centrality()
+        out_co = TestVisium.self.find_cooccurrence()
+        out_sv = TestVisium.self.find_svgs(genes=genes, method="moran",
+                                           n_perms=10)
+        out_rl = TestVisium.self.calculate_receptor_ligand(
+            col_condition=False, p_threshold=0.001, remove_ns=True)
+        for x in [out_ce, out_co, out_sv, out_rl]:
+            if isinstance(x[-1], dict):  # if figure output is a dictionary
+                for i in x[-1]:
+                    assert not isinstance(x[-1][i], str)  # ensure not error
+            else:
+                assert not isinstance(x[-1], str)  # ensure not error
