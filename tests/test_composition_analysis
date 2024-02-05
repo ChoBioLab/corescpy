@@ -1,4 +1,4 @@
-from crispr.class_sc import Omics
+from corescpy.class_sc import Omics
 import pertpy as pt
 
 

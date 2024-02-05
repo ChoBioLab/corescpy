@@ -373,7 +373,7 @@ dependencies:
       - cellpose==2.2.3
       - celltypist==1.5.3
       - chex==0.1.7
-      - crispr==0.0.1
+      - corescpy==0.0.1
       - custom-inherit==2.4.1
       - decoupler==1.4.0
       - equinox==0.10.11

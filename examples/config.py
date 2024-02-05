@@ -1,7 +1,7 @@
 import pertpy
 import os
 import pathlib
-import crispr as cr
+import corescpy as cr
 import numpy as np
 
 

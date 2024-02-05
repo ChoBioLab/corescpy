@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../projects"
+		}
+	],
+	"settings": {
+		"jupyter.logKernelOutputSeparately": false,
+		"files.trimTrailingWhitespace": true,
+		"files.insertFinalNewline": true
+	}
+}

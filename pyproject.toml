@@ -3,7 +3,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = "crispr"
+name = "corescpy"
 version = "0.0.1"
 description = "CRISPR analysis (standardized workflow)."
 readme = "README.md"
@@ -15,9 +15,9 @@ authors = [
 maintainers = [
     {name = "Elizabeth Aslinger", email = "elizabeth.aslinger@aya.yale.edu"},
 ]
-urls.Documentation = "https://github.com/easlinger/crispr/README.md"
-urls.Source = "https://github.com/easlinger/crispr"
-urls.Home-page = "https://github.com/easlinger/crispr"
+urls.Documentation = "https://github.com/easlinger/corescpy/README.md"
+urls.Source = "https://github.com/easlinger/corescpy"
+urls.Home-page = "https://github.com/easlinger/corescpy"
 dependencies = [
     # Base
     "anndata",
@@ -115,13 +115,13 @@ test = [
 source = "vcs"
 
 [tool.coverage.run]
-source = ["crispr"]
+source = ["corescpy"]
 omit = [
     "**/test_*.py",
 ]
 
 [tool.pytest.ini_options]
-testpaths = "crispr/tests"
+testpaths = "corescpy/tests"
 xfail_strict = true
 addopts = [
     "--import-mode=importlib",  # allow using test files with same name

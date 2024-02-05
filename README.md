@@ -12,15 +12,15 @@ Correspondence: elizabeth.aslinger@aya.yale.edu
 
 1. Open a Unix terminal (often Ctrl + Alt  + T on Linux).
 
-2. Install conda environment from .yml file (replace "env-crispr"
+2. Install conda environment from .yml file (replace "env-corescpy"
 with desired environment name):
-`conda create -n crispr python=3.10.4  # create python environment`
+`conda create -n corescpy python=3.10.4  # create python environment`
 
-3. Activate the conda environment with `conda activate crispr`.
+3. Activate the conda environment with `conda activate corescpy`.
 
 4. Clone the repository to your local computer:
-`git clone git@github.com:ChoBioLab/crispr.git`,
-`git clone https://github.com/ChoBioLab/crispr.git`, or
+`git clone git@github.com:ChoBioLab/corescpy.git`,
+`git clone https://github.com/ChoBioLab/corescpy.git`, or
 look above for the green "Code" button and press it for instructions.
 
 5. Naviate to the repository directory (replace
@@ -32,9 +32,9 @@ look above for the green "Code" button and press it for instructions.
 
 ## Usage
 
-1. You can now load `crispr` like any other distributed Python package.
+1. You can now load `corescpy` like any other distributed Python package.
 Open a Python terminal and type:
-`import crispr as cr`
+`import corescpy as cr`
 
 2. You can now call functions from the analysis module using
 `cr.ax.<FUNCTION>()`, from the preprocessing using `cr.ax.pp...`, etc.
@@ -43,7 +43,7 @@ class object. Here is example code you might run
 (replacing <...> with your argument specifications) to load and
 preprocess your data.
 ```
-from crispr.crispr_class import Crispr
+from corescpy.crispr_class import corescpy
 self = Crispr(adata, <...>)
 self.preprocess(<...>)
 ```
@@ -67,7 +67,7 @@ The following perturbation-specific methods can be executed optionally and in an
 
 <u> Argument Conventions: </u>
 
-Certain arguments used throughout the `crispr` package (including outside the `crispr.crispr_class.Crispr()` class), hold to conventions intended to foster readability, maintain consistency, and promote clarity, both for end-users and future developers.
+Certain arguments used throughout the `corescpy` package (including outside the `corescpy.crispr_class.Crispr()` class), hold to conventions intended to foster readability, maintain consistency, and promote clarity, both for end-users and future developers.
 
 * Arguments starting in `col_` and `key_`
     - The "col_" prefix indicates that an argument refers to a column name (often in `.adata.obs` or `.adata.var`), while the "key_" prefix means you're meant to specify a type of entry in a column. For instance, assume the column "condition" contains the names of different experimental conditions (drug A, drug B, drug C). In a function where you want to compare, for instance, drug A vs. control, you would specify `key_treatment="drug A"` and k
@@ -86,7 +86,7 @@ Certain arguments used throughout the `crispr` package (including outside the `c
         * A drug design targeting more than one gene, `col_perturbed` would contain only `key_treatment` (i.e., all perturbed cells, regardless of targeted gene) while `col_condition` would contain entries specifying the particular gene(s) targeted (or `key_control`).
         * If the design only targets one gene/has one treatment conditions/etc., these columns would simply be equivalent.
     - In the `Crispr` class object, it is created during object initialization as a column (named after your specification of `col_perturbed`) in `.obs`. All rows in `.obs[col_condition]` that do not = `key_control` will be set as `key_treatment`.
-    - In the `crispr` package more broadly, if a function calls for a `col_perturbed` argument, that indicates that it works with binary categories only. If it is fed a column with three or more categories, it will either subset the data to include only rows where that column = `key_treatment` or `key_control` (desirable behavior if you want to compare only a subset of the existing conditions, but undesirable if you want to look at, say, any drug vs. control, where the desired "drug" category consists of rows where the column = "drug A" and "drug B"), or it will throw an error.
+    - In the `corescpy` package more broadly, if a function calls for a `col_perturbed` argument, that indicates that it works with binary categories only. If it is fed a column with three or more categories, it will either subset the data to include only rows where that column = `key_treatment` or `key_control` (desirable behavior if you want to compare only a subset of the existing conditions, but undesirable if you want to look at, say, any drug vs. control, where the desired "drug" category consists of rows where the column = "drug A" and "drug B"), or it will throw an error.
 
 <!-- break -->
 
@@ -97,14 +97,14 @@ Certain arguments used throughout the `crispr` package (including outside the `c
 * `file_path` **(str, AnnData, or dictionary)**: Path or object containing data. Used in initialization to create the initial `self.adata` attribute (an AnnData or MuData object). Either
     - a path to a 10x directory (with matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz),
     - a path to an .h5ad or .mu file (Scanpy/AnnData/Muon-compatible),
-    - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon, or by using `crispr.pp.create_object(file_path)`), or
-    - a dictionary containing keyword arguments to pass to  `crispr.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); press the arrow to expand details here),
+    - an AnnData or MuData object (e.g., already loaded with Scanpy or Muon, or by using `corescpy.pp.create_object(file_path)`), or
+    - a dictionary containing keyword arguments to pass to  `corescpy.pp.combine_matrix_protospacer()` (in order to load information about perturbations from other file(s); press the arrow to expand details here),
 
 <details><summary>Click to expand details</summary>
 
 ```
 crd = "<YOUR DIRECTORY HERE>"
-# e.g., "/home/asline01/projects/crispr/examples/data/crispr-screening/HH03"
+# e.g., "/home/asline01/projects/corescpy/examples/data/crispr-screening/HH03"
 
 subd = "<YOUR SUB-DIRECTORY WITH THE .mtx, barcodes, features files HERE>"
 # e.g., "filtered_feature_bc_matrix"
@@ -119,7 +119,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 </details>
 
    or
-    - to concatenate multiple datasets, a dictionary (keyed by your desired subject/sample names to be used in `col_sample_id`) consisting of whatever objects you would pass to `create_object()`'s `file` argument for the individual objects. You must also specify `col_sample` (a tuple as described in the documentation below). The other arguments passed to the `crispr.pp.create_object()` function (e.g., `col_gene_symbols`) can be specified as normal if they are common across samples; otherwise, specify them as lists in the same order as the `file` dictionary.
+    - to concatenate multiple datasets, a dictionary (keyed by your desired subject/sample names to be used in `col_sample_id`) consisting of whatever objects you would pass to `create_object()`'s `file` argument for the individual objects. You must also specify `col_sample` (a tuple as described in the documentation below). The other arguments passed to the `corescpy.pp.create_object()` function (e.g., `col_gene_symbols`) can be specified as normal if they are common across samples; otherwise, specify them as lists in the same order as the `file` dictionary.
 
 <!-- break -->
 
@@ -141,7 +141,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 
 * `col_condition` **(str, optional)**: Either the name of an existing column in `.obs` indicating the experimental condition to which each cell belongs or (for CRISPR designs) the **desired** name of the column that will be created from `col_guide_rna` to indicate the gene(s) targeted in each cell.
     - If there are multiple conditions besides control (e.g., multiple types of drugs and/or exposure times, multiple target genes in CRISPR), this column distinguishes the different conditions, in contrast to `col_perturbed` (a binary treated/perturbed vs. control indicator).
-    - In CRISPR designs (i.e., when `col_guide_rna` is specified), this column will be where each guide RNA's target gene will be stored, whether pre-existing (copied directly from `col_guide_rna` if `kws_process_guide_rna` is None) or created during the Crispr object initialization by passing `col_guide_rna` and `kws_process_guide_rna` to `crispr.pp.filter_by_guide_counts()` in order to convert particular guide RNA IDs to their target(s) (e.g., STAT1-1|CCL8-2-1|NegCtrl32a => STAT1|CCL8|Control). Defaults to None.
+    - In CRISPR designs (i.e., when `col_guide_rna` is specified), this column will be where each guide RNA's target gene will be stored, whether pre-existing (copied directly from `col_guide_rna` if `kws_process_guide_rna` is None) or created during the Crispr object initialization by passing `col_guide_rna` and `kws_process_guide_rna` to `corescpy.pp.filter_by_guide_counts()` in order to convert particular guide RNA IDs to their target(s) (e.g., STAT1-1|CCL8-2-1|NegCtrl32a => STAT1|CCL8|Control). Defaults to None.
     - For non-CRISPR designs (e.g., pharmacological treatment):
         - This column should exist in the AnnData or MuData object (either already available upon simply reading the specified file with no other alterations, or as originally passed to the initialization method if given instead of a file path).
         - It should contain a single `key_control`, but it can have multiple categories of other entries that all translate to `key_treatment` in `col_perturbed`.
@@ -176,7 +176,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 
 * `key_nonperturbed` **(str, optional)**: What will be stored in the `mixscape_class_global` and related columns/labels after running Mixscape methods. Indicates cells without a detectible perturbation. Defaults to "NP".
 
-* `kws_process_guide_rna` (dict, optional): Dictionary of keyword arguments to pass to `crispr.pp.filter_by_guide_counts()`. (See below and crispr.processing.preprocessing documentation). Defaults to None (no processing will take place, in which case BE SURE THAT `col_target_genes` already exists in the data once loaded and contains the already-filtered, summed up, generic gene-named, etc. versions of the guide RNA column). Keys of this dictionary should be:
+* `kws_process_guide_rna` (dict, optional): Dictionary of keyword arguments to pass to `corescpy.pp.filter_by_guide_counts()`. (See below and corescpy.processing.preprocessing documentation). Defaults to None (no processing will take place, in which case BE SURE THAT `col_target_genes` already exists in the data once loaded and contains the already-filtered, summed up, generic gene-named, etc. versions of the guide RNA column). Keys of this dictionary should be:
     - key_control_patterns (list, optional): List (or single string) of patterns in guide RNA column entries that correspond to a control. For instance, if control entries in the original `col_guide_rna` column include `NEGCNTRL` and `Control.D`, you should specify ['Control', 'CNTRL'] (assuming no non-control sgRNA names contain those patterns). If blank entries should be interpreted as control guides, then include np.nan/numpy.nan in this list. Defaults to None, which turns to [np.nan].
     - `max_percent_umis_control_drop` (int, optional): If control UMI counts are $<=$ this percentage of the total counts for that cell, and if a non-control sgRNA is also present and meets other filtering criteria, then consider that cell pseudo-single-transfected (non-control gene). Defaults to 75.
     - `min_percent_umis` (int, optional): sgRNAs with counts below this percentage will be considered noise for that guide. Defaults to 40.
@@ -192,7 +192,7 @@ If you have the typical/default file tree/naming (e.g., "filtered_feature_bc_mat
 
 ### Crispr Object Properties
 
-The `crispr.crispr_object.Crispr()` class object is an end user's main way of interacting with the package as a whole. (See above for an overview of the workflow.) See the notebooks in [/examples](https://github.com/ChoBioLab/crispr/tree/a8564fb02d7ef2983432c6ca6035d2b77458dbbe/examples) for additional help.
+The `corescpy.crispr_object.Crispr()` class object is an end user's main way of interacting with the package as a whole. (See above for an overview of the workflow.) See the notebooks in [/examples](https://github.com/ChoBioLab/corescpy/tree/a8564fb02d7ef2983432c6ca6035d2b77458dbbe/examples) for additional help.
 
 #### Major Attributes Descriptions
 

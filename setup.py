@@ -12,10 +12,10 @@ pkg_was_here = pathlib.Path(__file__).parent.resolve()
 with open('README.md') as info:
     readme = info.read()
 
-setup(name='crispr',
+setup(name='corescpy',
       version='0.1.0',
       description='CRISPR workflow',
-      url='http://github.com/easlinger/crispr',
+      url='http://github.com/easlinger/corescpy',
       author='Elizabeth N. Aslinger',
       packages=find_packages(),
       install_requires=must_have,

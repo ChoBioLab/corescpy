@@ -1,4 +1,4 @@
-import crispr as cr
+import corescpy as cr
 import scipy
 import pertpy as pt
 import numpy as np
