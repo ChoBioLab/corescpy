@@ -1,15 +1,15 @@
 import corescpy as cr
 import scanpy as sc
 import squidpy as sq
+import spatialdata_io as sdio
 import scipy
 import numpy as np
 
 
 class TestXenium:
     """Visium data tests."""
-    sdata = sdio.xenium(file, n_jobs=n_jobs)
-    sdata[0].images["morphology_mip"]
-    self = cr.Spatial(adata, **kwargs)
+    sdata = sdio.xenium(file, n_jobs=4)
+    self = cr.Spatial(sdata, **kwargs)
 
     def test_xenium_ax(self):
         """Test Xenium analysis."""
