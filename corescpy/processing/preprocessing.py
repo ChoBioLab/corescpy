@@ -543,8 +543,10 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     patterns_names = dict(zip(patterns, p_names))  # map abbreviated to pretty
     rename_perc = dict(zip([f"pct_counts_{p}" for p in names], [
         names[p] + " " + "%" + " of Counts" for p in names]))
+
+    # Calculate QC Metrics
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...")
-    for k in patterns:
+    for k in patterns:  # calculate MT, RB, HB counts
         try:
             gvars = adata.var_names.str.startswith(patterns[k])
             adata.var[k] = gvars
@@ -553,7 +555,9 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
     sc.pp.calculate_qc_metrics(adata, qc_vars=list(patterns), log1p=log1p,
-                               percent_top=None, inplace=True)  # metrics
+                               percent_top=None, inplace=True)  # QC metrics
+
+    # Determine Available QC Metrics & Color-Coding (e.g., by Subject)
     nonzero = [adata.obs[f"total_counts_{q}"].max() > 0 for q in patterns]
     qc_vars = list(np.array(list(patterns))[np.where(nonzero)[0]]) if any(
         nonzero) else []  # only plot MT, RB, HB if present
@@ -565,32 +569,31 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     if len(hhh) > 1:  # only include sample ID as hue if others only 1 value
         hht = list(np.array(hhh)[np.where([
             len(adata.obs[h].unique()) > 1 for h in hhh])[0]])
-        hhh = list(pd.unique(hht if len(hht) > 0 else [hhh[0]])
-                   )  # if no non-unique hues, still color by subject
-    for h in hhh:
-        if h not in adata.obs and h not in adata.var:
-            if h is not None:
-                warn(f"\n\t{h} not in adata.obs or .var; skipping color-code")
-            if yes is None:
-                continue  # skip if already did "None" hue
-            yes = None
-        rrs, ccs = cr.pl.square_grid(len(pct_n + ["n_genes_by_counts"]))
-        fff, axs = plt.subplots(rrs, ccs, figsize=(
-            5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
-        try:
-            axf = axs.ravel() if rrs > 1 or ccs > 1 else [axs]
-            for a, v in zip(axf, pct_n + ["n_genes_by_counts"]):
-                try:  # facet "v" of scatterplot
-                    sc.pl.scatter(adata, x="total_counts", y=v, ax=a,
-                                  show=False, color=h if yes else None,
-                                  frameon=False)
-                    if a.legend_ is not None:
-                        a.legend_.set_bbox_to_anchor((-0.2, -0.7))
-                    plt.show()
-                except Exception:
-                    print(traceback.format_exc())
-        except Exception:
-            print(traceback.format_exc(), "\n\nQC scatterplots failed.")
+        hhh = list(pd.unique(hht if len(hht) > 0 else [
+            hhh[0]]))  # if no non-unique hue values, still color by subject
+
+    # % Counts (MT, RB, HB) versus Counts (Scatter Plots)
+    rrs, ccs = len(pd.unique(hhh)), len(pct_n + ["n_genes_by_counts"])
+    fff, axs = plt.subplots(rrs, ccs, figsize=(
+        5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
+    for i, h in enumerate(pd.unique(hhh)):
+        for j, v in enumerate(pct_n + ["n_genes_by_counts"]):
+            aij = axs if not isinstance(axs, np.ndarray) else axs[
+                i, j] if len(axs.shape) > 1 else axs[j] if ccs > 1 else axs[i]
+            try:  # % mt, etc. vs. counts
+                sc.pl.scatter(adata, x="total_counts", y=v, ax=aij,
+                              color=h, frameon=False, show=False)  # scatter
+                if aij.legend_ is not None and v != "n_genes_by_counts":
+                    aij.legend_.remove()  # legend only on last column
+                aij.set_title(f"{v} (by {h})" if h else v)  # title
+            except Exception as err:
+                print(traceback.format_exc())
+                warn(f"\n\n{'=' * 80}\n\nCouldn't plot {h} vs. {v}: {err}")
+    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    plt.show()
+
+    # All QC Variables versus Each Other (Joint Plots, Scatter & KDE)
+    for h in pd.unique(hhh):
         figs[f"qc_scatter_by_{h}" if yes else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)
             vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
@@ -607,6 +610,8 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             fff = err
             print(traceback.format_exc())
         figs[f"pairplot_by_{h}" if yes else "pairplot"] = fff
+
+    # % Counts (MT, RB, HB) Distribution (KDE) Plots
     if len(pct_n) > 0:  # if any QC vars (e.g., MT RNA) present...
         try:  # KDE of % of counts ~ QC variable
             mets_df = adata.obs[pct_n].rename_axis("Metric", axis=1).rename(
@@ -617,7 +622,8 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         except Exception as err:
             print(traceback.format_exc())
             figs["pct_counts_kde"] = err
-    figs["pct_counts_kde"] = None
+    else:
+        figs["pct_counts_kde"] = "No percent counts variables"
     try:  # log1p genes by counts (x) vs. total counts (y)
         figs["qc_log"] = seaborn.jointplot(
             data=adata.obs, x="log1p_total_counts",
@@ -625,7 +631,6 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     except Exception as err:
         print(traceback.format_exc())
         figs["qc_log"] = err
-    # print(adata.var.describe())
     return figs
 
 

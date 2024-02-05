@@ -6,7 +6,7 @@ from . import processing as pp
 from . import analysis as ax
 from . import visualization as pl
 from .class_sc import Omics
-from .class_crispr import corescpy
+from .class_crispr import Crispr
 from .class_spatial import Spatial
 
 import sys

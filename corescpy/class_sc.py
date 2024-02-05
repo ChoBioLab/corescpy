@@ -527,6 +527,7 @@ class Omics(object):
     def find_markers(self, assay=None, n_genes=5, layer="log1p",
                      method="wilcoxon", key_reference="rest", kws_plot=True,
                      col_cell_type=None, copy=False, use_raw=False, **kwargs):
+        """Find gene markers for clusters/cell types."""
         if assay is None:
             assay = self._assay
         adata = self.rna.copy() if copy is True else self.rna  # copy?
