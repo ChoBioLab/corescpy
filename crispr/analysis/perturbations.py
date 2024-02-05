@@ -17,6 +17,8 @@ import traceback
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage
 import os
+# import blitzgsea as blitz
+# from copy import deepcopy
 import crispr as cr
 import pandas as pd
 import numpy as np
@@ -599,6 +601,59 @@ def perform_gsea(pdata, adata_sc=None,
     res = {"gsea_results": gsea_results, "score_sort": score_sort,
            "gsea_results_cell": gsea_results_cell}
     return pdata, adata_sc, res, figs
+
+
+def perform_gsea_pt(adata, col_condition, key_condition=None, layer=None,
+                    correction="benjamini-hochberg",
+                    absolute=False, library_blitz=None, **kwargs):
+    raise NotImplementedError("Pertpy GSEA not yet released.")
+    """Perform GSEA (Pertpy-style)."""
+    # res, fig, key_add = {}, {}, "pertpy_enrichment"  # for results
+    # ref = "rest" if key_condition is None else key_condition if (
+    #     isinstance(key_condition, str)) else None  # 1st key=reference
+    # if isinstance(key_condition, (list, np.ndarray)):  # if condition subset
+    #     adata = adata[adata.obs[col_condition].isin(key_condition)
+    #                     ]  # only keep conditions specified in key_condition
+    # if layer:
+    #     adata.X = adata.layers[layer].copy()
+    # rgg = "rank_genes_groups"  # rank genes key (cell types RGG)
+    # rgo = "rank_genes_groups_o"  # original rank genes key
+    # if rgg in adata.uns:  # preserve original rank genes
+    #     adata.uns[rgo] = adata.uns[rgg]
+    # model = pt.tl.Enrichment()
+    # kws = cr.tl.merge(dict(
+    #     nested=False, categories=None, method="mean", n_bins=25,
+    #     ctrl_size=50), {**kwargs, "key_added": key_add}, how="left")
+    # kws["targets"] = blitz.enrichr.get_library(
+    #     library_blitz) if library_blitz else None  # custom resource?
+    # model.score(adata, layer=layer, key_added=key_add, **kws)  # ~ cell
+    # sc.tl.rank_genes_groups(adata, method="wilcoxon", reference=ref,
+    #                         groupby=col_condition)  # rank genes ~ condition
+    # model.plot_dotplot(adata, groupby=col_condition)  # GEX dotplot
+    # res["gsea"] = model.gsea(absolute=absolute)  # run blitzgsea GSEA
+    # model.plot_gsea(adata, res["gsea"], interactive_plot=True)  # plot
+    # fig["gsea"] = plt.gcf()
+    # geo = model.hypergeometric(adata, absolute=absolute,
+    #                            corr_method=correction)  # significance test
+    # res["hypergeometric"] = model.gsea(adata)
+    # model.plot_gsea(adata, res["hypergeometric"], interactive_plot=True)
+    # fig["hypergeometric"] = plt.gcf()
+    # fig["blitz"] = {}
+    # for x in adata.obs[col_condition].unique():  # iterate cell types
+    #     try:
+    #         fig["blitz"][x] = blitz.plot.running_sum(
+    #             signature=adata.uns[f"{key_add}_gsea"]["scores"][x],
+    #             library=adata.uns["{key_add}_gsea"]["targets"],
+    #             geneset="MHC class II receptor activity (GO:0032395)",
+    #             result=res[x], interactive_plot=True)
+    #         fig["blitz"].show()
+    #     except:
+    #         print(traceback.format_exc(), "\n\nGSEA plot failed!")
+    # adata.uns[f"{rgg}_{col_condition}"] = adata.uns[rgg]  # new rank genes
+    # if rgo in adata.uns:  # if originally had rank ~ cluster...
+    #     adata.uns[rgg] = adata.uns[f"{rgg}_o"]  # restore original ranks
+    #     _ = adata.uns.pop(rgo)  # remove placeholder rank genes from `.uns`
+    # return adata, res, fig
 
 
 def perform_pathway_interference(adata, layer=None, n_top=500, copy=True,

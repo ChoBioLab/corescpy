@@ -30,7 +30,7 @@ class Spatial(cr.Omics):
 
         Args:
             file_path (str, AnnData, or MuData): Path or object
-                containing data. Used in initialization to create
+                containing data. Used in initialization to create             
                 the initial `.adata` attribute (an AnnData or
                 MuData object). Either
                     - a path to a 10x directory (with matrix.mtx.gz,
