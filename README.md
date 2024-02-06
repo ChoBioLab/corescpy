@@ -64,7 +64,7 @@ Here are the methods (applicable to scRNA-seq generally, not just perturbations)
 
 * `self.preprocess(...)`: Perform filtering, normalization, scaling, quality control analysis, selection for highly variable genes, regressing out confounds, and intial exploration of the data (e.g., cell counts, mitochondrial counts, etc.).
 * `self.cluster(...)`: Perform dimensionality reduction (e.g., PCA) and clustering (Louvain or Leiden), as well as related visualization.
-* `self.plot(...)`: Create additional basic plots (e.g., dot, matrix, and violin gene expression plots).
+* `self.plot(...)`: Create additional basic plots (e.g., dot, matrix, and violin gene expression plots). Use `self.plot_compare(...)` to make plots comparing gene expression across groups.
 
 The following perturbation-specific methods can be executed optionally and in any order:
 

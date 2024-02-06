@@ -23,7 +23,7 @@ COLOR_MAP = "coolwarm"
 class Spatial(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
-    def __init__(self, file_path, col_sample_id="Sample", library_id="A",
+    def __init__(self, file_path, col_sample_id="Sample", library_id=None,
                  file_path_spatial=None, visium=False, **kwargs):
         """
         Initialize Crispr class object.
@@ -70,6 +70,10 @@ class Spatial(cr.Omics):
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
                          library_id=library_id, visium=visium, **kwargs)
         self._spatial_key = cr.pp.SPATIAL_KEY
+        if library_id is None and visium is True:
+            library_id = list(self.rna.uns[self._spatial_key].keys())
+            if len(library_id) == 1:
+                library_id = library_id[0]
         if self._columns["col_sample_id"] not in self.rna.obs:
             self.rna.obs.loc[:, self._columns["col_sample_id"]] = library_id
         self.figures["spatial"], self.results["spatial"] = {}, {}
@@ -144,17 +148,25 @@ class Spatial(cr.Omics):
         # if library_id is None:  # all libraries if unspecified
         #     library_id = list(self.rna.obs[col_sample_id].unique())
         adata = self.rna.copy()
-        _ = adata.uns.pop("leiden_colors", None)
         color = None if color is False else color if color else self._columns[
             "col_cell_type"]  # no color if False; clusters if unspecified
         if color is not None:
             color = list(pd.unique(self.get_variables(color)))
-        kws = dict(figsize=figsize, shape=shape, title=title, color=color,
+        kws = dict(figsize=figsize, shape=shape, color=color,
                    # img_res_key=key_image, library_key=col_sample_id,
-                   # library_id=library_id,
+                   library_id=library_id if library_id else self._library_id,
                    cmap=cmap, alt_var=cgs, wspace=wspace, **kwargs)
-        fig = sq.pl.spatial_scatter(adata, **kws) if (
-            kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
+        try:
+            fig = sq.pl.spatial_scatter(adata, **kws) if (
+                kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
+        except Exception:
+            _ = adata.uns.pop("leiden_colors", None)
+            fig = sq.pl.spatial_scatter(adata, **kws) if (
+                kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
+        try:
+            fig.suptitle(title)
+        except Exception:
+            pass
         return fig
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
@@ -167,8 +179,8 @@ class Spatial(cr.Omics):
         # Connectivity & Centrality
         print("\t*** Building connectivity matrix...")
         adata = self.adata
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
+        cct = col_cell_type if col_cell_type else self._columns[
+            "col_cell_type"]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         if size is None:
@@ -183,21 +195,23 @@ class Spatial(cr.Omics):
             adata, coord_type=coord_type, delaunay=delaunay,
             spatial_key=self._spatial_key)  # spatial neighbor calculation
         print("\t*** Computing & plotting centrality scores...")
-        sq.gr.centrality_scores(adata, cluster_key=col_cell_type,
-                                n_jobs=n_jobs)  # centrality scores
+        sq.gr.centrality_scores(adata, cluster_key=cct, n_jobs=n_jobs)  # run
         try:
-            ann = adata.table.copy()
-            _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
-            sq.pl.centrality_scores(ann, cluster_key=col_cell_type,
-                                    figsize=figsize)
-            fig = {"centrality": plt.gcf()}
+            sq.pl.centrality_scores(adata, cluster_key=cct, figsize=figsize)
+            fig = plt.gcf()
         except Exception:
-            fig = str(traceback.format_exc())
-            traceback.print_exc()
-        if title:
+            try:
+                ann = adata.table.copy()
+                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                sq.pl.centrality_scores(ann, cluster_key=cct, figsize=figsize)
+                fig = plt.gcf()
+            except Exception:
+                fig = str(traceback.format_exc())
+                traceback.print_exc()
+        if not isinstance(fig, str) and title:
             fig.suptitle(title)
         print("\t*** Computing interaction matrix...")
-        sq.gr.interaction_matrix(adata, col_cell_type, normalized=False)
+        sq.gr.interaction_matrix(self.adata, cct, normalized=False)
         if copy is False:
             self.figures["centrality"] = fig
         return adata, fig
@@ -213,13 +227,14 @@ class Spatial(cr.Omics):
         adata = self.adata
         if library_key is None:
             library_key = self._columns["col_sample_id"]
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
+        cct = col_cell_type if col_cell_type else self._columns[
+            "col_cell_type"]
         if cbar_range is None:
             cbar_range = [None, None]
         if library_id is None:
             library_id = self._library_id
-        if key_image is None:
+        if key_image is None and not isinstance(
+                self.adata, spatialdata.SpatialData):
             key_image = list(self.rna.uns[self._spatial_key][library_id][
                 "images"].keys())[0]
         figsize = (figsize, figsize) if isinstance(figsize, (
@@ -230,23 +245,25 @@ class Spatial(cr.Omics):
             palette = matplotlib.colors.Colormap(palette)
         kws_plot = cr.tl.merge(dict(palette=palette, size=size, use_raw=False,
                                     layer=layer), kws_plot)
-        sq.gr.nhood_enrichment(adata, cluster_key=col_cell_type,
-                               n_jobs=None,
+        sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=None,
                                # n_jobs=n_jobs,  # not working for some reason
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         try:
-            ann = adata.table.copy()
-            _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
-            sq.pl.nhood_enrichment(
-                ann, cluster_key=col_cell_type, title=title,
-                vcenter=vcenter, vmin=cbar_range[0], vmax=cbar_range[1],
-                library_id=library_id, library_key=library_key,
-                img_res_key=key_image, cmap=cmap, ax=axs[0])  # matrix
+            pkws = dict(cluster_key=cct, title=title, library_id=library_id,
+                        library_key=library_key, vcenter=vcenter,
+                        vmin=cbar_range[0], vmax=cbar_range[1],
+                        img_res_key=key_image, cmap=cmap, ax=axs[0])
+            sq.pl.nhood_enrichment(adata, **pkws)  # matrix
         except Exception:
-            traceback.print_exc()
+            try:
+                ann = adata.table.copy()
+                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                sq.pl.nhood_enrichment(ann, **pkws)  # matrix
+            except Exception:
+                traceback.print_exc()
         try:
-            self.plot_spatial(color=col_cell_type, ax=axs[1], shape=shape,
+            self.plot_spatial(color=cct, ax=axs[1], shape=shape,
                               figsize=figsize, cmap=cmap)  # cells (panel 2)
         except Exception:
             fig = str(traceback.format_exc())
@@ -274,12 +291,14 @@ class Spatial(cr.Omics):
             size = int(1 if figsize[0] < 25 else figsize[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = cr.tl.merge(dict(palette=palette, size=size), kws_plot)
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
+        kws_plot = cr.tl.merge(dict(
+            palette=palette, size=size, key_cell_type=key_cell_type,
+            figsize=figsize), kws_plot)  # plot keywods
+        cct = col_cell_type if col_cell_type else self._columns[
+            "col_cell_type"]
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
-        sq.gr.co_occurrence(adata, cluster_key=col_cell_type, n_jobs=n_jobs,
+        sq.gr.co_occurrence(adata, cluster_key=cct, n_jobs=n_jobs,
                             spatial_key=self._spatial_key, **kwargs)
         fig["co_occurrence"] = {}
         try:
@@ -292,17 +311,20 @@ class Spatial(cr.Omics):
         except Exception:
             traceback.print_exc()
         # fig["co_occurrence"] = sq.pl.co_occurrence(
-        #     adata, cluster_key=col_cell_type, legend=False,
+        #     adata, cluster_key=cct, legend=False,
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         try:
-            ann = adata.table.copy()
-            _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
             fig["co_occurrence"] = cr.pl.plot_cooccurrence(
-                ann, col_cell_type=col_cell_type, **kws_plot,
-                key_cell_type=key_cell_type, figsize=figsize)  # lines plot
-        except Exception as err:
-            fig["co_occurrence"] = str(traceback.format_exc())
-            print(traceback.format_exc())
+                adata, col_cell_type=cct, **kws_plot)  # lines plot
+        except:
+            try:
+                ann = adata.table.copy()
+                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                fig["co_occurrence"] = cr.pl.plot_cooccurrence(
+                    ann, col_cell_type=cct, **kws_plot)  # lines plot
+            except Exception as err:
+                fig["co_occurrence"] = str(traceback.format_exc())
+                print(traceback.format_exc())
         if title:
             fig["co_occurrence"].suptitle(title)
         self.figures["co_occurrence"] = fig["co_occurrence"]
@@ -318,31 +340,20 @@ class Spatial(cr.Omics):
         kws_plot = cr.tl.merge({"cmap": "magma", "use_raw": False}, kws_plot)
         if n_jobs == -1:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
+        cct = col_cell_type if col_cell_type else self._columns[
+            "col_cell_type"]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
-        # if isinstance(palette, list):
-        #     palette = matplotlib.colors.Colormap(palette)
-        # if size is None:
-        #     size = int(1 if figsize[0] < 25 else figsize[0] / 15)
-        # kws_plot = {**dict(palette=palette, shape=shape, size=size),
-        #             **dict(kws_plot if kws_plot else {})}
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
-        sq.gr.spatial_autocorr(
-            adata, mode=method, layer=layer, n_perms=n_perms,
-            n_jobs=n_jobs)  # auto-correlate
+        sq.gr.spatial_autocorr(adata, mode=method, layer=layer, n_jobs=n_jobs,
+                               n_perms=n_perms)  # autocorrelation
         if isinstance(genes, int):
             genes = self.rna.uns["moranI"].head(genes).index.values
-        ncols = cr.pl.square_grid(len(genes + [col_cell_type]))[1]
-        fig = None
+        fig, ncols = None, cr.pl.square_grid(len(genes + [cct]))[1]
         try:
             fig = self.plot_spatial(
-                genes + [col_cell_type], shape=shape, figsize=figsize,
-                return_ax=True, key_image=key_image, library_id=library_id,
-                **kws_plot)
-            if title:
-                fig.suptitle(title)
+                genes + [cct], shape=shape, figsize=figsize, title=title,
+                key_image=key_image, library_id=library_id, **kws_plot)
         except Exception:
             fig = str(traceback.format_exc())
             traceback.print_exc()

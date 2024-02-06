@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 from anndata import AnnData
 import corescpy as cr
-from corescpy.class_sc import Omics
 import pandas as pd
 import numpy as np
 
@@ -68,7 +67,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
     # Create AnnData Objects
     # selves = dict(zip(ids, [cr.pp.read_spatial(
     #     file_path[f], **kws_init[f], library_id=f
-    #     ) if spatial is True else Omics(file_path[f], **kws_init[f]) if (
+    #     ) if spatial is True else cr.Omics(file_path[f], **kws_init[f]) if (
     #         "kws_process_guide_rna" not in kws_init) else cr.Crispr(
     #             file_path[f], **kws_init[f]) for f in file_path])
     #               )  # create individual objects
@@ -77,7 +76,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
             cr.pp.read_spatial(file_path[f], **kws_init[f], library_id=f),
             **kws_init[f], library_id=f) for f in file_path]))
     else:
-        selves = dict(zip(ids, [Omics(file_path[f], **kws_init[f]) if (
+        selves = dict(zip(ids, [cr.Omics(file_path[f], **kws_init[f]) if (
             "kws_process_guide_rna" not in kws_init) else cr.Crispr(
                 file_path[f], **kws_init[f]) for f in file_path]))
 

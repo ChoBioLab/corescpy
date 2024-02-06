@@ -278,6 +278,7 @@ class Omics(object):
              kws_matrix=None, cell_types_circle=None, **kwargs):
         """Create a variety of plots."""
         figs = {}
+        adata = (self.rna if subset is None else self.rna[subset]).copy()
         if genes is None and marker_genes_dict:  # marker_genes_dict -> genes
             genes = pd.unique(functools.reduce(lambda i, j: i + j, [
                 marker_genes_dict[k] for k in marker_genes_dict]))
@@ -290,15 +291,14 @@ class Omics(object):
             kind = list(set(kind).difference(set(["umap"])))
         if len(kind) == 1:
             kind = kind[0]  # in case "kind" is length 1 after removing umap
-        adata = (self.rna if subset is None else self.rna[subset]).copy()
-        if kws_umap is None:
-            kws_umap = {}
-        if "legend_loc" not in kws_umap:
-            kws_umap["legend_loc"] = "on data"
         genes_highlight = cr.tl.to_list(genes_highlight)  # list or None
         cell_types_circle = cr.tl.to_list(cell_types_circle)
         cgs = self._columns["col_gene_symbols"] if self._columns[
             "col_gene_symbols"] != self.rna.var.index.names[0] else None
+        kw_def = {
+            "col_cell_type": group, "legend_loc": "on data",
+            "col_gene_symbols": cgs, "cell_types_circle": cell_types_circle}
+        kws_umap = cr.tl.merge(kw_def, kws_umap)  # merge default, specified
 
         # Pre-Processing/QC
         if kws_qc:
@@ -318,7 +318,6 @@ class Omics(object):
                 for x in zip(["violin", ["heat", "hm"], "matrix", "dot"], [
                     kws_violin, kws_heat, kws_matrix, kws_dot])
                 ]  # can specify plot arguments via overall keyword arguments
-        print(kws_violin, kws_heat, kws_matrix, kws_dot)
         figs["gex"] = cr.pl.plot_gex(
             adata, col_cell_type=group, genes=genes, kind=kind, layer=layer,
             col_gene_symbols=cgs, marker_genes_dict=marker_genes_dict,
@@ -328,11 +327,7 @@ class Omics(object):
         # UMAP
         if umap is True:
             if "X_umap" in self.rna.obsm or group in self.rna.obs.columns:
-                if "col_cell_type" not in kws_umap:
-                    kws_umap.update({"col_cell_type": group})
-                figs["umap"] = cr.pl.plot_umap(
-                    adata, genes=genes, **kws_umap, col_gene_symbols=cgs,
-                    cell_types_circle=cell_types_circle)  # plot UMAP
+                figs["umap"] = cr.pl.plot_umap(adata, genes=genes, **kws_umap)
             else:
                 print("\n<<< UMAP NOT AVAILABLE. RUN `.cluster()`.>>>")
         return figs

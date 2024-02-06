@@ -9,7 +9,7 @@ import warnings
 import seaborn as sns
 import matplotlib.pyplot as plt
 import corescpy as cr
-from .class_sc import Omics
+from corescpy import Omics
 from corescpy.analysis.perturbations import layer_perturbation
 import pandas as pd
 
