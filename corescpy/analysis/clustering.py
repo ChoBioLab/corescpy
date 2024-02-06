@@ -12,7 +12,9 @@ import celltypist
 from anndata import AnnData
 import scanpy as sc
 import seaborn as sns
+import matplotlib.pyplot as plt
 import os
+import re
 from copy import deepcopy
 import corescpy as cr
 import pandas as pd
@@ -91,7 +93,8 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
     print("\n\n<<< CREATING UMAP PLOTS >>>")
     if plot is True:
         try:  # scree-like plot for PCA components
-            figs["pca_var_ratio"] = sc.pl.pca_variance_ratio(ann, log=True)
+            sc.pl.pca_variance_ratio(ann, log=True)
+            figs["pca_var_ratio"] = plt.gcf()
         except Exception as err:
             warnings.warn(f"Failed to plot PCA variance ratio: {err}")
         try:  # plot UMAP by clusters
@@ -110,8 +113,8 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
 
     # CellTypist (Optional)
     if kws_celltypist is not None:
-        ann.uns["celltypist"], figs["celltypist"] = perform_celltypist(
-            ann, **kws_celltypist)  # celltypist annotations
+        out = perform_celltypist(ann, **kws_celltypist)  # annotate
+        ann.uns["celltypist"], figs["celltypist"] = out[0], out[1]
         ann.obs = ann.obs.join(ann.uns["celltypist"].predicted_labels,
                                lsuffix="_last")  # to data
     return ann, figs
@@ -256,7 +259,8 @@ def perform_celltypist(adata, model, col_cell_type=None,
 
 
 def annotate_by_markers(adata, data_assignment, col_assignment="Type",
-                        col_cell_type="leiden", col_new="Annotation"):
+                        col_cell_type="leiden", col_new="Annotation",
+                        renaming=False):
     """
     Annotate based on markers (adapted from Squidpy tutorial).
 
@@ -272,6 +276,25 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     # Load Marker Groups
     if isinstance(data_assignment, (str, os.PathLike)):
         data_assignment = pd.read_excel(data_assignment, index_col=0)
+    data_assignment = data_assignment.copy()
+    if renaming is True:
+        sources = data_assignment[col_assignment].unique()
+        rename = dict(zip(sources, [" ".join([i.capitalize() if i and i[
+            0] != "(" else i for i in x.split(" ")]) if len(
+                x.split(" ")) > 1 else x for x in [re.sub(
+                    "glia", "Glia", re.sub("smc", "SMC", re.sub(
+                        "_", " ", j))) for j in sources]]))
+        data_assignment.loc[:, col_assignment] = data_assignment[
+            col_assignment].replace(rename)
+    nrow = data_assignment.shape[0]
+    if data_assignment.reset_index().iloc[:, 0].duplicated().any():
+        data_assignment = data_assignment.reset_index()
+        data_assignment = data_assignment[
+            ~data_assignment.iloc[:, 0].duplicated()]
+        data_assignment = data_assignment.set_index(
+            list(data_assignment.columns)[0])
+        print(
+            f"Dropping {data_assignment.shape[0]} duplicate genes of {nrow}.")
     data_assignment.index.name = None
     data_assignment.columns = [col_assignment]
 

@@ -158,7 +158,7 @@ class Omics(object):
                 self._file_path, prefix=prefix, col_sample_id=col_sample_id,
                 col_gene_symbols=col_gene_symbols, kws_process_guide_rna=kpg,
                 spatial=spatial, assay=assay, raw=raw, **kwargs)  # object
-        print(self.adata.obs, "\n\n") if assay else None
+        print(f"{self.adata.obs}\n\n" if assay else None)
 
         # Let Property Setters Run
         self.rna = self.adata.table if isinstance(
@@ -188,7 +188,7 @@ class Omics(object):
             self._rna = self.adata.mod[self._assay]
         elif isinstance(self.adata, spatialdata.SpatialData):
             if self.adata.table is not None:
-                del(self.adata.table)
+                del self.adata.table
             self.adata.table = value
             self._rna = self.adata.table
         else:
@@ -418,8 +418,8 @@ class Omics(object):
         adata, figs = cr.pp.process_data(adata, **kws)  # preprocess
         # if assay_protein is not None:  # if includes protein assay
         #     ad_p = muon.prot.pp.clr(adata[assay_protein], inplace=False)
-        for x in kws:
-            adata.obs.loc[:, x] = str(kws[x])  # store parameters in `.obs`
+        for x in kws.items():
+            adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
         if copy is False:
             self.rna = adata
             self.figures["preprocessing"] = figs
@@ -484,8 +484,8 @@ class Omics(object):
         adata, figs_cl = cr.ax.cluster(
             ann, assay=assay, **self._columns, **self._keys, colors=colors,
             kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
-        for x in kws:
-            adata.obs.loc[:, x] = str(kws[x])  # store parameters in `.obs`
+        for x in kws.items():
+            adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
         if copy is False:
             self.figures.update({"clustering": figs_cl})
             self.rna = adata
