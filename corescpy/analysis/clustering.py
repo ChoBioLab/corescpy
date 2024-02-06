@@ -260,9 +260,9 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     """
     Annotate based on markers (adapted from Squidpy tutorial).
 
-    The argument `data_assignment` should be specified as a dataframe indexed
-    by gene symbols and a single column of assignments to cell types
-    for each marker (or a file path returning the same).
+    The argument `data_assignment` should be specified as a dataframe
+    indexed by gene symbols and a single column of assignments to cell
+    types for each marker (or a file path returning the same).
     """
     adata = adata.copy()
     col_bc = adata.obs.index.names[0]
@@ -277,15 +277,11 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
 
 
     # Assign marker gene metadata using reference dataset
-    markers = data_assignment[data_assignment[col_assignment].str.contains(
-        "marker")].index.tolist()
     meta_gene = deepcopy(adata.var)
-    shared_marks = list(set(meta_gene.index.tolist()).intersection(markers))
+    shared_marks = list(set(meta_gene.index.tolist()).intersection(
+        data_assignment[col_assignment].index.tolist()))  # available genes
     meta_gene.loc[shared_marks, "Markers"] = data_assignment.loc[
         shared_marks, col_assignment]
-    meta_gene["Markers"] = meta_gene["Markers"].apply(
-        lambda x: "N.A." if "marker" not in str(x) else x)
-    print(meta_gene["Markers"].value_counts())
 
     # Calculate Average Expression by Cluster
     ser_counts = adata.obs[col_cell_type].value_counts()
@@ -297,7 +293,7 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     for c in adata.obs[col_cell_type].cat.categories:  # iterate cluters
         sig_cl.loc[c] = adata[adata.obs[col_cell_type].isin([c]), :].X.mean(0)
     sig_cl = sig_cl.transpose()
-    leiden = ["Leiden-" + str(x) for x in sig_cl.columns.tolist()]
+    leiden = [f"{col_cell_type}-" + str(x) for x in sig_cl.columns.tolist()]
     sig_cl.columns = leiden
     meta_c.index = sig_cl.columns.tolist()
     meta_c[col_cell_type] = pd.Series(
@@ -309,7 +305,7 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
         shared_marks, col_assignment]
 
     # Assign Cell Types
-    meta_c["Cell_Type"] = pd.Series("N.A.", index=meta_c.index.tolist())
+    meta_c[col_new] = pd.Series("N.A.", index=meta_c.index.tolist())
     num_top_genes = 30
     for inst_cluster in sig_cl.columns.tolist():
         top_genes = (sig_cl[inst_cluster].sort_values(
@@ -320,21 +316,20 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
         max_count = ser_counts.max()
         max_cat = "_".join(sorted(ser_counts[
             ser_counts == max_count].index.tolist()))
-        max_cat = max_cat.replace(" marker", "").replace(" ", "-")
-        print(inst_cluster, max_cat)
-        meta_c.loc[inst_cluster, "Cell_Type"] = max_cat
+        meta_c.loc[inst_cluster, col_new] = max_cat
     meta_c["name"] = meta_c.apply(
-        lambda x: x["Cell_Type"] + "_" + x[col_cell_type], axis=1)  # rename
+        lambda x: x[col_new] + "_" + x[col_cell_type], axis=1)  # rename
     leiden_names = meta_c["name"].values.tolist()
     meta_c.index = leiden_names
-    print(meta_c)
     leiden_to_cell_type = deepcopy(meta_c)
     leiden_to_cell_type.set_index(col_cell_type, inplace=True)
     leiden_to_cell_type.index.name = None
     adata.obs[col_new] = adata.obs["leiden"].apply(
-        lambda x: leiden_to_cell_type.loc["Leiden-" + str(x), "Cell_Type"])
-    adata.obs["Cluster"] = adata.obs["leiden"].apply(
-        lambda x: leiden_to_cell_type.loc["Leiden-" + str(x), "name"])
+        lambda x: leiden_to_cell_type.loc[f"{col_cell_type}-{x}", col_new])
+    adata.obs[f"{col_new}_Cluster"] = adata.obs["leiden"].apply(
+        lambda x: leiden_to_cell_type.loc[
+            f"{col_cell_type}-" + str(x), "name"])
     if col_bc in adata.obs:
         adata.obs = adata.obs.set_index(col_bc)
+    print(leiden_to_cell_type[col_new])
     return adata
