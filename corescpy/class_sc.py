@@ -77,7 +77,7 @@ class Omics(object):
             assay (str, optional): Name of the gene expression assay if
                 loading a multi-modal data object (e.g., "rna").
                 Defaults to None.
-            assay_protein (str, optional):  Name of the assay containing
+            assay_protein (str, optional): Name of the assay containing
                 the protein expression modality, if available.
                 For instance, if "adt", `self.adata["adt"]` would be
                 expected to contain the AnnData object for the
