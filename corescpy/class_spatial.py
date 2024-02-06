@@ -138,8 +138,8 @@ class Spatial(cr.Omics):
         """Create basic spatial plots."""
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
-        if col_sample_id is None:
-            col_sample_id = self._columns["col_sample_id"]
+        col_sample_id = col_sample_id if col_sample_id else kwargs.pop(
+            "libary_key", self._columns["col_sample_id"])
         if isinstance(self.adata, spatialdata.SpatialData) and shape:
             warn("Can't currently use `shape` parameter with SpatialData.")
             shape = None
@@ -147,22 +147,26 @@ class Spatial(cr.Omics):
             "col_gene_symbols"] != self.rna.var.index.names[0]) else None
         # if library_id is None:  # all libraries if unspecified
         #     library_id = list(self.rna.obs[col_sample_id].unique())
-        adata = self.rna.copy()
+        ann = self.rna.copy()
         color = None if color is False else color if color else self._columns[
             "col_cell_type"]  # no color if False; clusters if unspecified
         if color is not None:
             color = list(pd.unique(self.get_variables(color)))
         kws = dict(figsize=figsize, shape=shape, color=color,
-                   # img_res_key=key_image, library_key=col_sample_id,
+                   # img_res_key=key_image,
+                   library_key=col_sample_id,
                    library_id=library_id if library_id else self._library_id,
                    cmap=cmap, alt_var=cgs, wspace=wspace, **kwargs)
         try:
-            fig = sq.pl.spatial_scatter(adata, **kws) if (
-                kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
+            try:
+                fig = sq.pl.spatial_scatter(ann, **kws) if (
+                    kind == "scatter") else sq.pl.spatial_segment(ann, **kws)
+            except Exception:  # remove Leiden colors if evokes Squidpy bug
+                _ = ann.uns.pop("leiden_colors", None)
+                fig = sq.pl.spatial_scatter(ann, **kws) if (
+                    kind == "scatter") else sq.pl.spatial_segment(ann, **kws)
         except Exception:
-            _ = adata.uns.pop("leiden_colors", None)
-            fig = sq.pl.spatial_scatter(adata, **kws) if (
-                kind == "scatter") else sq.pl.spatial_segment(adata, **kws)
+            fig = str(traceback.format_exc())
         try:
             fig.suptitle(title)
         except Exception:

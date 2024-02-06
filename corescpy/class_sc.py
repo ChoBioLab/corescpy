@@ -200,7 +200,7 @@ class Omics(object):
 
     def get_layer(self, layer=None, subset=None, inplace=False):
         """Get layer (and optionally, subset)."""
-        adata = self.rna.copy() if inplace is False else self.copy
+        adata = self.rna.copy() if inplace is False else self.rna
         # if isinstance(self.adata, spatialdata.SpatialData):
         #     if inplace is False:
         #         warn("Non-inplace spatialdata layers not supported")
@@ -218,6 +218,7 @@ class Omics(object):
 
     def get_variables(self, variables=None):
         """Get `.obs` & `.var` variables/intersection with list."""
+        variables = cr.tl.to_list(variables)
         valids = list(self.rna.var_names) + list(self.rna.obs.columns)
         variables = [var for var in variables if var in valids]
         return variables
