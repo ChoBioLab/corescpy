@@ -223,7 +223,7 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
             matrix.at[feature_to_index[feature], cell_id] += 1
 
     # Call a helper function to create Seurat and Scanpy compatible MTX output
-    write_sparse_mtx(args, matrix, cells, features)
+    write_sparse_mtx(directory, matrix, cells, features)
 
 
 def nearest_cell(x_pixel, y_pixel, z_slice,
