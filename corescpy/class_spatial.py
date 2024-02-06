@@ -16,6 +16,8 @@ import corescpy as cr
 import pandas as pd
 import numpy as np
 
+SEG_CELL_ID_XENIUM = "region"
+SEG_CELL_ID_VISIUM = None
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 
@@ -74,6 +76,8 @@ class Spatial(cr.Omics):
             library_id = list(self.rna.uns[self._spatial_key].keys())
             if len(library_id) == 1:
                 library_id = library_id[0]
+        self._columns["col_segment"] = SEG_CELL_ID_VISIUM if (
+            visium is True) else SEG_CELL_ID_XENIUM
         if self._columns["col_sample_id"] not in self.rna.obs:
             self.rna.obs.loc[:, self._columns["col_sample_id"]] = library_id
         self.figures["spatial"], self.results["spatial"] = {}, {}
@@ -131,7 +135,7 @@ class Spatial(cr.Omics):
             cr.pp.describe_tiff(os.path.dirname(self.adata.uns[
                 "spatial"][x]["metadata"]["file_path"]))
 
-    def plot_spatial(self, color=None, kind="scatter", key_image=None,
+    def plot_spatial(self, color=None, kind="dot", key_image=None,
                      col_sample_id=None, library_id=None, title="",
                      shape="hex", figsize=30, cmap="magma", wspace=0.4,
                      **kwargs):
@@ -140,6 +144,9 @@ class Spatial(cr.Omics):
             figsize = (figsize, figsize)
         col_sample_id = col_sample_id if col_sample_id else kwargs.pop(
             "libary_key", self._columns["col_sample_id"])
+        seg = None if kind.lower() == "dot" else kwargs.pop(
+            "seg_cell_id", self._columns["col_segment"])  # segmentation ID
+        libid = library_id if library_id else self._library_id
         if isinstance(self.adata, spatialdata.SpatialData) and shape:
             warn("Can't currently use `shape` parameter with SpatialData.")
             shape = None
@@ -153,20 +160,21 @@ class Spatial(cr.Omics):
         if color is not None:
             color = list(pd.unique(self.get_variables(color)))
         kws = dict(figsize=figsize, shape=shape, color=color,
-                   # img_res_key=key_image,
-                   library_key=col_sample_id,
-                   library_id=library_id if library_id else self._library_id,
+                   library_key=col_sample_id, library_id=libid,
                    cmap=cmap, alt_var=cgs, wspace=wspace, **kwargs)
+        kws["img_res_key"] = key_image if key_image else list(
+            self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
         try:
             try:
-                fig = sq.pl.spatial_scatter(ann, **kws) if (
-                    kind == "scatter") else sq.pl.spatial_segment(ann, **kws)
+                fig = sq.pl.spatial_segment(ann, seg, **kws) if (
+                    seg) else sq.pl.spatial_scatter(ann, **kws)
             except Exception:  # remove Leiden colors if evokes Squidpy bug
                 _ = ann.uns.pop("leiden_colors", None)
-                fig = sq.pl.spatial_scatter(ann, **kws) if (
-                    kind == "scatter") else sq.pl.spatial_segment(ann, **kws)
+                fig = sq.pl.spatial_segment(ann, seg, **kws) if (
+                    seg) else sq.pl.spatial_scatter(ann, **kws)
         except Exception:
             fig = str(traceback.format_exc())
+            print(fig)
         try:
             fig.suptitle(title)
         except Exception:

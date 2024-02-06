@@ -55,8 +55,9 @@ class TestCiteSeq:
 
 class TestAdamson:
     """Adamson 2016 dataset."""
+    key_control_patterns = ["CTRL"]
     kws_pga = dict(feature_split=None, guide_split="_",
-                   key_control_patterns=["CTRL"],
+                   key_control_patterns=key_control_patterns,
                    remove_multi_transfected=True)
     kwargs = dict(col_gene_symbols="gene_symbol", col_cell_type="leiden",
                   col_sample_id=None, col_batch=None, col_subject=None,
@@ -65,5 +66,7 @@ class TestAdamson:
                   key_control="Control", key_treatment="KO",
                   kws_process_guide_rna=kws_pga)
     adata = pt.dt.adamson_2016_upr_perturb_seq()
-    adata.obs[adata.obs.perturbation == "*", "perturbation"] = "CTRL"
+    adata.obs.loc[:, "perturbation"].astype(str, copy=False)
+    adata.obs.loc[:, "perturbation"] = adata.obs["perturbation"].astype(
+        str).replace({"*", key_control_patterns[0]})
     self = cr.Crispr(adata, **kwargs)
