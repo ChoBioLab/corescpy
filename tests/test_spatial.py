@@ -19,6 +19,12 @@ DIR_DATA = os.path.join(DIR_TEST_FILE, "data")
 #         os.system(f"unzip {file}.zip -d {os.path.join(DIR_DATA, file)}")
 #     self = cr.Spatial(os.path.join(DIR_DATA, file))
 
+#     def test_xenium_attributes(self):
+#         """Ensure proper attributes."""
+#         assert "adata" in dir(TestXenium.self)
+#         assert "rna" in dir(TestXenium.self)
+#         assert "original_ix" in dir(TestXenium.self.rna.uns)
+
 #     def test_xenium_ax(self):
 #         """Test Xenium analysis."""
 #         genes = list(TestXenium.self.rna.var_names[:3])

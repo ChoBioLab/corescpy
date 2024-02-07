@@ -4,23 +4,23 @@
 @author: E. N. Aslinger
 """
 
-import scanpy as sc
-import seaborn as sns
-import matplotlib.pyplot as plt
-import pertpy as pt
-import blitzgsea as blitz
-import liana
-import decoupler
-import spatialdata
 import traceback
 from warnings import warn
 import functools
 from copy import deepcopy
+import scanpy as sc
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pertpy as pt
+# import blitzgsea as blitz
+import liana
+import decoupler
+import spatialdata
 import muon
 import anndata
-import corescpy as cr
 import pandas as pd
 import numpy as np
+import corescpy as cr
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -308,7 +308,7 @@ class Omics(object):
             cr.pp.perform_qc(adata, layer=self._layers["counts"], **kws_qc)
 
         # Gene Expression
-        if "categories_order" in kwargs:  # merge category kws; subset if needed
+        if "categories_order" in kwargs:  # merge category kws; subset if need
             kws_violin, kws_heat, kws_matrix, kws_dot = [{
                 "categories_order": cr.tl.merge(x, kwargs["categories_order"])
                 } for x in [kws_violin, kws_heat, kws_matrix, kws_dot]]
@@ -366,6 +366,8 @@ class Omics(object):
         to default to `self._columns["col_condition"]`).
         """
         ann = self.get_layer(layer=layer, inplace=False)
+        if subset is True:
+            ann = ann[subset]
         con, cct = [x[1] if x[1] else self._columns[x[0]]
                     for x in zip(["col_condition", "col_cell_type"], [
                         col_condition, col_cell_type])]  # specs v. default

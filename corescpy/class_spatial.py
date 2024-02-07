@@ -5,16 +5,16 @@
 """
 
 import os
-import squidpy as sq
-import spatialdata
-import scanpy as sc
 import traceback
 from warnings import warn
 import matplotlib
 import matplotlib.pyplot as plt
-import corescpy as cr
+import squidpy as sq
+import spatialdata
+import scanpy as sc
 import pandas as pd
-import numpy as np
+# import numpy as np
+import corescpy as cr
 
 SEG_CELL_ID_XENIUM = "region"
 SEG_CELL_ID_VISIUM = None
@@ -26,7 +26,7 @@ class Spatial(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
     def __init__(self, file_path, col_sample_id="Sample", library_id=None,
-                 file_path_spatial=None, visium=False, **kwargs):
+                 visium=False, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -69,6 +69,7 @@ class Spatial(cr.Omics):
                 Omics class initialization method.
         """
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
+        _ = kwargs.pop("file_path_spatial", None)
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
                          library_id=library_id, visium=visium, **kwargs)
         self._spatial_key = cr.pp.SPATIAL_KEY
@@ -82,11 +83,15 @@ class Spatial(cr.Omics):
             self.rna.obs.loc[:, self._columns["col_sample_id"]] = library_id
         self.figures["spatial"], self.results["spatial"] = {}, {}
         self._library_id = library_id
+        if isinstance(self.adata, spatialdata.SpatialData):
+            self.rna = self.adata.table
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
 
     def update_from_h5ad(self, file=None):
         """Update SpatialData object `.table` from h5ad file."""
+        original_ix = self.rna.uns[
+            "original_ix"] if "original_ix" in self.rna.uns else None
         self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
         csid = self._columns["col_sample_id"]
         if isinstance(self.adata, spatialdata.SpatialData) and (
@@ -101,6 +106,9 @@ class Spatial(cr.Omics):
                 self.adata, self._library_id, csid, rna_only=True)
         else:  # if not SpatialData object
             print("\n\n<<< RESTORED FROM h5ad >>>\n")
+        if original_ix is not None and ("original_ix" not in self.rna.uns or (
+                len(self.rna.uns["original_ix"]) <= len(original_ix))):
+            self.rna.uns["original_ix"] = original_ix
 
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
@@ -328,13 +336,13 @@ class Spatial(cr.Omics):
         try:
             fig["co_occurrence"] = cr.pl.plot_cooccurrence(
                 adata, col_cell_type=cct, **kws_plot)  # lines plot
-        except:
+        except Exception:
             try:
                 ann = adata.table.copy()
                 _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
                 fig["co_occurrence"] = cr.pl.plot_cooccurrence(
                     ann, col_cell_type=cct, **kws_plot)  # lines plot
-            except Exception as err:
+            except Exception:
                 fig["co_occurrence"] = str(traceback.format_exc())
                 print(traceback.format_exc())
         if title:

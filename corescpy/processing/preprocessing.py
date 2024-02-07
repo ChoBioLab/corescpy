@@ -125,18 +125,20 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     """
     # Load Object (or Copy if Already AnnData or MuData)
     csid = kwargs.pop("col_sample_id", None)
-
-
     if isinstance(file, (AnnData, spatialdata.SpatialData,
                          muon.MuData)):  # if already data object
         print("\n\n<<< LOADING OBJECT >>>")
         adata = file.copy() if "copy" in dir(file) else file
+        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
+            adata.table.uns["original_ix"] = adata.table.obs.index.values
     # Spatial Data
     elif spatial not in [None, False]:
         kwargs = {**dict(prefix=prefix, col_sample_id=csid,
                          col_gene_symbols=col_gene_symbols),
                   **kwargs}  # user-specified + variable keyword arguments
         adata = cr.pp.read_spatial(file_path=file, **kwargs)
+        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
+            adata.table.uns["original_ix"] = adata.table.obs.index.values
 
     # Non-Spatial Data
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(

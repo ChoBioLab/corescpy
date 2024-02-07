@@ -194,8 +194,9 @@ def perform_celltypist(adata, model, col_cell_type=None,
         p_thres=p_threshold, mode=mode, over_clustering=over_clustering,
         min_prop=min_proportion, **kwargs)  # run celltypist
     if out_dir:  # save results?
-        res.to_plots(out_file=out_dir, plot_probability=True)  # save plots
-        res.to_table(out_file=out_dir, plot_probability=True)  # save tables
+        pass
+        # res.to_plots(out_file=out_dir, plot_probability=True)  # save plots
+        # res.to_table(out_file=out_dir, plot_probability=True)  # save tables
     # ann = res.to_adata(insert_labels=True, insert_prob=True)
     ann = res.to_adata(insert_labels=True)  # results object -> anndata
 
@@ -280,10 +281,10 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     if renaming is True:
         sources = data_assignment[col_assignment].unique()
         rename = dict(zip(sources, [" ".join([i.capitalize() if i and i[
-            0] != "(" else i for i in x.split(" ")]) if len(
-                x.split(" ")) > 1 else x for x in [re.sub(
-                    "glia", "Glia", re.sub("smc", "SMC", re.sub(
-                        "_", " ", j))) for j in sources]]))
+            0] != "(" and not i.isupper() and i not in [
+                "IgG", "IgA"] else i for i in x.split(" ")]) if len(x.split(
+                    " ")) > 1 else x for x in [re.sub("glia", "Glia", re.sub(
+                        "_", " ", j)) for j in sources]]))
         data_assignment.loc[:, col_assignment] = data_assignment[
             col_assignment].replace(rename)
     nrow = data_assignment.shape[0]
@@ -297,7 +298,6 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
             f"Dropping {data_assignment.shape[0]} duplicate genes of {nrow}.")
     data_assignment.index.name = None
     data_assignment.columns = [col_assignment]
-
 
     # Assign marker gene metadata using reference dataset
     meta_gene = deepcopy(adata.var)
@@ -355,4 +355,4 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     if col_bc in adata.obs:
         adata.obs = adata.obs.set_index(col_bc)
     print(leiden_to_cell_type[col_new])
-    return adata
+    return adata, leiden_to_cell_type
