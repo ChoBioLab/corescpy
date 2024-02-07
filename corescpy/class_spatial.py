@@ -167,9 +167,10 @@ class Spatial(cr.Omics):
             "col_cell_type"]  # no color if False; clusters if unspecified
         if color is not None:
             color = list(pd.unique(self.get_variables(color)))
-        kws = dict(figsize=figsize, shape=shape, color=color, return_ax=True,
-                   library_key=col_sample_id, library_id=libid,
-                   cmap=cmap, alt_var=cgs, wspace=wspace, **kwargs)
+        kws = cr.tl.merge(dict(figsize=figsize, shape=shape, cmap=cmap,
+                               return_ax=True, library_key=col_sample_id,
+                               library_id=libid, color=color, alt_var=cgs,
+                               wspace=wspace), kwargs)
         kws["img_res_key"] = key_image if key_image else list(
             self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
         try:
@@ -191,7 +192,7 @@ class Spatial(cr.Omics):
         return fig
 
     def plot_compare_spatial(self, others, color, cmap="magma",
-                             wspace=0.3, layer="log1p",**kwargs):
+                             wspace=0.3, layer="log1p", **kwargs):
         """Compare spatial plots to those of other Spatial objects."""
         if isinstance(color, str):
             color = [color]
@@ -210,7 +211,7 @@ class Spatial(cr.Omics):
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
                              coord_type="generic", n_jobs=None, figsize=None,
-                             palette=None, shape="hex", size=None, title=None,
+                             palette=None, size=None, title=None,
                              kws_plot=None, copy=False, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
@@ -220,13 +221,13 @@ class Spatial(cr.Omics):
         adata = self.adata
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
-        figsize = (figsize, figsize) if isinstance(figsize, (
-            int, float)) else (15, 7) if figsize is None else figsize
+        f_s = (figsize, figsize) if isinstance(figsize, (
+            int, float)) else (30, 7) if figsize is None else figsize
         if size is None:
-            size = int(1 if figsize[0] < 25 else figsize[0] / 15)
+            size = int(1 if f_s[0] < 25 else f_s[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(figsize=figsize, palette=palette, size=size),
+        kws_plot = {**dict(figsize=f_s, palette=palette, size=size),
                     **dict(kws_plot if kws_plot else {})}
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
@@ -236,13 +237,13 @@ class Spatial(cr.Omics):
         print("\t*** Computing & plotting centrality scores...")
         sq.gr.centrality_scores(adata, cluster_key=cct, n_jobs=n_jobs)  # run
         try:
-            sq.pl.centrality_scores(adata, cluster_key=cct, figsize=figsize)
+            sq.pl.centrality_scores(adata, cluster_key=cct, figsize=f_s)
             fig = plt.gcf()
         except Exception:
             try:
                 ann = adata.table.copy()
                 _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
-                sq.pl.centrality_scores(ann, cluster_key=cct, figsize=figsize)
+                sq.pl.centrality_scores(ann, cluster_key=cct, figsize=f_s)
                 fig = plt.gcf()
             except Exception:
                 fig = str(traceback.format_exc())

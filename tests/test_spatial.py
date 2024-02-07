@@ -1,10 +1,6 @@
-import corescpy as cr
-import scanpy as sc
 import os
 import squidpy as sq
-import spatialdata_io as sdio
-import scipy
-import numpy as np
+import corescpy as cr
 
 DIR_TEST_FILE = os.path.dirname(os.path.abspath(__file__))
 DIR_DATA = os.path.join(DIR_TEST_FILE, "data")

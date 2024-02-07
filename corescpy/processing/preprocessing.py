@@ -165,8 +165,8 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         kws_pmc = dict(assay=[assay, assay_gdo])
         for x in ["col_guide_rna", "col_num_umis", "feature_split",
                   "guide_split", "keep_extra_columns"]:
-            if (kws_process_guide_rna and x in kws_process_guide_rna
-                    ) or x in kwargs:
+            if (kws_process_guide_rna and x in kws_process_guide_rna) or (
+                    x in kwargs):
                 kws_pmc.update({x: kwargs[x] if (
                     x in kwargs) else kws_process_guide_rna[x]})
         adata = cr.pp.process_multimodal_crispr(adata, **kws_pmc)
@@ -353,7 +353,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
                 kws_scale) == 0:  # if extracted all regular-scale keywords
             kws_scale = True  # so doesn't think scaling by reference (CRISPR)
     else:
-        max_val, cen = 0, 0
+        max_val, cen = 0, True
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)

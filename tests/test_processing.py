@@ -1,9 +1,7 @@
-import corescpy as cr
-import scanpy as sc
-import pertpy as pt
 import squidpy as sq
-import scipy
+import scanpy as sc
 import numpy as np
+import corescpy as cr
 
 
 class TestOmics:
