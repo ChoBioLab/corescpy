@@ -354,5 +354,7 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
             f"{col_cell_type}-" + str(x), "name"])
     if col_bc in adata.obs:
         adata.obs = adata.obs.set_index(col_bc)
+    leiden_to_cell_type.index = ["-".join(x.split("-")[
+        1:]) for x in leiden_to_cell_type.index.values]
     print(leiden_to_cell_type[col_new])
     return adata, leiden_to_cell_type

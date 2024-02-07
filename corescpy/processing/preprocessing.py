@@ -233,7 +233,8 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
                  cell_filter_ncounts=None, cell_filter_ngene=None,
                  gene_filter_ncell=None, gene_filter_ncounts=None,
                  remove_malat1=False, target_sum=1e4, kws_hvg=True,
-                 kws_scale=None, regress_out=regress_out_vars, **kwargs):
+                 kws_scale=None, regress_out=regress_out_vars,
+                 custom_thresholds=None, **kwargs):
     """
     Perform various data processing steps.
 
@@ -309,6 +310,9 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             the dictionary to specify a layer to set before scaling.
         regress_out (list or None, optional): The variables to
             regress out. Defaults to regress_out_vars.
+        custom_thresholds (dict or None, optional): A dictionary, keyed
+            by column names on which to filter data (before all other
+            steps), with lists [minimum, maximum] as each item.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -318,6 +322,13 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     # Setup Object
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
+    if custom_thresholds:  # filter on custom thresholds
+        for x in custom_thresholds:
+            dff = ann.obs[x] if x in ann.obs else ann.var[x]  # .obs or .var?
+            if custom_thresholds[x][0]:  # filter by minimum
+                ann = ann[ann.obs[x] >= custom_thresholds[x][0]]
+            if custom_thresholds[x][1]:  # filter by maximum
+                ann = ann[dff <= custom_thresholds[x][1]]
     if layers["counts"] not in ann.layers:
         if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(

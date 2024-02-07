@@ -48,11 +48,14 @@ class TestOmics:
         """Test that `.rna reflects adata changes, & vice-versa."""
         TestOmics.self.adata.obs.loc[:, "adata_change"] = np.random.randn(
             len(TestOmics.self.adata.obs))
-        np.testing.assert_array_equal(*[np.array(x.obs["adata_change"])])
+        np.testing.assert_array_equal(
+            np.array(TestOmics.self.adata.obs["adata_change"]),
+            np.array(TestOmics.self.rna.obs["adata_change"]))
         TestOmics.self.rna.obs.loc[:, "rna_change"] = np.random.randn(
             len(TestOmics.self.rna.obs))
-        np.testing.assert_array_equal(np.array(self.adata.obs["rna_change"]),
-                                      np.array(self.rna.obs["rna_change"]))
+        np.testing.assert_array_equal(
+            np.array(TestOmics.self.adata.obs["rna_change"]),
+            np.array(TestOmics.self.rna.obs["rna_change"]))
 
 
 class TestSpatialVisium:
@@ -79,7 +82,8 @@ class TestSpatialVisium:
         """Ensure `.var` meets expectations."""
         var_ixn = TestSpatialVisium.self.rna.var.index.names[0]
         assert var_ixn == TestSpatialVisium.self._columns["col_gene_symbols"]
-        assert self.rna.var.sort_index().index.values[0] == "ABHD17A"
+        assert TestSpatialVisium.self.rna.var.sort_index(
+            ).index.values[0] == "ABHD17A"
 
     def test_obs(self):
         """Ensure `.obs` meets expectations."""
@@ -108,12 +112,12 @@ class TestSpatialVisium:
     def test_rna(self):
         """Test that `.rna reflects adata changes, & vice-versa."""
         TestSpatialVisium.self.adata.obs.loc[:, "adata_change"] = np.arange(
-        1, TestSpatialVisium.self.adata.obs.shape[0])
+            1, TestSpatialVisium.self.adata.obs.shape[0])
         np.testing.assert_array_equal(*[np.array(x.obs[
             "adata_change"]) for x in [TestSpatialVisium.self.adata,
                                        TestSpatialVisium.self.rna]])
         TestSpatialVisium.self.rna.obs.loc[:, "rna_change"] = np.arange(
-        1, TestSpatialVisium.self.rna.obs.shape[0])
+            1, TestSpatialVisium.self.rna.obs.shape[0])
         np.testing.assert_array_equal(*[np.array(x.obs[
             "rna_change"]) for x in [TestSpatialVisium.self.adata,
                                      TestSpatialVisium.self.rna]])

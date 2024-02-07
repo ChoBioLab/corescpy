@@ -167,7 +167,7 @@ class Spatial(cr.Omics):
             "col_cell_type"]  # no color if False; clusters if unspecified
         if color is not None:
             color = list(pd.unique(self.get_variables(color)))
-        kws = dict(figsize=figsize, shape=shape, color=color,
+        kws = dict(figsize=figsize, shape=shape, color=color, return_ax=True,
                    library_key=col_sample_id, library_id=libid,
                    cmap=cmap, alt_var=cgs, wspace=wspace, **kwargs)
         kws["img_res_key"] = key_image if key_image else list(
@@ -184,10 +184,29 @@ class Spatial(cr.Omics):
             fig = str(traceback.format_exc())
             print(fig)
         try:
-            fig.suptitle(title)
+            fig.figure.suptitle(title)
+            fig.figure.tight_layout()
         except Exception:
             pass
         return fig
+
+    def plot_compare_spatial(self, others, color, cmap="magma",
+                             wspace=0.3, layer="log1p",**kwargs):
+        """Compare spatial plots to those of other Spatial objects."""
+        if isinstance(color, str):
+            color = [color]
+        selves = [self] + list(others)
+        f_s = kwargs.pop("figsize", (5 * len(color), 20 * len(selves)))
+        fig, axs = plt.subplots(len(color) + 1, len(selves), figsize=f_s)
+        for j, s in enumerate(selves):
+            goi = [s._columns["col_cell_type"]] + color
+            for i, g in enumerate(goi):
+                s.plot_spatial(ax=axs[i, j], cmap=cmap, layer=layer, color=g)
+                if i == 0:
+                    axs[i, j].set_title(s._library_id)
+        plt.subplots_adjust(wspace=wspace)
+        fig.show()
+        return fig, axs
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
                              coord_type="generic", n_jobs=None, figsize=None,
@@ -362,6 +381,8 @@ class Spatial(cr.Omics):
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
+        csid = col_sample_id if col_sample_id else self._columns[
+            "col_sample_id"]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
         print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
@@ -369,11 +390,12 @@ class Spatial(cr.Omics):
                                n_perms=n_perms)  # autocorrelation
         if isinstance(genes, int):
             genes = self.rna.uns["moranI"].head(genes).index.values
-        fig, ncols = None, cr.pl.square_grid(len(genes + [cct]))[1]
+        # fig, ncols = None, cr.pl.square_grid(len(genes + [cct]))[1]
         try:
             fig = self.plot_spatial(
                 genes + [cct], shape=shape, figsize=figsize, title=title,
-                key_image=key_image, library_id=library_id, **kws_plot)
+                key_image=key_image, library_id=library_id,
+                library_key=csid, **kws_plot)
         except Exception:
             fig = str(traceback.format_exc())
             traceback.print_exc()
