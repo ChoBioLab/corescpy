@@ -45,6 +45,8 @@ dependencies = [
 
     # Spatial
     "squidpy",
+    "spatialdata>=0.0.15",
+    "spatialdata_io>=0.0.9",
     "spatialdata-plot",
     "tifffile",
     "cellpose",
@@ -58,9 +60,9 @@ dependencies = [
     "jax==0.4.20",
     "jaxlib==0.4.20",
     "optax==0.1.7",
-    "chex==0.1.7",
+    # "chex==0.1.7",
     "seaborn>=0.13.0",
-    "typing-extensions<4.6.0,>=3.6.6",
+    "typing-extensions>=4.8.0",
     "scipy",
     "rich",
     "requests",
