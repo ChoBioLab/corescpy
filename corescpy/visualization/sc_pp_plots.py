@@ -46,7 +46,7 @@ from scanpy.pl import _utils
 
 def plot_hvgs(
     adata_or_result: Union[AnnData, pd.DataFrame, np.recarray],
-    log: bool = False,
+    log: bool = False, figsize=None,
     show: Optional[bool] = None,
     save: Union[bool, str, None] = None,
     highly_variable_genes: bool = True,
@@ -94,8 +94,9 @@ def plot_hvgs(
     else:
         var_or_disp = result.dispersions
         var_or_disp_norm = result.dispersions_norm
-    size = rcParams["figure.figsize"]
-    pl.figure(figsize=(2 * size[0], size[1]))
+    if not figsize:
+        figsize = rcParams["figure.figsize"]
+    pl.figure(figsize=(2 * figsize[0], figsize[1]))
     pl.subplots_adjust(wspace=0.3)
     for idx, d in enumerate([var_or_disp_norm, var_or_disp]):
         pl.subplot(1, 2, idx + 1)
@@ -120,7 +121,6 @@ def plot_hvgs(
             + "{} of genes".format(data_type)
             + (" (normalized)" if idx == 0 else " (not normalized)")
         )
-
     _utils.savefig_or_show("filter_genes_dispersion", show=show, save=save)
     if show is False:
         return pl.gca()
@@ -132,7 +132,7 @@ def filter_genes_dispersion(
     log: bool = False,
     show: Optional[bool] = None,
     save: Union[bool, str, None] = None,
-    palette: Optional[Union[list, None]] = None
+    palette: Optional[Union[list, None]] = None, **kwargs
 ):
     """
     Plot dispersions versus means for genes.
@@ -155,5 +155,5 @@ def filter_genes_dispersion(
     """
     plot_hvgs(
         result, log=log, show=show, save=save, highly_variable_genes=False,
-        palette=palette
+        palette=palette, **kwargs
     )

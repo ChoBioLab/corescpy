@@ -1,7 +1,9 @@
-from corescpy.processing import get_layer_dict
 import decoupler as dc
+from scanpy._settings import settings
 import scanpy as sc
 import pandas as pd
+import numpy as np
+from corescpy.processing import get_layer_dict
 
 layers = get_layer_dict()
 
@@ -42,6 +44,25 @@ def create_condition_combo(adata, col_condition, col_label_new=None, sep="_"):
         adata.obs = create_condition_combo(adata.obs, col_condition,
                                            col_label_new=col_label_new)
     return adata
+
+
+def _merge_pca_subset(adata, adata_subset, n_comps=None,
+                      key_added="X_pca", retain_cols=True):
+    ann = adata.copy()
+    ixs = np.array(pd.Series(ann.var.index.values).isin(list(
+        adata_subset.var.index.values)))
+    n_comps = adata_subset.varm["PCs"].shape[1]
+    ann.uns["pca"] = adata_subset.uns["pca"]
+    ann.obsm[key_added] = adata_subset.obsm[key_added]
+    for i in adata_subset.varm:
+        ann.varm["PCs"] = np.zeros(shape=(ann.n_vars, n_comps))
+        ann.varm["PCs"][ixs] = adata_subset.varm["PCs"]
+    if retain_cols is True:
+        ann.obs = ann.obs.join(adata_subset.obs, lsuffix="_pre_pca_subset")
+    else:
+        ann.obs = ann.obs.drop(list(ann.obs.columns.intersection(
+            adata_subset.obs.columns)), axis=1).join(adata_subset.obs)
+    return ann
 
 
 rfx_convert = r"""

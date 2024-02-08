@@ -87,6 +87,9 @@ coda = [
     "ete3",
     "pyqt5"
 ]
+gpu = [
+    "scanpy[rapids]"
+]
 dev = [
     "pre-commit",
 ]

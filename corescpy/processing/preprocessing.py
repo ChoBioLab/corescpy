@@ -234,7 +234,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
                  gene_filter_ncell=None, gene_filter_ncounts=None,
                  remove_malat1=False, target_sum=1e4, kws_hvg=True,
                  kws_scale=None, regress_out=regress_out_vars,
-                 custom_thresholds=None, **kwargs):
+                 custom_thresholds=None, figsize=None, **kwargs):
     """
     Perform various data processing steps.
 
@@ -313,6 +313,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         custom_thresholds (dict or None, optional): A dictionary, keyed
             by column names on which to filter data (before all other
             steps), with lists [minimum, maximum] as each item.
+        figsize (tuple or None, optional): Figure size.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -365,9 +366,12 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         sids = None
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
+
+    # Highly Expressed Genes
     try:
-        figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
-            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX
+        figs["highly_expressed_genes"], axs = plt.subplots(figsize=figsize)
+        sc.pl.highest_expr_genes(
+            adata, ax=axs, n_top=n_top, gene_symbols=col_gene_symbols)
     except Exception as err:
         print(traceback.format_exc())
         warn(f"\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
@@ -428,7 +432,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     # Gene Variability (Detection, Optional Filtering)
     print("\n<<< DETECTING VARIABLE GENES >>>")
     sc.pp.highly_variable_genes(ann, **kws_hvg)
-    cr.pl.plot_hvgs(ann, palette=["red", "black"])
+    cr.pl.plot_hvgs(ann, palette=["red", "black"], figsize=figsize)
     if filter_hvgs is True:
         print("\n<<< FILTERING BY HIGHLY VARIABLE GENES >>>")
         ann = ann[:, ann.var.highly_variable]  # filter by HVGs

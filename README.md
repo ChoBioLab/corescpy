@@ -29,6 +29,8 @@ look above for the green "Code" button and press it for instructions.
 6. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
 
+** Note: To use GPU resources, use `conda install -c rapidsai -c nvidia -c conda-forge cugraph cuml cudf` and install the gpu version of coreSCpy (which should `pip install scanpy[rapids]`).
+
 ## Usage
 
 1. You can now load `corescpy` like any other distributed Python package.

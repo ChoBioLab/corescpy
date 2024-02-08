@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 import os
 import re
 from copy import deepcopy
-import corescpy as cr
 import pandas as pd
+import numpy as np
+import corescpy as cr
 
 
 def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
@@ -47,6 +48,8 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
     if layer:
         print(f"\n\n*** Using layer: {layer}.\n\n")
         ann.X = adata.layers[layer].copy()  # set layer
+    if ann.var.index.values[0] not in ann.var_names:
+        raise ValueError("`adata.var_names` must be index of `.var`.")
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
@@ -68,21 +71,16 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
         ann_use = ann[:, ann.var_names.isin(genes_subset)
                       ] if genes_subset not in [None, False] else ann  # genes
         sc.pp.pca(ann_use, **{"random_state": seed, **kws_pca})  # PCA
-        if genes_subset not in [None, False]:
-            for i in ann_sub.uns:
-                ann.uns[i] = ann_sub.uns[i]
-            for i in adata.obsm:
-                ann.obsm[i] = ann_sub.obsm[i]
-            for i in adata.varm:
-                ann.varm[i] = ann_sub.varm[i]
-            ann.obs = ann.obs.join(ann_sub.obs[list(
-                ann.obs.columns.difference(ann_sub.obs.columns))])
-        else:
+        if genes_subset not in [None, False]:  # if subsetted genes
+            n_comps = kwargs["n_comps"] if "n_comps" in kwargs else None
+            ann = cr.tl._merge_pca_subset(ann, ann_use, n_comps=n_comps,
+                                          retain_cols=False)
+        else:  # if used full gene set
             ann = ann_use
-        print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>" + str(
-            f"\n\n{kws_neighbors}" if kws_neighbors else ""))
 
     # Neighborhood Graph & UMAP Embedding
+    print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>" + str(
+        f"\n\n{kws_neighbors}" if kws_neighbors else ""))
     sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
     print(f"\n\n<<< EMBEDDING: UMAP{' with PAGA' if paga else ''} >>>")
     if kws_umap:
