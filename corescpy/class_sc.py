@@ -461,7 +461,8 @@ class Omics(object):
 
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,
-                kws_umap=None, kws_cluster=None, kws_celltypist=None,
+                kws_umap=None, kws_cluster=None,
+                kws_celltypist=None, genes_subset=None,
                 plot=True, colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
@@ -483,6 +484,8 @@ class Omics(object):
             method_cluster=method_cluster, kws_pca=kws_pca,
             kws_neighbors=kws_neighbors, kws_umap=kws_umap,
             kws_cluster=kws_cluster, resolution=resolution)
+        if genes_subset is not None:  # subset by genes if needed
+            ann = ann[:, ann.var_names.isin(genes_subset)]
         adata, figs_cl = cr.ax.cluster(
             ann, assay=assay, **self._columns, **self._keys, colors=colors,
             kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
@@ -490,7 +493,17 @@ class Omics(object):
             adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
         if copy is False:
             self.figures.update({"clustering": figs_cl})
-            self.rna = adata
+            if genes_subset is True:  # If subsetted genes, update attributes
+                for i in adata.uns:
+                    self.rna.uns[i] = adata.uns[i]
+                for i in adata.obsm:
+                    self.rna.obsm[i] = adata.obsm[i]
+                for i in adata.varm:
+                    self.rna.varm[i] = adata.varm[i]
+                self.rna.obs = self.rna.obs.join(adata.obs[list(
+                    adata.obs.columns.difference(self.rna.obs.columns))])
+            else:  # otherwise, replace whole object
+                self.rna = adata
             return figs_cl
         return adata
 

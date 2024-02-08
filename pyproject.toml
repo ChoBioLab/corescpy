@@ -30,13 +30,13 @@ dependencies = [
     "blitzgsea",
 
     # Perturbations/Conditions
-    "pertpy >= 0.6.0",
+    "pertpy>=0.6.0",
     "ete3",
     "PyQt5",
     "harmonypy",
     "pydeseq2",
     "decoupler",
-    "liana >= 1.0.4",
+    "liana>=1.0.4",
     "corneto",
     "graphviz",
     "cvxpy",
@@ -45,6 +45,8 @@ dependencies = [
 
     # Spatial
     "squidpy",
+    "spatialdata>=0.0.15",
+    "spatialdata_io>=0.0.9",
     "spatialdata-plot",
     "tifffile",
     "cellpose",
@@ -52,8 +54,15 @@ dependencies = [
     "napari[pyside2]; platform_system == 'Windows'",
 
     # Other
-    "numpy >= 1.24.4",
-    "seaborn >= 0.13.0",
+    "docutils < 0.17,>= 0.10",
+    # "numpy >=1.24.4",
+    "numpy<=1.24.3,>=1.22",
+    "jax==0.4.20",
+    "jaxlib==0.4.20",
+    "optax==0.1.7",
+    # "chex==0.1.7",
+    "seaborn>=0.13.0",
+    "typing-extensions>=4.8.0",
     "scipy",
     "rich",
     "requests",
