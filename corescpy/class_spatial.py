@@ -6,6 +6,7 @@
 
 import os
 import traceback
+import json
 from warnings import warn
 import matplotlib
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ import squidpy as sq
 import spatialdata
 import scanpy as sc
 import pandas as pd
-# import numpy as np
+import numpy as np
 import corescpy as cr
 
 SEG_CELL_ID_XENIUM = "region"
@@ -73,6 +74,7 @@ class Spatial(cr.Omics):
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
                          library_id=library_id, visium=visium, **kwargs)
         self._spatial_key = cr.pp.SPATIAL_KEY
+        self._kind = "xenium" if visium is False else "visium"
         if library_id is None and visium is True:
             library_id = list(self.rna.uns[self._spatial_key].keys())
             if len(library_id) == 1:
@@ -120,6 +122,34 @@ class Spatial(cr.Omics):
             adata.write_h5ad(file, **kwargs)
         else:
             self.adata.write(file, **{"overwrite": True, **kwargs})
+
+    def read_panel(self, directory=""):
+        """Read gene panel for Xenium data."""
+        drop = cr.pp._get_control_probe_names()
+        if self._kind != "xenium":
+            raise ValueError("Gene panel reading not available for Visium.")
+        if os.path.splitext(directory)[1] == ".json":
+            file_path = directory
+        elif os.path.exists(os.path.join(directory, "gene_panel.json")):
+            file_path = os.path.join(directory, "gene_panel.json")
+        else:
+            if "file_path" in self.rna.obs:
+                directory = os.path.join(directory, str(
+                    self.rna.obs["file_path"].iloc[0]))
+            file_path = os.path.join(directory, "gene_panel.json")
+        with open(file_path) as f:
+            expect = json.load(f)["payload"]["targets"]
+        panel = list(set([g["type"]["data"]["name"] for g in expect]))
+        panel = list(set(panel).difference(np.array(panel)[np.where([any((
+            i in x for i in drop)) for x in panel])[0]]))
+        miss = list(set(panel).difference(self.rna.var_names))
+        if len(miss) > 0:
+            print(f"\n\nObject {self._library_id} " + str(
+                f"is missing genes from panel: \n\n{miss}\n\n"))
+            print("This may be normal if you've filtered the data.")
+        else:
+            print(f"\n\n{self._library_id}: All expected genes present!")
+        return expect
 
     def read_parquet(self, directory=None, kind="transcripts"):
         """

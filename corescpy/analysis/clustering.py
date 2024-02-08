@@ -24,7 +24,7 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden", resolution=1, kws_pca=None,
             kws_neighbors=None, kws_umap=None, kws_cluster=None,
-            seed=1618, **kwargs):
+            genes_subset=None, seed=1618, **kwargs):
     """
     Perform clustering and visualize results.
 
@@ -65,7 +65,20 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
                 warnings.warn("""use_highly_variable set to True, but
                               'highly_variable' not found in `adata.var`""")
             kws_pca["use_highly_variable"] = False
-        sc.pp.pca(ann, **{"random_state": seed, **kws_pca})  # PCA
+        ann_use = ann[:, ann.var_names.isin(genes_subset)
+                      ] if genes_subset not in [None, False] else ann  # genes
+        sc.pp.pca(ann_use, **{"random_state": seed, **kws_pca})  # PCA
+        if genes_subset not in [None, False]:
+            for i in ann_sub.uns:
+                ann.uns[i] = ann_sub.uns[i]
+            for i in adata.obsm:
+                ann.obsm[i] = ann_sub.obsm[i]
+            for i in adata.varm:
+                ann.varm[i] = ann_sub.varm[i]
+            ann.obs = ann.obs.join(ann_sub.obs[list(
+                ann.obs.columns.difference(ann_sub.obs.columns))])
+        else:
+            ann = ann_use
         print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>" + str(
             f"\n\n{kws_neighbors}" if kws_neighbors else ""))
 

@@ -35,6 +35,11 @@ STORE_UNS_SQUIDPY = True  # for back-compatibility with Squidpy
 # store images from SpatialData object in SpatialData.table.uns (AnnData.uns)
 
 
+def _get_control_probe_names():
+    """Get Xenium control probe names."""
+    return ["NegControlCodeword", "NegControlProbe", "Unassigned"]
+
+
 def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
                  visium=False, spatial_key="spatial", library_id=None,
                  col_gene_symbols="gene_symbols", prefix=None, gex_only=False,

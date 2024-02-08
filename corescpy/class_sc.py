@@ -481,11 +481,9 @@ class Omics(object):
             self.info["methods"]["clustering"] = method_cluster
         ann.obs.loc[:, "method_cluster"] = method_cluster
         kws = dict(
-            method_cluster=method_cluster, kws_pca=kws_pca,
-            kws_neighbors=kws_neighbors, kws_umap=kws_umap,
-            kws_cluster=kws_cluster, resolution=resolution)
-        if genes_subset is not None:  # subset by genes if needed
-            ann = ann[:, ann.var_names.isin(genes_subset)]
+            method_cluster=method_cluster, kws_pca=kws_pca, kws_umap=kws_umap,
+            kws_neighbors=kws_neighbors, kws_cluster=kws_cluster,
+            resolution=resolution, genes_subset=genes_subset)  # arguments
         adata, figs_cl = cr.ax.cluster(
             ann, assay=assay, **self._columns, **self._keys, colors=colors,
             kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
@@ -493,17 +491,7 @@ class Omics(object):
             adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
         if copy is False:
             self.figures.update({"clustering": figs_cl})
-            if genes_subset is True:  # If subsetted genes, update attributes
-                for i in adata.uns:
-                    self.rna.uns[i] = adata.uns[i]
-                for i in adata.obsm:
-                    self.rna.obsm[i] = adata.obsm[i]
-                for i in adata.varm:
-                    self.rna.varm[i] = adata.varm[i]
-                self.rna.obs = self.rna.obs.join(adata.obs[list(
-                    adata.obs.columns.difference(self.rna.obs.columns))])
-            else:  # otherwise, replace whole object
-                self.rna = adata
+            self.rna = adata
             return figs_cl
         return adata
 
