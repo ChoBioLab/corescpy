@@ -887,3 +887,14 @@ class Crispr(Omics):
     #                 dirp = os.path.join(directory_path, r)
     #                 if not os.path.exists(dirp)
     #                 os.makedirs(dirp, exist_ok=overwrite)
+
+    def plot_correlation(self, genes, method="pearson", col_condition=None,
+                         figsize=None, **kwargs):
+        """Plot correlation among conditions (default=target genes)."""
+        if isinstance(figsize, (int, float)):
+            figsize = (figsize, figsize)  # can specify as 1 #: width & height
+        con = col_condition if col_condition else self._columns[
+            "col_target_genes"]
+        axs = sc.pl.correlation_matrix(
+            self.rna, con, genes, method=method, figsize=figsize, **kwargs)
+        return axs
