@@ -241,8 +241,8 @@ class Spatial(cr.Omics):
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
                              coord_type="generic", n_jobs=None, figsize=None,
-                             palette=None, size=None, title=None,
-                             kws_plot=None, copy=False, **kwargs):
+                             palette=None, size=None, title=None, copy=False,
+                             kws_plot=None,  normalized=True, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
         """
@@ -281,7 +281,7 @@ class Spatial(cr.Omics):
         if not isinstance(fig, str) and title:
             fig.suptitle(title)
         print("\t*** Computing interaction matrix...")
-        sq.gr.interaction_matrix(self.adata, cct, normalized=False)
+        sq.gr.interaction_matrix(self.adata, cct, normalized=normalized)
         if copy is False:
             self.figures["centrality"] = fig
         return adata, fig
@@ -289,7 +289,7 @@ class Spatial(cr.Omics):
     def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
                                library_id=None, library_key=None, seed=1618,
                                layer=None, palette=None, size=None,
-                               key_image=None, shape="hex", mode="zscore",
+                               key_image=None, shape="hex",
                                title="Neighborhood Enrichment",
                                kws_plot=None, figsize=None, cmap="magma",
                                vcenter=None, cbar_range=None, copy=False):
@@ -315,27 +315,25 @@ class Spatial(cr.Omics):
             palette = matplotlib.colors.Colormap(palette)
         kws_plot = cr.tl.merge(dict(palette=palette, size=size, use_raw=False,
                                     layer=layer), kws_plot)
-        fig, axs = plt.subplots(1, 3, figsize=figsize)  # set up facet figure
-        for i in [False, True]:
-            sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=None,
-                                   # n_jobs=n_jobs,  # broken for some reason
-                                   seed=seed)  # neighborhood enrichment
-            try:
-                pkws = dict(cluster_key=cct, title=title, normalized=i,
-                            library_id=library_id, library_key=library_key,
-                            vmin=cbar_range[0], vmax=cbar_range[1], mode=mode,
-                            img_res_key=key_image, cmap=cmap, vcenter=vcenter)
-                sq.pl.nhood_enrichment(adata, ax=axs[i], **pkws)  # plot
-            except Exception:
-                try:
-                    ann = adata.table.copy()
-                    _ = ann.uns.pop("leiden_colors", None)  # Squidpy bug
-                    sq.pl.nhood_enrichment(ann, ax=axs[i], **pkws)  # m
-                except Exception:
-                    traceback.print_exc()
-            axs[i].set_title("Normalized" if i is True else "Un-Normalized")
+        sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=None,
+                               # n_jobs=n_jobs,  # not working for some reason
+                               seed=seed)  # neighborhood enrichment
+        fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         try:
-            self.plot_spatial(color=cct, ax=axs[2], shape=shape,
+            pkws = dict(cluster_key=cct, title=title, library_id=library_id,
+                        library_key=library_key, vcenter=vcenter,
+                        vmin=cbar_range[0], vmax=cbar_range[1],
+                        img_res_key=key_image, cmap=cmap, ax=axs[0])
+            sq.pl.nhood_enrichment(adata, **pkws)  # matrix
+        except Exception:
+            try:
+                ann = adata.table.copy()
+                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                sq.pl.nhood_enrichment(ann, **pkws)  # matrix
+            except Exception:
+                traceback.print_exc()
+        try:
+            self.plot_spatial(color=cct, ax=axs[1], shape=shape,
                               figsize=figsize, cmap=cmap)  # cells (panel 2)
         except Exception:
             fig = str(traceback.format_exc())
