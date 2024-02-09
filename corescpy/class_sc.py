@@ -796,7 +796,7 @@ class Omics(object):
 
     def plot_receptor_ligand(self, key_sources=None, key_targets=None,
                              title=None, out_dir=None, top_n=20,
-                             figsize_dea=None, **kwargs):
+                             figsize_dea=None, swap_axes=False, **kwargs):
         """Plot previously-run receptorout_dir-ligand analyses."""
         subset = self.results["receptor_ligand_info"]["subset"]
         cct = self.results["receptor_ligand_info"]["col_cell_type"]
@@ -809,8 +809,8 @@ class Omics(object):
             kws_dea[x] = kwargs.pop(x, kws_dea[x])
         figs = cr.pl.plot_receptor_ligand(
             adata=(self.adata[subset] if subset else self.adata).copy(),
-            lr_dea_res=res["lr_dea_res"], key_sources=key_sources,
-            key_targets=key_targets, top_n=top_n, **kwargs)  # plot
+            lr_dea_res=res["lr_dea_res"], top_n=top_n, swap_axes=swap_axes,
+            key_sources=key_sources, key_targets=key_targets, **kwargs)  # p
         if res["dea_df"] is not None:
             dea = res["dea_df"].reset_index()
             p_dims = cr.pl.square_grid(len(dea))

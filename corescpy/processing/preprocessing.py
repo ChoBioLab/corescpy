@@ -603,11 +603,15 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
     for h in pd.unique(hhh):
         figs[f"qc_scatter_by_{h}" if h else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)
-            vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
-                [h] if h else [])  # QC variable names
+            ctm = list(set([
+                "n_genes_by_counts", "total_counts", "log1p_total_counts",
+                "cell_area", "nucleus_area"]).intersection(adata.obs.columns))
+            vam = pct_n + ctm + list([h] if h else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
-                {"total_counts": "Total Counts in Cell", **rename_perc,
-                 "n_genes_by_counts": "Genes Detected in Cell",
+                {"total_counts": "Total Counts in Cell",
+                 "cell_area": "Cell Area", "nucleus_area": "Nucleus Area",
+                 "log1p_total_counts": "Log-Normalized Total Counts",
+                 **rename_perc, "n_genes_by_counts": "Genes Detected in Cell",
                  **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(
                 mets_df, diag_kind="kde", hue=h if h else None,

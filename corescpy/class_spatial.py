@@ -241,8 +241,8 @@ class Spatial(cr.Omics):
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
                              coord_type="generic", n_jobs=None, figsize=None,
-                             palette=None, size=None, title=None, copy=False,
-                             kws_plot=None,  normalized=True, **kwargs):
+                             palette=None, copy=False, cmap="magma",
+                             title=None, kws_plot=None, normalized=True, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
         """
@@ -253,12 +253,10 @@ class Spatial(cr.Omics):
             "col_cell_type"]
         f_s = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (30, 7) if figsize is None else figsize
-        if size is None:
-            size = int(1 if f_s[0] < 25 else f_s[0] / 15)
         if isinstance(palette, list):
             palette = matplotlib.colors.Colormap(palette)
-        kws_plot = {**dict(figsize=f_s, palette=palette, size=size),
-                    **dict(kws_plot if kws_plot else {})}
+        kws_plot = cr.tl.merge(dict(figsize=f_s, palette=palette, cmap=cmap),
+                               kws_plot)  # interaction matrix plot arguments
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.spatial_neighbors(
@@ -282,8 +280,14 @@ class Spatial(cr.Omics):
             fig.suptitle(title)
         print("\t*** Computing interaction matrix...")
         sq.gr.interaction_matrix(self.adata, cct, normalized=normalized)
+        try:
+            sq.pl.interaction_matrix(self.rna, cct, **kws_plot)
+            fig_ix = plt.gcf()
+        except Exception:
+            fig_ix = str(traceback.format_exc())
         if copy is False:
             self.figures["centrality"] = fig
+            self.figures["interaction_matrix"] = fig_ix
         return adata, fig
 
     def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
@@ -451,15 +455,5 @@ class Spatial(cr.Omics):
                                           layer="log1p", p_threshold=0.005,
                                           **kwargs):
         """Calculate receptor-ligand information using spatial data."""
-        cct = col_cell_type if col_cell_type else  self._columns[
-            "col_cell_type"]  # cell type column name
-        kws = dict(use_raw=False, transmitter_params={"categories": "ligand"},
-                   receiver_params={"categories": "receptor"})  # defaults
-        adata = self.get_layer(layer=layer, inplace=False)
-        kws = cr.tl.merge(kws, kwargs)
-        res = sq.gr.ligrec(adata, cluster_key=cct, copy=False, **kws)
-        for i in res:
-            print(res[i].head() + "\n\n\n" if "head" in dir(res[i]) else None)
-        sq.pl.ligrec(res, source_groups=key_sources,
-                     target_groups=key_targets, alpha=p_threshold)  # plot
-        return adata, res, fig
+        raise NotImplementedError("Spatially-informed ligand-receptor "
+                                  "analysis not yet implemented.")
