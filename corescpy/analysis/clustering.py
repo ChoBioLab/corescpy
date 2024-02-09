@@ -8,16 +8,15 @@ Preprocessing CRISPR experiment data.
 """
 
 import warnings
-import celltypist
-from anndata import AnnData
-import scanpy as sc
-import seaborn as sns
-import matplotlib.pyplot as plt
 import os
 import re
 from copy import deepcopy
+import celltypist
+from anndata import AnnData
+import seaborn as sns
+import matplotlib.pyplot as plt
+import scanpy as sc
 import pandas as pd
-import numpy as np
 import corescpy as cr
 
 

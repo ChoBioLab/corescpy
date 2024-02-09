@@ -334,7 +334,6 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(
                 f"Must have counts in `adata.layers['{layers['counts']}']`.")
-        # warn("\n\nASSUMING COUNTS IN `adata.X`! (No counts layer present.)")
         ann.layers[layers["counts"]] = ann.X.copy()  # store counts in layer
     else:
         ann.X = ann.layers[layers["counts"]]  # use counts layer
@@ -561,22 +560,18 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         names[p] + " " + "%" + " of Counts" for p in names]))
 
     # Calculate QC Metrics
+    qc_vars = []  # to hold mt, rb, hb, etc. if present in data
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...")
     for k in patterns:  # calculate MT, RB, HB counts
-        try:
-            gvars = adata.var_names.str.startswith(patterns[k])
+        gvars = adata.var_names.str.startswith(patterns[k])
+        if any(gvars):
             adata.var[k] = gvars
-        except Exception as err:
-            print(traceback.format_exc())
-            warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
+            qc_vars += [k]
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
     sc.pp.calculate_qc_metrics(adata, qc_vars=list(patterns), log1p=log1p,
                                percent_top=None, inplace=True)  # QC metrics
 
     # Determine Available QC Metrics & Color-Coding (e.g., by Subject)
-    nonzero = [adata.obs[f"total_counts_{q}"].max() > 0 for q in patterns]
-    qc_vars = list(np.array(list(patterns))[np.where(nonzero)[0]]) if any(
-        nonzero) else []  # only plot MT, RB, HB if present
     pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
     for x in pct_n:  # replace NaN % (in case no mt, rb, hb) wth 0
         adata.obs.loc[adata.obs[x].isnull(), x] = 0
