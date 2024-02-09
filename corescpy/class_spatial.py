@@ -242,7 +242,8 @@ class Spatial(cr.Omics):
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
                              coord_type="generic", n_jobs=None, figsize=None,
                              palette=None, copy=False, cmap="magma",
-                             title=None, kws_plot=None, normalized=True, **kwargs):
+                             title=None, kws_plot=None,
+                             normalized=True, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
         """
@@ -355,6 +356,7 @@ class Spatial(cr.Omics):
         enrichment analysis, but uses original spatial coordinates rather
         than connectivity matrix).
         """
+        _ = self.get_layer(layer=layer, inplace=True)
         adata = self.adata
         if isinstance(key_cell_type, str):
             key_cell_type = [key_cell_type]
