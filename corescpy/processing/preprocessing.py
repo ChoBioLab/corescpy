@@ -386,9 +386,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
 
     # Exploration & QC Metrics
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
-    figs["qc_metrics"] = cr.pp.perform_qc(
-        ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
-        hue=sids)  # QC metric calculation & plotting
+    figs["qc_metrics"] = cr.pp.perform_qc(ann, hue=sids)  # QC metrics & plots
 
     # Basic Filtering (DO FIRST...ALL INPLACE)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>")
@@ -458,8 +456,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
 
     # Final Data Examination
     cr.tl.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
-    figs["qc_metrics_post"] = cr.pp.perform_qc(
-        ann.copy(), n_top=n_top, col_gene_symbols=col_gene_symbols, hue=sids)
+    figs["qc_metrics_post"] = cr.pp.perform_qc(ann.copy(), hue=sids)
     return ann, figs
 
 
@@ -542,8 +539,7 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     return adata
 
 
-def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
-               hue=None, patterns=None, layer=None):
+def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
     """Calculate & plot quality control metrics."""
     figs = {}
     if layer is not None:
@@ -616,7 +612,7 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             fff = seaborn.pairplot(
                 mets_df, diag_kind="kde", hue=h if h else None,
                 diag_kws=dict(fill=True, cut=0), plot_kws=dict(
-                    marker=".", linewidth=0.05))  # QC pairplot
+                    marker=".", linewidth=0.05), height=5)  # QC pairplot
         except Exception as err:
             fff = err
             print(traceback.format_exc())

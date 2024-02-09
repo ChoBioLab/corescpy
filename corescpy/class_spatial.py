@@ -289,7 +289,7 @@ class Spatial(cr.Omics):
     def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
                                library_id=None, library_key=None, seed=1618,
                                layer=None, palette=None, size=None,
-                               key_image=None, shape="hex",
+                               key_image=None, shape="hex", mode="zscore",
                                title="Neighborhood Enrichment",
                                kws_plot=None, figsize=None, cmap="magma",
                                vcenter=None, cbar_range=None, copy=False):
@@ -315,25 +315,27 @@ class Spatial(cr.Omics):
             palette = matplotlib.colors.Colormap(palette)
         kws_plot = cr.tl.merge(dict(palette=palette, size=size, use_raw=False,
                                     layer=layer), kws_plot)
-        sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=None,
-                               # n_jobs=n_jobs,  # not working for some reason
-                               seed=seed)  # neighborhood enrichment
-        fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
-        try:
-            pkws = dict(cluster_key=cct, title=title, library_id=library_id,
-                        library_key=library_key, vcenter=vcenter,
-                        vmin=cbar_range[0], vmax=cbar_range[1],
-                        img_res_key=key_image, cmap=cmap, ax=axs[0])
-            sq.pl.nhood_enrichment(adata, **pkws)  # matrix
-        except Exception:
+        fig, axs = plt.subplots(1, 3, figsize=figsize)  # set up facet figure
+        for i in [False, True]:
+            sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=None,
+                                   # n_jobs=n_jobs,  # broken for some reason
+                                   seed=seed)  # neighborhood enrichment
             try:
-                ann = adata.table.copy()
-                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
-                sq.pl.nhood_enrichment(ann, **pkws)  # matrix
+                pkws = dict(cluster_key=cct, title=title, normalized=i,
+                            library_id=library_id, library_key=library_key,
+                            vmin=cbar_range[0], vmax=cbar_range[1], mode=mode,
+                            img_res_key=key_image, cmap=cmap, vcenter=vcenter)
+                sq.pl.nhood_enrichment(adata, ax=axs[i], **pkws)  # plot
             except Exception:
-                traceback.print_exc()
+                try:
+                    ann = adata.table.copy()
+                    _ = ann.uns.pop("leiden_colors", None)  # Squidpy bug
+                    sq.pl.nhood_enrichment(ann, ax=axs[i], **pkws)  # m
+                except Exception:
+                    traceback.print_exc()
+            axs[i].set_title("Normalized" if i is True else "Un-Normalized")
         try:
-            self.plot_spatial(color=cct, ax=axs[1], shape=shape,
+            self.plot_spatial(color=cct, ax=axs[2], shape=shape,
                               figsize=figsize, cmap=cmap)  # cells (panel 2)
         except Exception:
             fig = str(traceback.format_exc())
@@ -445,3 +447,21 @@ class Spatial(cr.Omics):
         sq.gr.ripley(adata, cluster_key=col_cell_type, mode=mode)
         fig = sq.pl.ripley(self.adata, cluster_key=col_cell_type, mode=mode)
         return adata, fig
+
+    def calculate_receptor_ligand_spatial(self, col_cell_type=None,
+                                          key_sources=None, key_targets=None,
+                                          layer="log1p", p_threshold=0.005,
+                                          **kwargs):
+        """Calculate receptor-ligand information using spatial data."""
+        cct = col_cell_type if col_cell_type else  self._columns[
+            "col_cell_type"]  # cell type column name
+        kws = dict(use_raw=False, transmitter_params={"categories": "ligand"},
+                   receiver_params={"categories": "receptor"})  # defaults
+        adata = self.get_layer(layer=layer, inplace=False)
+        kws = cr.tl.merge(kws, kwargs)
+        res = sq.gr.ligrec(adata, cluster_key=cct, copy=False, **kws)
+        for i in res:
+            print(res[i].head() + "\n\n\n" if "head" in dir(res[i]) else None)
+        sq.pl.ligrec(res, source_groups=key_sources,
+                     target_groups=key_targets, alpha=p_threshold)  # plot
+        return adata, res, fig
