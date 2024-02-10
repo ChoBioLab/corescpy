@@ -564,7 +564,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
             adata.var[k] = gvars
             qc_vars += [k]
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
-    sc.pp.calculate_qc_metrics(adata, qc_vars=list(patterns), log1p=log1p,
+    sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, log1p=log1p,
                                percent_top=None, inplace=True)  # QC metrics
 
     # Determine Available QC Metrics & Color-Coding (e.g., by Subject)

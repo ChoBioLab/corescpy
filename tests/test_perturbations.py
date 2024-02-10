@@ -1,7 +1,7 @@
-import corescpy as cr
 import scipy
 import pertpy as pt
 import numpy as np
+import corescpy as cr
 
 
 class TestCiteSeq:
@@ -26,10 +26,11 @@ class TestCiteSeq:
     _ = self.preprocess()
     _ = self.cluster()
 
-    def test_celltypist():
+    def test_celltypist(self):
+        """Test CellTypist."""
         _ = TestCiteSeq.self.annotate_clusters("Immune_All_Low.pkl")
 
-    def test_guide_assign(tol=2):
+    def test_guide_assign(self, tol=2):
         """See if guide assignment roughly matches author's."""
         guides = TestCiteSeq.self.rna.obs[[TestCiteSeq.self._columns[
             "col_condition"], "gene_target"]].copy()
