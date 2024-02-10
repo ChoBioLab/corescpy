@@ -282,6 +282,9 @@ class Spatial(cr.Omics):
         print("\t*** Computing interaction matrix...")
         sq.gr.interaction_matrix(self.adata, cct, normalized=normalized)
         try:
+            if "figsize" in kws_plot and kws_plot["figsize"]:
+                kws_plot["figsize"] = (kws_plot["figsize"][0] / 3,
+                                       kws_plot["figsize"][1])
             sq.pl.interaction_matrix(self.rna, cct, **kws_plot)
             fig_ix = plt.gcf()
         except Exception:

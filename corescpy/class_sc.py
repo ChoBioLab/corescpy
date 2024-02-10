@@ -554,14 +554,10 @@ class Omics(object):
                                  generate_sample_level=True, plot=True,
                                  copy=False, **kwargs):
         """Perform gene set enrichment analyses & plotting."""
-        for x in [self._columns, self._keys]:
-            for c in x:  # iterate column/key name attributes
-                if c not in kwargs:  # if not passed as argument to method...
-                    kwargs.update({c: x[c]})  # & use object attribute
         col_condition, col_cell_type = [kwargs.pop(x, self._columns[
             x]) for x in ["col_condition", "col_cell_type"]]  # extract kwargs
         output = cr.ax.analyze_composition(
-            self.adata, col_condition,  col_cell_type,
+            self.rna, col_condition,  col_cell_type,
             assay=assay, layer=layer, reference_cell_type=reference_cell_type,
             analysis_type=analysis_type, plot=plot, out_file=None,
             generate_sample_level=generate_sample_level,
