@@ -456,7 +456,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
 
     # Final Data Examination
     cr.tl.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
-    figs["qc_metrics_post"] = cr.pp.perform_qc(ann.copy(), hue=sids)
+    # figs["qc_metrics_post"] = cr.pp.perform_qc(ann.copy(), hue=sids)
     return ann, figs
 
 
@@ -580,11 +580,13 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
             hhh[0]]))  # if no non-unique hue values, still color by subject
 
     # % Counts (MT, RB, HB) versus Counts (Scatter Plots)
-    rrs, ccs = len(pd.unique(hhh)), len(pct_n + ["n_genes_by_counts"])
+    scatter_vars = pct_n + ["n_genes_by_counts", "cell_area", "nucleus_area"]
+    scatter_vars = list(set(scatter_vars).intersection(adata.obs.columns))
+    rrs, ccs = len(pd.unique(hhh)), len(scatter_vars)
     fff, axs = plt.subplots(rrs, ccs, figsize=(
         5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
     for i, h in enumerate(pd.unique(hhh)):
-        for j, v in enumerate(pct_n + ["n_genes_by_counts"]):
+        for j, v in enumerate(scatter_vars):
             aij = axs if not isinstance(axs, np.ndarray) else axs[
                 i, j] if len(axs.shape) > 1 else axs[j] if ccs > 1 else axs[i]
             try:  # % mt, etc. vs. counts
@@ -603,9 +605,9 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
     for h in pd.unique(hhh):
         figs[f"qc_scatter_by_{h}" if h else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)
-            ctm = list(set([
-                "n_genes_by_counts", "total_counts", "log1p_total_counts",
-                "cell_area", "nucleus_area"]).intersection(adata.obs.columns))
+            ctm = list(set(
+                ["n_genes_by_counts", "total_counts", "log1p_total_counts"]
+                ).intersection(adata.obs.columns))
             vam = pct_n + ctm + list([h] if h else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
                 {"total_counts": "Total Counts in Cell",
