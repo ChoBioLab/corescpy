@@ -614,9 +614,9 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
                  **rename_perc, "n_genes_by_counts": "Genes Detected in Cell",
                  **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(
-                mets_df, diag_kind="kde", hue=h if h else None,
-                diag_kws=dict(fill=True, cut=0), plot_kws=dict(
-                    marker=".", linewidth=0.05), height=5)  # QC pairplot
+                mets_df, hue=h if h else None, height=3, diag_kind="hist",
+                #  diag_kind="kde", diag_kws=dict(fill=True, cut=0),
+                plot_kws=dict(marker=".", linewidth=0.05))  # pair
         except Exception as err:
             fff = err
             print(traceback.format_exc())
