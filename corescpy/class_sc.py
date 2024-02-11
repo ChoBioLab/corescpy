@@ -359,7 +359,7 @@ class Omics(object):
         return fig
 
     def plot_compare(self, genes, col_condition=None, col_cell_type=None,
-                     layer=None, subset=None, **kwargs):
+                     layer=None, subset=None, use_raw=False, **kwargs):
         """
         Plot gene expression across cell types and
         condition(s) (string for 1 condition or list for 2, or None
@@ -375,6 +375,18 @@ class Omics(object):
         fig = cr.pl.plot_cat_split(
             ann, con, col_cell_type=cct, genes=genes,
             **{"columns": col, **kwargs})  # plot by groups
+        cgs = self._columns["col_gene_symbols"] if ann.var.index.values[
+            0] not in ann.var_names else None  # genes=columns instead of ix?
+        for c in con:
+            if c:
+                ann.obs = ann.obs.astype({c: "category"})
+                sc.pl.tracksplot(
+                    ann, genes, c, dendrogram=False, use_raw=use_raw,
+                    gene_symbols=cgs, layer=self._layers["counts"],
+                    figsize=[len(ann.obs[con].unique()), len(genes)])
+        sc.pl.tracksplot(ann, genes, cct, gene_symbols=cgs, dendrogram=False,
+                         use_raw=use_raw, layer=self._layers["counts"],
+                         figsize=[len(ann.obs[con].unique()), len(cct)])
         return fig
 
     def plot_coex(self, genes, use_raw=False, copy=True, **kwargs):
@@ -461,8 +473,9 @@ class Omics(object):
 
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,
-                kws_umap=None, kws_cluster=None,
-                kws_celltypist=None, genes_subset=None,
+                kws_umap=None, kws_cluster=None, genes_subset=None,
+                kws_celltypist=None, file_annotation_guide=None,
+                col_annotation="Annotation",
                 plot=True, colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
@@ -489,6 +502,16 @@ class Omics(object):
             kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
         for x in kws.items():
             adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
+        if file_annotation_guide is not None:  # annotation ~ file of markers
+            try:
+                _, annot = cr.ax.annotate_by_markers(
+                    adata, file_annotation_guide, renaming=True,
+                    col_new=col_annotation, col_cell_type=method_cluster)
+                adata.obs.loc[:, col_annotation] = adata.obs[
+                    method_cluster].replace(dict(zip(
+                        annot.index.values, list(annot["Annotation"]))))
+            except Exception:
+                print(f"{traceback.format_exc()}\n\nAnnotation failed!")
         if copy is False:
             self.figures.update({"clustering": figs_cl})
             self.rna = adata

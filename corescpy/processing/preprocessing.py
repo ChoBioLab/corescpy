@@ -561,8 +561,8 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
     for k in patterns:  # calculate MT, RB, HB counts
         gvars = adata.var_names.str.startswith(patterns[k])
         if any(gvars):
-            adata.var[k] = gvars
             qc_vars += [k]
+        adata.var[k] = gvars
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
     sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, log1p=log1p,
                                percent_top=None, inplace=True)  # QC metrics
@@ -649,7 +649,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
 
 def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
               cell_filter_ncounts=None, cell_filter_ngene=None,
-              gene_filter_ncell=None, gene_filter_ncounts=None):
+              gene_filter_ncell=None, gene_filter_ncounts=None, nmads=2):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
     if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
@@ -657,13 +657,13 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
     if cell_filter_pmt is None:  # None = no MT filter but calculates metrics
         cell_filter_pmt = [0,
                            100]
-    min_pct_mt, max_pct_mt = cell_filter_pmt
+    min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
     if outlier_mads is not None:  # automatic filtering using outlier stats
         outliers = ann.obs[outlier_mads.keys()]
         print(f"\n<<< DETECTING OUTLIERS {outliers.columns} >>>")
         for x in outlier_mads:
             outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
-                ann.obs, outlier_mads[x])  # separate metric outlier columns
+                ann.obs, outlier_mads[x], nmads)  # metric outlier column x
         cols_outlier = list(set(
             outliers.columns.difference(ann.obs.columns)))
         outliers.loc[:, "outlier"] = outliers[cols_outlier].any()  # binary
@@ -676,9 +676,10 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
         print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>")
         print(f"\nTotal Cell Count: {ann.n_obs}")
         print("\n\t*** Filtering cells by mitochondrial gene percentage...")
-        print(f"\n\tMinimum={min_pct_mt}\n\tMaximum={max_pct_mt}")
-        ann = ann[(ann.obs.pct_counts_mt < max_pct_mt) * (
-            ann.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
+        print(f"\n\tMinimum={min_mt}\n\tMaximum={max_mt}")
+        if min_mt and max_mt:
+            ann = ann[(ann.obs.pct_counts_mt < max_mt) * (
+                ann.obs.pct_counts_mt >= min_mt)]  # filter by MT %
         print(f"\tNew Count: {ann.n_obs}")
         cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
             gene_filter_ncounts = [x if x else [None, None] for x in [

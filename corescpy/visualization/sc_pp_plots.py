@@ -100,10 +100,11 @@ def plot_hvgs(
     pl.subplots_adjust(wspace=0.3)
     for idx, d in enumerate([var_or_disp_norm, var_or_disp]):
         pl.subplot(1, 2, idx + 1)
-        for lab, color, mask in zip(["highly variable genes", "other genes"],
-                                      palette, [gene_subset, ~gene_subset],):
+        for lab, color, mask in zip(["highly variable genes", "other genes"
+                                     ], palette, [gene_subset, ~gene_subset]):
             means_, var_or_disps_ = means[mask], d[mask]
-            pl.scatter(means_, var_or_disps_, label=lab, c=color, s=1)
+            pl.scatter(means_, var_or_disps_, label=lab, c=color,
+                       s=figsize[1] / 5)
         if log:  # there's a bug in autoscale
             pl.xscale("log")
             pl.yscale("log")
