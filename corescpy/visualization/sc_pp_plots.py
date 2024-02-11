@@ -104,7 +104,7 @@ def plot_hvgs(
                                      ], palette, [gene_subset, ~gene_subset]):
             means_, var_or_disps_ = means[mask], d[mask]
             pl.scatter(means_, var_or_disps_, label=lab, c=color,
-                       s=figsize[1] / 5)
+                       s=figsize[1] / 2)
         if log:  # there's a bug in autoscale
             pl.xscale("log")
             pl.yscale("log")

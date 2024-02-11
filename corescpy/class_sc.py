@@ -368,6 +368,7 @@ class Omics(object):
         ann = self.get_layer(layer=layer, inplace=False)
         if subset is True:
             ann = ann[subset]
+        genes = self.get_variables(variables=genes)
         con, cct = [x[1] if x[1] else self._columns[x[0]]
                     for x in zip(["col_condition", "col_cell_type"], [
                         col_condition, col_cell_type])]  # specs v. default
@@ -383,10 +384,10 @@ class Omics(object):
                 sc.pl.tracksplot(
                     ann, genes, c, dendrogram=False, use_raw=use_raw,
                     gene_symbols=cgs, layer=self._layers["counts"],
-                    figsize=[len(ann.obs[con].unique()), len(genes)])
+                    figsize=[len(ann.obs[con].unique()), len(genes) * 2])
         sc.pl.tracksplot(ann, genes, cct, gene_symbols=cgs, dendrogram=False,
                          use_raw=use_raw, layer=self._layers["counts"],
-                         figsize=[len(ann.obs[con].unique()), len(cct)])
+                         figsize=[len(ann.obs[con].unique()), len(cct) * 3])
         return fig
 
     def plot_coex(self, genes, use_raw=False, copy=True, **kwargs):
