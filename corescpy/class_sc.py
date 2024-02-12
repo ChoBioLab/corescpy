@@ -368,12 +368,13 @@ class Omics(object):
         ann = self.get_layer(layer=layer, inplace=False)
         if subset is True:
             ann = ann[subset]
+        fig = {}
         genes = self.get_variables(variables=genes)
         con, cct = [x[1] if x[1] else self._columns[x[0]]
                     for x in zip(["col_condition", "col_cell_type"], [
                         col_condition, col_cell_type])]  # specs v. default
         con, col = [con, None] if isinstance(con, str) else con  # 1 or 2?
-        fig = cr.pl.plot_cat_split(
+        fig["categorical"] = cr.pl.plot_cat_split(
             ann, con, col_cell_type=cct, genes=genes,
             **{"columns": col, **kwargs})  # plot by groups
         cgs = self._columns["col_gene_symbols"] if ann.var.index.values[
@@ -382,12 +383,19 @@ class Omics(object):
             if c:
                 ann.obs = ann.obs.astype({c: "category"})
                 sc.pl.tracksplot(
-                    ann, genes, c, dendrogram=False, use_raw=use_raw,
-                    gene_symbols=cgs, layer=self._layers["counts"],
-                    figsize=[len(ann.obs[con].unique()), len(genes) * 2])
-        sc.pl.tracksplot(ann, genes, cct, gene_symbols=cgs, dendrogram=False,
-                         use_raw=use_raw, layer=self._layers["counts"],
-                         figsize=[len(ann.obs[con].unique()), len(cct) * 3])
+                    ann, genes, c, dendrogram=False, gene_symbols=cgs,
+                    use_raw=use_raw, figsize=[
+                        len(ann.obs[c].unique()), len(genes)])
+        if con[1] is not None:
+            for i, g in enumerate(ann.obs[con[0]].unique()):
+                ggg = list(set(genes).intersection(ann[
+                    ann.obs[con[0]] == g].var_names))
+                fig[f"track_{g}"] = sc.pl.tracksplot(
+                    ann[ann.obs[con[0]] == g], ggg, con[1], show=False,
+                    use_raw=use_raw, gene_symbols=cgs, dendrogram=False,
+                    figsize=[len(ann.obs[con[1]].unique()) * 3, len(ggg)])
+                fig[f"track_{g}"]["groupby_ax"].set_xlabel(g)
+                plt.show()
         return fig
 
     def plot_coex(self, genes, use_raw=False, copy=True, **kwargs):
