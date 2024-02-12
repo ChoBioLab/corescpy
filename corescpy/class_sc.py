@@ -385,16 +385,15 @@ class Omics(object):
                 sc.pl.tracksplot(
                     ann, genes, c, dendrogram=False, gene_symbols=cgs,
                     use_raw=use_raw, figsize=[
-                        len(ann.obs[c].unique()), len(genes)])
-        if con[1] is not None:
-            for i, g in enumerate(ann.obs[con[0]].unique()):
+                        len(ann.obs[c].unique()) * 5, len(genes)])
+            for i, g in enumerate(ann.obs[cct].unique()):  # iterate cell type
                 ggg = list(set(genes).intersection(ann[
-                    ann.obs[con[0]] == g].var_names))
-                fig[f"track_{g}"] = sc.pl.tracksplot(
-                    ann[ann.obs[con[0]] == g], ggg, con[1], show=False,
+                    ann.obs[cct] == g].var_names))
+                fig[f"track_{c}_{g}"] = sc.pl.tracksplot(
+                    ann[ann.obs[cct] == g], ggg, c, show=False,
                     use_raw=use_raw, gene_symbols=cgs, dendrogram=False,
-                    figsize=[len(ann.obs[con[1]].unique()) * 3, len(ggg)])
-                fig[f"track_{g}"]["groupby_ax"].set_xlabel(g)
+                    figsize=[len(ann.obs[c].unique()) * 5, len(ggg)])
+                fig[f"track_{c}_{g}"]["groupby_ax"].set_xlabel(g)
                 plt.show()
         return fig
 
