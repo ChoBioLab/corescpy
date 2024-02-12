@@ -12,6 +12,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 import squidpy as sq
 import spatialdata
+import liana
+from liana.method import MistyData, genericMistyData, lrMistyData
+import decoupler as dc
+import plotnine
 import scanpy as sc
 import pandas as pd
 import numpy as np
@@ -455,10 +459,62 @@ class Spatial(cr.Omics):
         fig = sq.pl.ripley(self.adata, cluster_key=col_cell_type, mode=mode)
         return adata, fig
 
+    # def run_misty(self, col_cell_type=None, p_threshold=0.05,
+    #               organism="human", layer="log1p", top_n=500, seed=1618,
+    #               k_fold=10, model="linear", bypass_intra=None, **kwargs):
+    #     """Use Misty for receptor-ligand analysis on spatial data."""
+    #     fig = {"dot": {}}
+    #     if bypass_intra is None:
+    #         bypass_intra = model == "linear"
+    #     adata = self.get_layer(layer=layer, inplace=False)  # get layer copy
+    #     if isinstance(adata, spatialdata.SpatialData):
+    #         adata = adata.table.copy()  # AnnData from SpatialData object
+    #     cct = col_cell_type if col_cell_type else self._columns[
+    #         "col_cell_type"]  # cell type column
+    #     c_cat = dict(zip(adata.obs[cct].unique(), adata.obs[cct].unique()))
+    #     adata.obsm[cct].columns = [c_cat.get(c, c) for c in c_cat]
+    #     comp = liana.ut.obsm_to_adata(adata, cct)  # types -> adata
+    #     prog = dc.get_progeny(organism=organism, top=top_n)  # resource
+    #     dc.run_mlm(mat=adata, vnet=prog, source="source", target="target",
+    #                weight="weight", verbose=True, use_raw=False)  # MLM
+    #     act = liana.ut.obsm_to_adata(adata, "mlm_estimate")  # activity
+    #     kws = cr.tl.merge(dict(cutoff=p_threshold, bandwidth=200,
+    #                            coord_type="generic", n_rings=1), kwargs)
+    #     misty = genericMistyData(intra=comp, extra=act, **kws)  # Misty
+    #     misty(verbose=True, model=model, k_cv=k_fold, seed=seed,
+    #           bypass_intra=bypass_intra)  # run Misty model
+    #     print(misty.uns["target_metrics"].head())
+    #     for x in ["intra_R2", "gain_R2"]:
+    #         fig["dot"][x] = liana.pl.target_metrics(
+    #             misty, stat=x, return_fig=True)
+    #     fig["contribute"] = liana.pl.contributions(misty, return_fig=True)
+    #     print(misty.uns["interactions"].head())
+    #     (
+    #         liana.pl.interactions(misty, view="juxta", return_fig=True) +
+    #         plotnine.scale_fill_gradient2(low="blue", mid="white", high="red",
+    #                                       midpoint=0)
+    #     )
+    #     return misty, fig
+
     def calculate_receptor_ligand_spatial(self, col_cell_type=None,
-                                          key_sources=None, key_targets=None,
-                                          layer="log1p", p_threshold=0.005,
-                                          **kwargs):
+                                          method="cosine", layer="log1p",
+                                          genes=None, **kwargs):
         """Calculate receptor-ligand information using spatial data."""
-        raise NotImplementedError("Spatially-informed ligand-receptor "
-                                  "analysis not yet implemented.")
+        # raise NotImplementedError("Spatially-informed ligand-receptor "
+        #                           "analysis not yet implemented.")
+        adata = self.get_layer(layer=layer, inplace=False)  # get layer copy
+        if isinstance(adata, spatialdata.SpatialData):
+            adata = adata.table.copy()  # AnnData from SpatialData object
+        kws = cr.tl.merge(dict(
+            n_perms=100, mask_negatives=False, add_categories=True,
+            expr_prop=0.2, use_raw=False, verbose=True), kwargs, how="left")
+        liana.mt.lr_bivar(adata, function_name=method, **kws)  # run
+        lrdata = adata.obsm["local_scores"].sort_values(
+            "global_mean", ascending=False).head(3)
+        for x in ["global_mean", "global_sd"]:
+            print(x, lrdata.var.sort_values(x, ascending=False).head(3))
+        if genes:
+            combos = [f"{g[0]}^{g[1]}" for g in permutations(genes, 2)]
+            sc.pl.spatial(lrdata, layer="cats", color=combos, size=1.4,
+                          cmap="coolwarm")
+        return adata, lrdata

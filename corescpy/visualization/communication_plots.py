@@ -48,7 +48,7 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
             liana_res=lr_dea_res, fill="expr", label="padj",
             label_fun=lambda x: "*" if x < 0.05 else np.nan,
             orderby="interaction_stat", orderby_ascending=False,
-            orderby_absolute=False, **kws, dendrogram=group,
+            orderby_absolute=False, **kws,
             source_title="Ligand", target_title="Receptor")  # tile plot
     if title:
         for q in fig:
@@ -109,5 +109,4 @@ def plot_cooccurrence(adata, col_cell_type, cluster_key=None, palette=None,
     fig.legend(**legend_kwargs)
     plt.subplots_adjust([11, 12], right=1 - right_margin)
     plt.show()
-
     return fig, axs

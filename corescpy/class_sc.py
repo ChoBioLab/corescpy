@@ -379,22 +379,22 @@ class Omics(object):
             **{"columns": col, **kwargs})  # plot by groups
         cgs = self._columns["col_gene_symbols"] if ann.var.index.values[
             0] not in ann.var_names else None  # genes=columns instead of ix?
-        for c in con:
+        for c in [col, con]:
             if c:
                 ann.obs = ann.obs.astype({c: "category"})
                 sc.pl.tracksplot(
                     ann, genes, c, dendrogram=False, gene_symbols=cgs,
                     use_raw=use_raw, figsize=[
                         len(ann.obs[c].unique()) * 5, len(genes)])
-            for i, g in enumerate(ann.obs[cct].unique()):  # iterate cell type
-                ggg = list(set(genes).intersection(ann[
-                    ann.obs[cct] == g].var_names))
-                fig[f"track_{c}_{g}"] = sc.pl.tracksplot(
-                    ann[ann.obs[cct] == g], ggg, c, show=False,
-                    use_raw=use_raw, gene_symbols=cgs, dendrogram=False,
-                    figsize=[len(ann.obs[c].unique()) * 5, len(ggg)])
-                fig[f"track_{c}_{g}"]["groupby_ax"].set_xlabel(g)
-                plt.show()
+                for g in ann.obs[cct].unique():  # iterate cell type
+                    ggg = list(set(genes).intersection(ann[
+                        ann.obs[cct] == g].var_names))
+                    fig[f"track_{c}_{g}"] = sc.pl.tracksplot(
+                        ann[ann.obs[cct] == g], ggg, c, show=False,
+                        use_raw=use_raw, gene_symbols=cgs, dendrogram=False,
+                        figsize=[len(ann.obs[c].unique()) * 5, len(ggg)])
+                    fig[f"track_{c}_{g}"]["groupby_ax"].set_xlabel(g)
+                    plt.show()
         return fig
 
     def plot_coex(self, genes, use_raw=False, copy=True, **kwargs):
