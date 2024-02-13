@@ -22,8 +22,8 @@ import corescpy as cr
 
 def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
-            method_cluster="leiden", resolution=1, kws_pca=None,
-            kws_neighbors=None, kws_umap=None, kws_cluster=None,
+            method_cluster="leiden", resolution=1, n_comps=None,
+            kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None,
             genes_subset=None, seed=1618, **kwargs):
     """
     Perform clustering and visualize results.
@@ -49,6 +49,11 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
         ann.X = adata.layers[layer].copy()  # set layer
     if ann.var.index.values[0] not in ann.var_names:
         raise ValueError("`adata.var_names` must be index of `.var`.")
+    if "n_comps" in kws_pca:
+        if n_comps and n_comps != kws_pca["n_comps"]:
+            raise ValueError("Can't use `n_comps` & `kws_pca['n_comps']`.")
+        n_comps = kws_pca.pop("n_comps")
+    kws_pca["random_state"] = seed
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
@@ -64,14 +69,13 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
             print("\n", kws_pca)
         if "use_highly_variable" in kws_pca:
             if "highly_variable" not in ann.var:
-                warnings.warn("""use_highly_variable set to True, but
-                              'highly_variable' not found in `adata.var`""")
-            kws_pca["use_highly_variable"] = False
+                warnings.warn("`use_highly_variable`=True & 'highly_variable'"
+                              " not in `.var`. Setting to False.")
+                kws_pca["use_highly_variable"] = False
         ann_use = ann[:, ann.var_names.isin(genes_subset)
                       ] if genes_subset not in [None, False] else ann  # genes
-        sc.pp.pca(ann_use, **{"random_state": seed, **kws_pca})  # PCA
+        sc.pp.pca(ann_use, n_comps=n_comps, **kws_pca)  # PCA
         if genes_subset not in [None, False]:  # if subsetted genes
-            n_comps = kwargs["n_comps"] if "n_comps" in kwargs else None
             ann = cr.tl._merge_pca_subset(ann, ann_use, n_comps=n_comps,
                                           retain_cols=False)
         else:  # if used full gene set

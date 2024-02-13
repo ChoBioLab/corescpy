@@ -408,7 +408,7 @@ class Omics(object):
         return fig
 
     def preprocess(self, assay_protein=None, layer_in="counts", copy=False,
-                   kws_scale=True,  by_batch=None, **kwargs):
+                   kws_scale=True, **kwargs):
         """
         Preprocess (specified layer of) data
         (defaulting to originally-loaded layer).
@@ -484,7 +484,7 @@ class Omics(object):
                 kws_umap=None, kws_cluster=None, genes_subset=None,
                 kws_celltypist=None, file_annotation_guide=None,
                 col_annotation="Annotation",
-                plot=True, colors=None, copy=False, **kwargs):
+                colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
