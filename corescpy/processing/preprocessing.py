@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=no-member
+# pylint: disable=broad-exception-caught
 """
 Preprocessing single-cell data.
 
@@ -8,24 +8,24 @@ Preprocessing single-cell data.
 """
 
 import os
+from warnings import warn
+import traceback
+from copy import deepcopy
+import matplotlib.pyplot as plt
+# import anndata
+from anndata import AnnData
 import scanpy as sc
 import pertpy as pt
 import muon
-from warnings import warn
-import traceback
 import seaborn
 import spatialdata
-import matplotlib.pyplot as plt
-# import anndata
-from copy import deepcopy
-from anndata import AnnData
-import corescpy as cr
 import pandas as pd
 import numpy as np
+import corescpy as cr
 
 pd.DataFrame.iteritems = pd.DataFrame.items  # back-compatibility
-# regress_out_vars = ["total_counts", "pct_counts_mt"]
-regress_out_vars = None  # default variables to regress out
+# REGRESS_OUT_VARS = ["total_counts", "pct_counts_mt"]
+REGRESS_OUT_VARS = None  # default variables to regress out
 # pp_defaults = dict(cell_filter_pmt=[None, 30],
 #                    cell_filter_ncounts=None,
 #                    cell_filter_ngene=[200, None],
@@ -48,10 +48,12 @@ def get_layer_dict():
 
 
 def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
-                        kws_cluster=None, kws_harmony=True, n_jobs=1):
+                        kws_cluster=None, kws_harmony=True, **kwargs):
     """Create objects, then preprocess, cluster, & integrate them."""
     # Arguments
     ids = list(file_path.keys())
+    if kwargs:
+        print(f"\n\nUn-used Keyword Arguments: {kwargs}")
     [kws_init, kws_pp, kws_cluster] = [
         deepcopy(x) for x in [kws_init, kws_pp, kws_cluster]]
     [kws_init, kws_pp, kws_cluster] = [dict(zip(ids, x)) if isinstance(
@@ -233,7 +235,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
                  cell_filter_ncounts=None, cell_filter_ngene=None,
                  gene_filter_ncell=None, gene_filter_ncounts=None,
                  remove_malat1=False, target_sum=1e4, kws_hvg=True,
-                 kws_scale=None, regress_out=regress_out_vars,
+                 kws_scale=None, regress_out=REGRESS_OUT_VARS,
                  custom_thresholds=None, figsize=None, **kwargs):
     """
     Perform various data processing steps.
@@ -308,8 +310,8 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             un-log-normalized data, then scaled and set to
             the scaled data. To avoid this behavior, pass "layer" in
             the dictionary to specify a layer to set before scaling.
-        regress_out (list or None, optional): The variables to
-            regress out. Defaults to regress_out_vars.
+        regress_out (list or None, optional): The variables to regress
+            out. Defaults to `pp.preprocessing.REGRESS_OUT_VARS`.
         custom_thresholds (dict or None, optional): A dictionary, keyed
             by column names on which to filter data (before all other
             steps), with lists [minimum, maximum] as each item.

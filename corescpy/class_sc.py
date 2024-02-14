@@ -517,7 +517,7 @@ class Omics(object):
                     col_new=col_annotation, col_cell_type=method_cluster)
                 adata.obs.loc[:, col_annotation] = adata.obs[
                     method_cluster].replace(dict(zip(
-                        annot.index.values, list(annot["Annotation"]))))
+                        annot.index.values, list(annot[col_annotation]))))
             except Exception:
                 print(f"{traceback.format_exc()}\n\nAnnotation failed!")
         if copy is False:

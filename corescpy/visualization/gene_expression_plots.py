@@ -7,16 +7,16 @@ Visualizing CRISPR experiment analysis results.
 @author: E. N. Aslinger
 """
 
-import scanpy as sc
-import matplotlib.pyplot as plt
-from matplotlib import colors
-import seaborn as sb
 # import cowplot
 import warnings
 import copy
-import corescpy as cr
+import matplotlib.pyplot as plt
+from matplotlib import colors
+import seaborn as sb
+import scanpy as sc
 import pandas as pd
 import numpy as np
+import corescpy as cr
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -262,10 +262,10 @@ def plot_umap_multi(adata, genes, title=None, **kwargs):
         c_b.minorticks_off()
         c_b.set_ticklabels(c_b.get_ticks(), rotation=270, fontdict={
             "fontsize": 3})  # tick labels font size
-        c_b.set_ticklabels([c_b.get_ticks()[0]] + [""] * (
-            len(c_b.get_ticks()) - 2) + ["{1:0.{0}f}\"".format(int(
-                c_b.get_ticks()[-1] % 1 > 0), c_b.get_ticks()[-1])],
-            rotation=270, fontdict={"fontsize": 3})  # tick labels font size
+        c_b.set_ticklabels([
+            c_b.get_ticks()[0]] + [""] * (len(c_b.get_ticks()) - 2) + [
+                f"{int(c_b.get_ticks()[-1] % 1 > 0):0.{c_b.get_ticks()[-1]}f}"
+                ], rotation=270, fontdict={"fontsize": 3})  # tick labels size
         c_b.set_label(genes[i], rotation=0, loc="center", fontdict={
             "fontsize": 8}, labelpad=4, rotation_mode="anchor"
                       )  # colorbar title

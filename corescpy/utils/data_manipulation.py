@@ -1,5 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=broad-exception-caught
+"""
+Data manipulation utilities.
+
+@author: E. N. Aslinger
+"""
+
 import decoupler as dc
-from scanpy._settings import settings
 import scanpy as sc
 import pandas as pd
 import numpy as np
@@ -46,8 +54,9 @@ def create_condition_combo(adata, col_condition, col_label_new=None, sep="_"):
     return adata
 
 
-def _merge_pca_subset(adata, adata_subset, n_comps=None,
-                      key_added="X_pca", retain_cols=True):
+def merge_pca_subset(adata, adata_subset,
+                     key_added="X_pca", retain_cols=True):
+    """Merge gene-subsetted AnnData on which PCA was run into full."""
     ann = adata.copy()
     ixs = np.array(pd.Series(ann.var.index.values).isin(list(
         adata_subset.var.index.values)))
@@ -65,7 +74,7 @@ def _merge_pca_subset(adata, adata_subset, n_comps=None,
     return ann
 
 
-rfx_convert = r"""
+RFX_CONVERT = r"""
 require(Seurat)
 require(zellkonverter)
 

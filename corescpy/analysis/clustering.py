@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=no-member
+# pylint: disable=broad-exception-caught
 """
 Preprocessing CRISPR experiment data.
 
@@ -16,6 +16,7 @@ from anndata import AnnData
 import seaborn as sns
 import matplotlib.pyplot as plt
 import scanpy as sc
+# import rapids_singlecell as rsc
 import pandas as pd
 import corescpy as cr
 
@@ -24,7 +25,7 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
             paga=False,  # if issues with disconnected clusters, etc.
             method_cluster="leiden", resolution=1, n_comps=None,
             kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None,
-            genes_subset=None, seed=1618, **kwargs):
+            genes_subset=None, seed=1618, use_gpu=False, **kwargs):
     """
     Perform clustering and visualize results.
 
@@ -53,12 +54,15 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
         if n_comps and n_comps != kws_pca["n_comps"]:
             raise ValueError("Can't use `n_comps` & `kws_pca['n_comps']`.")
         n_comps = kws_pca.pop("n_comps")
-    kws_pca["random_state"] = seed
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")
     kws_pca, kws_neighbors, kws_umap, kws_cluster = [
         {} if x is None else x for x in [
-            kws_pca, kws_neighbors, kws_umap, kws_cluster]]
+            kws_pca, kws_neighbors, kws_umap, kws_cluster]]  # None -> {}
+    kws_pca["random_state"] = seed
+    kws_umap["random_state"] = seed
+    if use_gpu:
+        kws_pca["method"] = "rapids"
 
     # Dimensionality Reduction (PCA)
     if kws_pca is not False:  # unless indicated not to run PCA
@@ -72,12 +76,11 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
                 warnings.warn("`use_highly_variable`=True & 'highly_variable'"
                               " not in `.var`. Setting to False.")
                 kws_pca["use_highly_variable"] = False
-        ann_use = ann[:, ann.var_names.isin(genes_subset)
-                      ] if genes_subset not in [None, False] else ann  # genes
-        sc.pp.pca(ann_use, n_comps=n_comps, **kws_pca)  # PCA
-        if genes_subset not in [None, False]:  # if subsetted genes
-            ann = cr.tl._merge_pca_subset(ann, ann_use, n_comps=n_comps,
-                                          retain_cols=False)
+        ann_use = ann[:, ann.var_names.isin(genes_subset)] if (
+            genes_subset not in [None, False]) else ann  # data for PCA
+        sc.pp.pca(ann_use, n_comps=n_comps, **kws_pca)  # run PCA
+        if genes_subset not in [None, False]:  # subsetted genes data -> full
+            ann = cr.tl.merge_pca_subset(ann, ann_use, retain_cols=False)
         else:  # if used full gene set
             ann = ann_use
 
@@ -88,20 +91,30 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
     print(f"\n\n<<< EMBEDDING: UMAP{' with PAGA' if paga else ''} >>>")
     if kws_umap:
         print("\nUMAP Keywords:\n\n", kws_umap)
-    sc.tl.umap(ann, **{"random_state": seed, **kws_umap})
+    if use_gpu is True:
+        raise NotImplementedError("GPU-accelerated UMAP not yet implemented.")
+        # rsc.tl.umap(ann, **kws_umap)  # UMAP with rapids (GPU-accelerated)
+    else:
+        sc.tl.umap(ann, **kws_umap)  # vanilla Scanpy UMAP
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
-    if str(method_cluster).lower() == "leiden":
-        sc.tl.leiden(ann, resolution=resolution,
-                     **kws_cluster)  # leiden clustering
-    elif str(method_cluster).lower() == "louvain":
-        sc.tl.louvain(ann, resolution=resolution,
-                      **kws_cluster)  # louvain clustering
+    if str(method_cluster).lower() == "leiden":  # Leiden clustering
+        if use_gpu is True:
+            raise NotImplementedError("GPU-acceleration not yet supported.")
+            # rsc.tl.leiden(ann, resolution=resolution, **kws_cluster)
+        else:
+            sc.tl.leiden(ann, resolution=resolution, **kws_cluster)
+    elif str(method_cluster).lower() == "louvain":  # Louvain clustering
+        if use_gpu is True:
+            raise NotImplementedError("GPU-acceleration not yet supported.")
+            # rsc.tl.louvain(ann, resolution=resolution, **kws_cluster)
+        else:
+            sc.tl.louvain(ann, resolution=resolution, **kws_cluster)
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
     if paga is True:
         sc.tl.paga(ann)
         sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
-        sc.tl.umap(ann, init_pos="paga", **{"random_state": seed, **kws_umap})
+        sc.tl.umap(ann, init_pos="paga", **kws_umap)
 
     # Plotting
     print("\n\n<<< CREATING UMAP PLOTS >>>")
@@ -142,6 +155,8 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
     figs = {}
     if kws_plot is True:
         kws_plot = {}
+    if assay:
+        adata = adata[assay]
     if layer:
         adata.X = adata.layers[layer].copy()  # change anndata layer if need
     sc.tl.rank_genes_groups(

@@ -1,12 +1,19 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=broad-exception-caught
+"""
+Modifications to Scanpy preprocessing visualization functions.
+
+@author: E. N. Aslinger
+"""
+
 from typing import Optional, Union
-import scanpy as sc
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as pl
-from matplotlib import rcParams
 from anndata import AnnData
-from adjustText import adjust_text
-from scanpy.pl import _utils
+# from adjustText import adjust_text
+from scanpy.plotting._utils import savefig_or_show
 
 # ----------------------------------------------------------------------------
 # Plot result of preprocessing functions
@@ -87,7 +94,6 @@ def plot_hvgs(
     else:
         gene_subset = result.gene_subset
     means = result.means
-
     if seurat_v3_flavor:
         var_or_disp = result.variances
         var_or_disp_norm = result.variances_norm
@@ -95,7 +101,7 @@ def plot_hvgs(
         var_or_disp = result.dispersions
         var_or_disp_norm = result.dispersions_norm
     if not figsize:
-        figsize = rcParams["figure.figsize"]
+        figsize = (5, 5)
     pl.figure(figsize=(2 * figsize[0], figsize[1]))
     pl.subplots_adjust(wspace=0.3)
     for idx, d in enumerate([var_or_disp_norm, var_or_disp]):
@@ -114,15 +120,14 @@ def plot_hvgs(
             pl.ylim(y_min, 1.05 * np.max(var_or_disp))
         if idx == 0:
             pl.legend()
-        pl.xlabel(
-            ("$log_{10}$ " if False else "") + "mean expressions of genes")
-        data_type = "dispersions" if not seurat_v3_flavor else "variances"
+        pl.xlabel(("$log_{10}$ " if log is True else "") + "Mean Expression")
+        data_type = "Dispersions" if not seurat_v3_flavor else "Variances"
         pl.ylabel(
-            ("$log_{10}$ " if False else "")
-            + "{} of genes".format(data_type)
-            + (" (normalized)" if idx == 0 else " (not normalized)")
+            ("$log_{10}$ " if log is True else "")
+            + f"{data_type} of Genes"
+            + (" (Normalized)" if idx == 0 else " (Not Normalized)")
         )
-    _utils.savefig_or_show("filter_genes_dispersion", show=show, save=save)
+    savefig_or_show("filter_genes_dispersion", show=show, save=save)
     if show is False:
         return pl.gca()
 
