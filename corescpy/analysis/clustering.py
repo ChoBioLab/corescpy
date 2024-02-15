@@ -65,14 +65,14 @@ def cluster(adata, layer=None, method_cluster="leiden",
         print(f"\n\n`kws_pca`=False. Using existing if present:\n\n{ann}\n\n")
     if kws_pca is not False:
         kws_pca["random_state"] = seed  # seed to PCA arguments
+        if use_highly_variable is True and "highly_variable" not in ann.var:
+            warnings.warn("`use_highly_variable`=True & 'highly_variable'"
+                          " not in `.var`. Setting to False.")
+            kws_pca["use_highly_variable"] = False
     kws_neighbors, kws_umap, kws_cluster = [cr.tl.merge({
         "random_state": seed}, x) for x in [
             kws_neighbors, kws_umap, kws_cluster]]  # seed->arguments; None={}
-    kws_neighbors["npcs"] = n_comps  # components for neighbors = for PCA
-    if "use_highly_variable" in kws_pca and "highly_variable" not in ann.var:
-        warnings.warn("`use_highly_variable`=True & 'highly_variable'"
-                      " not in `.var`. Setting to False.")
-        kws_pca["use_highly_variable"] = False
+    kws_neighbors["n_pcs"] = n_comps  # components for neighbors = for PCA
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")
 
@@ -292,9 +292,10 @@ def perform_celltypist(adata, model, col_cell_type=None,
     return ann, res, figs
 
 
-def annotate_by_markers(adata, data_assignment, col_assignment="Type",
+def annotate_by_markers(adata, data_assignment, method="overlap_counts",
+                        col_assignment="Type", n_top=20,
                         col_cell_type="leiden", col_new="Annotation",
-                        renaming=False, n_top=10, specific_only=True):
+                        renaming=False, specific_only=True, **kwargs):
     """
     Annotate based on markers (adapted from Squidpy tutorial).
 
@@ -322,69 +323,83 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
                     " ")) > 1 else x for x in [re.sub("glia", "Glia", re.sub(
                         "_", " ", j)) for j in sources]]))
         assign.loc[:, col_assignment] = assign[col_assignment].replace(rename)
-    nrow = assign.shape[0]
-    if assign.reset_index().iloc[:, 0].duplicated().any():
-        assign = assign.reset_index()
-        assign = assign[~assign.iloc[:, 0].duplicated()]
-        assign = assign.set_index(list(assign.columns)[0])
-        print(f"Dropping {assign.shape[0]} duplicate genes of {nrow}.")
-    assign.index.name = None
-    assign.columns = [col_assignment]
+    if method.lower() in ["overlap_count", "overlap_coef", "jaccard"]:
+        assign = assign.rename_axis("Gene")
+        assign.columns = [col_assignment]
+        assign = dict(assign.reset_index().groupby(col_assignment).apply(
+            lambda x: list(pd.unique(x.Gene))))  # to marker dictionary
+        overlap = sc.tl.marker_gene_overlap(
+            adata, assign, method, top_n_markers=n_top, **kwargs)  # overlap
+        overlap.T.join(overlap.apply(lambda x: overlap.index.values[np.argmax(
+            x)]).to_frame(col_new))
+        return adata, overlap
+    else:
+        nrow = assign.shape[0]
+        if assign.reset_index().iloc[:, 0].duplicated().any():
+            assign = assign.reset_index()
+            assign = assign[~assign.iloc[:, 0].duplicated()]
+            assign = assign.set_index(list(assign.columns)[0])
+            print(f"Dropping {assign.shape[0]} duplicate genes of {nrow}.")
+        assign.index.name = None
+        assign.columns = [col_assignment]
 
-    # Assign marker gene metadata using reference dataset
-    meta_gene = deepcopy(adata.var)
-    shared_marks = list(set(meta_gene.index.tolist()).intersection(
-        assign[col_assignment].index.tolist()))  # available genes
-    meta_gene.loc[shared_marks, "Markers"] = assign.loc[
-        shared_marks, col_assignment]
+        # Assign marker gene metadata using reference dataset
+        meta_gene = deepcopy(adata.var)
+        shared_marks = list(set(meta_gene.index.tolist()).intersection(
+            assign[col_assignment].index.tolist()))  # available genes
+        meta_gene.loc[shared_marks, "Markers"] = assign.loc[
+            shared_marks, col_assignment]
 
-    # Calculate Average Expression by Cluster
-    ser_counts = adata.obs[col_cell_type].value_counts()
-    ser_counts.name = "cell counts"
-    meta_c = pd.DataFrame(ser_counts)
-    sig_cl = pd.DataFrame(columns=adata.var_names, index=adata.obs[
-        col_cell_type].cat.categories)  # cell types (rows) ~ genes (columns)
-    for c in adata.obs[col_cell_type].cat.categories:  # iterate cluters
-        sig_cl.loc[c] = adata[adata.obs[col_cell_type].isin([c]), :].X.mean(0)
-    sig_cl = sig_cl.transpose()
-    leiden = [f"{col_cell_type}-" + str(x) for x in sig_cl.columns.tolist()]
-    sig_cl.columns = leiden
-    meta_c.index = sig_cl.columns.tolist()
-    meta_c[col_cell_type] = pd.Series(
-        meta_c.index.tolist(), index=meta_c.index.tolist())
-    meta_gene = pd.DataFrame(index=sig_cl.index.tolist())
-    meta_gene["info"] = pd.Series("", index=meta_gene.index.tolist())
-    meta_gene["Markers"] = pd.Series("N.A.", index=sig_cl.index.tolist())
-    meta_gene.loc[shared_marks, "Markers"] = assign.loc[
-        shared_marks, col_assignment]
+        # Calculate Average Expression by Cluster
+        ser_counts = adata.obs[col_cell_type].value_counts()
+        ser_counts.name = "cell counts"
+        meta_c = pd.DataFrame(ser_counts)
+        sig_cl = pd.DataFrame(columns=adata.var_names, index=adata.obs[
+            col_cell_type].cat.categories)  # cell types (rows) ~ genes
+        for c in adata.obs[col_cell_type].cat.categories:  # iterate cluters
+            sig_cl.loc[c] = adata[adata.obs[col_cell_type].isin(
+                [c]), :].X.mean(0)
+        sig_cl = sig_cl.transpose()
+        leiden = [f"{col_cell_type}-" + str(x)
+                  for x in sig_cl.columns.tolist()]
+        sig_cl.columns = leiden
+        meta_c.index = sig_cl.columns.tolist()
+        meta_c[col_cell_type] = pd.Series(
+            meta_c.index.tolist(), index=meta_c.index.tolist())
+        meta_gene = pd.DataFrame(index=sig_cl.index.tolist())
+        meta_gene["info"] = pd.Series("", index=meta_gene.index.tolist())
+        meta_gene["Markers"] = pd.Series("N.A.", index=sig_cl.index.tolist())
+        meta_gene.loc[shared_marks, "Markers"] = assign.loc[
+            shared_marks, col_assignment]
 
-    # Assign Cell Types
-    meta_c[col_new] = pd.Series("N.A.", index=meta_c.index.tolist())
-    for inst_cluster in sig_cl.columns.tolist():
-        top_genes = (sig_cl[inst_cluster].sort_values(
-            ascending=False).index.tolist()[:n_top])
-        inst_ser = meta_gene.loc[top_genes, "Markers"]
-        inst_ser = inst_ser[inst_ser != "N.A."]
-        ser_counts = inst_ser.value_counts()
-        max_count = ser_counts.max()
-        max_cat = "_".join(sorted(ser_counts[
-            ser_counts == max_count].index.tolist()))
-        meta_c.loc[inst_cluster, col_new] = max_cat
-    meta_c["name"] = meta_c.apply(
-        lambda x: x[col_new] + "_" + x[col_cell_type], axis=1)  # rename
-    leiden_names = meta_c["name"].values.tolist()
-    meta_c.index = leiden_names
-    leiden_to_cell_type = deepcopy(meta_c)
-    leiden_to_cell_type.set_index(col_cell_type, inplace=True)
-    leiden_to_cell_type.index.name = None
-    adata.obs[col_new] = adata.obs["leiden"].apply(
-        lambda x: leiden_to_cell_type.loc[f"{col_cell_type}-{x}", col_new])
-    adata.obs[f"{col_new}_Cluster"] = adata.obs["leiden"].apply(
-        lambda x: leiden_to_cell_type.loc[
-            f"{col_cell_type}-" + str(x), "name"])
-    if col_bc in adata.obs:
-        adata.obs = adata.obs.set_index(col_bc)
-    leiden_to_cell_type.index = ["-".join(x.split("-")[
-        1:]) for x in leiden_to_cell_type.index.values]
-    print(leiden_to_cell_type[col_new])
-    return adata, leiden_to_cell_type
+        # Assign Cell Types
+        meta_c[col_new] = pd.Series("N.A.", index=meta_c.index.tolist())
+        for inst_cluster in sig_cl.columns.tolist():
+            top_genes = (sig_cl[inst_cluster].sort_values(
+                ascending=False).index.tolist()[:n_top])
+            inst_ser = meta_gene.loc[top_genes, "Markers"]
+            inst_ser = inst_ser[inst_ser != "N.A."]
+            ser_counts = inst_ser.value_counts()
+            max_count = ser_counts.max()
+            max_cat = "_".join(sorted(ser_counts[
+                ser_counts == max_count].index.tolist()))
+            meta_c.loc[inst_cluster, col_new] = max_cat
+        meta_c["name"] = meta_c.apply(
+            lambda x: x[col_new] + "_" + x[col_cell_type], axis=1)  # rename
+        leiden_names = meta_c["name"].values.tolist()
+        meta_c.index = leiden_names
+        leiden_to_cell_type = deepcopy(meta_c)
+        leiden_to_cell_type.set_index(col_cell_type, inplace=True)
+        leiden_to_cell_type.index.name = None
+        adata.obs[col_new] = adata.obs["leiden"].apply(
+            lambda x: leiden_to_cell_type.loc[
+                f"{col_cell_type}-{x}", col_new])
+        adata.obs[f"{col_new}_Cluster"] = adata.obs["leiden"].apply(
+            lambda x: leiden_to_cell_type.loc[
+                f"{col_cell_type}-" + str(x), "name"])
+        if col_bc in adata.obs:
+            adata.obs = adata.obs.set_index(col_bc)
+        leiden_to_cell_type.index = ["-".join(x.split("-")[
+            1:]) for x in leiden_to_cell_type.index.values]
+        print(leiden_to_cell_type[col_new])
+        return adata, leiden_to_cell_type
