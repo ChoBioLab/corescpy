@@ -21,11 +21,12 @@ import pandas as pd
 import corescpy as cr
 
 
-def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
+def cluster(adata, layer=None, method_cluster="leiden",
             paga=False,  # if issues with disconnected clusters, etc.
-            method_cluster="leiden", resolution=1, n_comps=None,
+            resolution=1, n_comps=None, use_highly_variable=True,
             kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None,
-            genes_subset=None, seed=1618, use_gpu=False, **kwargs):
+            genes_subset=None, seed=0, use_gpu=False,  kws_celltypist=None,
+            plot=True, colors=None, **kwargs):
     """
     Perform clustering and visualize results.
 
@@ -50,32 +51,34 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
         ann.X = adata.layers[layer].copy()  # set layer
     if ann.var.index.values[0] not in ann.var_names:
         raise ValueError("`adata.var_names` must be index of `.var`.")
-    if "n_comps" in kws_pca:
-        if n_comps and n_comps != kws_pca["n_comps"]:
-            raise ValueError("Can't use `n_comps` & `kws_pca['n_comps']`.")
-        n_comps = kws_pca.pop("n_comps")
+    if isinstance(kws_pca, dict):
+        for k, x in zip(["n_comps", "use_highly_variable"],
+                        [n_comps, use_highly_variable]):
+            if k in kws_pca and x != kws_pca[k]:
+                raise ValueError(f"Can't use `{k}` & `kws_pca['{k}']`.")
+        kws_pca.update(dict(use_highly_variable=use_highly_variable,
+                            n_comps=n_comps))
+    elif kws_pca is not False:
+        kws_pca = dict(use_highly_variable=use_highly_variable,
+                       n_comps=n_comps)
+    else:
+        print(f"\n\n`kws_pca`=False. Using existing if present:\n\n{ann}\n\n")
+    if kws_pca is not False:
+        kws_pca["random_state"] = seed  # seed to PCA arguments
+    kws_neighbors, kws_umap, kws_cluster = [cr.tl.merge({
+        "random_state": seed}, x) for x in [
+            kws_neighbors, kws_umap, kws_cluster]]  # seed->arguments; None={}
+    kws_neighbors["npcs"] = n_comps  # components for neighbors = for PCA
+    if "use_highly_variable" in kws_pca and "highly_variable" not in ann.var:
+        warnings.warn("`use_highly_variable`=True & 'highly_variable'"
+                      " not in `.var`. Setting to False.")
+        kws_pca["use_highly_variable"] = False
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")
-    kws_pca, kws_neighbors, kws_umap, kws_cluster = [
-        {} if x is None else x for x in [
-            kws_pca, kws_neighbors, kws_umap, kws_cluster]]  # None -> {}
-    kws_pca["random_state"] = seed
-    kws_umap["random_state"] = seed
-    if use_gpu:
-        kws_pca["method"] = "rapids"
 
     # Dimensionality Reduction (PCA)
     if kws_pca is not False:  # unless indicated not to run PCA
-        if "use_highly_variable" not in kws_pca:  # default = use HVGs
-            kws_pca["use_highly_variable"] = True
-        print("\n\n<<< PERFORMING PCA >>>")
-        if len(kws_pca) > 0:
-            print("\n", kws_pca)
-        if "use_highly_variable" in kws_pca:
-            if "highly_variable" not in ann.var:
-                warnings.warn("`use_highly_variable`=True & 'highly_variable'"
-                              " not in `.var`. Setting to False.")
-                kws_pca["use_highly_variable"] = False
+        print(f"\n\n<<< PERFORMING PCA >>>\n{kws_pca}\n")
         ann_use = ann[:, ann.var_names.isin(genes_subset)] if (
             genes_subset not in [None, False]) else ann  # data for PCA
         sc.pp.pca(ann_use, n_comps=n_comps, **kws_pca)  # run PCA
@@ -84,26 +87,27 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
         else:  # if used full gene set
             ann = ann_use
 
-    # Neighborhood Graph & UMAP Embedding
-    print("\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>" + str(
-        f"\n\n{kws_neighbors}" if kws_neighbors else ""))
-    sc.pp.neighbors(ann, **kws_neighbors)  # neighborhood
-    print(f"\n\n<<< EMBEDDING: UMAP{' with PAGA' if paga else ''} >>>")
-    if kws_umap:
-        print("\nUMAP Keywords:\n\n", kws_umap)
+    # Neighborhood Graph
+    print(f"\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n{kws_neighbors}\n")
+    sc.pp.neighbors(ann, **kws_neighbors)  # compute neighborhood graph
+
+    # UMAP Embedding
+    print(f"\n\n<<< EMBEDDING UMAP >>>\n{kws_umap}\n")
     if use_gpu is True:
         raise NotImplementedError("GPU-accelerated UMAP not yet implemented.")
         # rsc.tl.umap(ann, **kws_umap)  # UMAP with rapids (GPU-accelerated)
     else:
         sc.tl.umap(ann, **kws_umap)  # vanilla Scanpy UMAP
+
+    # Clustering with Leiden or Louvain
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
-    if str(method_cluster).lower() == "leiden":  # Leiden clustering
+    if method_cluster == "leiden":  # Leiden clustering
         if use_gpu is True:
             raise NotImplementedError("GPU-acceleration not yet supported.")
             # rsc.tl.leiden(ann, resolution=resolution, **kws_cluster)
         else:
             sc.tl.leiden(ann, resolution=resolution, **kws_cluster)
-    elif str(method_cluster).lower() == "louvain":  # Louvain clustering
+    elif method_cluster == "louvain":  # Louvain clustering
         if use_gpu is True:
             raise NotImplementedError("GPU-acceleration not yet supported.")
             # rsc.tl.louvain(ann, resolution=resolution, **kws_cluster)
@@ -111,13 +115,21 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
             sc.tl.louvain(ann, resolution=resolution, **kws_cluster)
     else:
         raise ValueError("method_cluster must be 'leiden' or 'louvain'")
-    if paga is True:
-        sc.tl.paga(ann)
-        sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
-        sc.tl.umap(ann, init_pos="paga", **kws_umap)
+
+    # PAGA Correction (Optional)
+    if paga is True:  # recompute with PAGA (optional)
+        print("\n\n<<< PERFORMING PAGA >>>")
+        sc.tl.paga(ann, groups=method_cluster)
+        if plot is True:
+            sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
+        if use_gpu is True:  #  GPU-accelerated UMAP
+            raise NotImplementedError("Not yet implemented: GPU UMAP.")
+            # rsc.tl.umap(ann, **kws_umap, init_pos="paga")  # UMAP with PAGA
+        else:  # Vanilla UMAP
+            sc.tl.umap(ann, **kws_umap, init_pos="paga")  # UMAP with PAGA
 
     # Plotting
-    print("\n\n<<< CREATING UMAP PLOTS >>>")
+    print("\n\n<<< CREATING PLOTS >>>")
     if plot is True:
         try:  # scree-like plot for PCA components
             sc.pl.pca_variance_ratio(ann, log=True)
@@ -125,9 +137,8 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
         except Exception as err:
             warnings.warn(f"Failed to plot PCA variance ratio: {err}")
         try:  # plot UMAP by clusters
-            figs["umap"] = sc.pl.umap(
-                ann, color=method_cluster, legend_loc="on data",
-                title="", frameon=False)  # UMAP plot
+            figs["umap"] = sc.pl.umap(ann, color=method_cluster, title="",
+                                      frameon=False, legend_loc="on data")
         except Exception as err:
             warnings.warn(f"Failed to plot UMAP: {err}")
         if colors is not None:  # plot UMAP + extra color coding subplots
@@ -137,13 +148,6 @@ def cluster(adata, layer=None, plot=True, colors=None, kws_celltypist=None,
                         len(colors) + 1) * 0.075)  # UMAP extra panels
             except Exception as err:
                 warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
-
-    # CellTypist (Optional)
-    if kws_celltypist is not None:
-        out = perform_celltypist(ann, **kws_celltypist)  # annotate
-        ann.uns["celltypist"], figs["celltypist"] = out[0], out[1]
-        ann.obs = ann.obs.join(ann.uns["celltypist"].predicted_labels,
-                               lsuffix="_last")  # to data
     return ann, figs
 
 
@@ -165,7 +169,7 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
     if isinstance(kws_plot, dict):
         figs["marker_rankings"] = cr.pl.plot_markers(
             adata, n_genes=n_genes, key_added=key_added, use_raw=use_raw,
-            key_reference=key_reference, **kws_plot)
+            key_reference=key_reference, **{"col_wrap": 3, **kws_plot})
     ranks = sc.get.rank_genes_groups_df(
         adata, None, key=key_added, pval_cutoff=p_threshold,
         log2fc_min=None, log2fc_max=None, gene_symbols=col_gene_symbols)
@@ -290,13 +294,16 @@ def perform_celltypist(adata, model, col_cell_type=None,
 
 def annotate_by_markers(adata, data_assignment, col_assignment="Type",
                         col_cell_type="leiden", col_new="Annotation",
-                        renaming=False):
+                        renaming=False, n_top=10, specific_only=True):
     """
     Annotate based on markers (adapted from Squidpy tutorial).
 
     The argument `data_assignment` should be specified as a dataframe
     indexed by gene symbols and a single column of assignments to cell
     types for each marker (or a file path returning the same).
+
+    Set `specific_only` to True to use only markers that have one
+    associated cell type.
     """
     adata = adata.copy()
     col_bc = adata.obs.index.names[0]
@@ -306,42 +313,37 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     # Load Marker Groups
     if isinstance(data_assignment, (str, os.PathLike)):
         data_assignment = pd.read_excel(data_assignment, index_col=0)
-    data_assignment = data_assignment.copy()
+    assign = data_assignment.copy()
     if renaming is True:
-        sources = data_assignment[col_assignment].unique()
+        sources = assign[col_assignment].unique()
         rename = dict(zip(sources, [" ".join([i.capitalize() if i and i[
             0] != "(" and not i.isupper() and i not in [
                 "IgG", "IgA"] else i for i in x.split(" ")]) if len(x.split(
                     " ")) > 1 else x for x in [re.sub("glia", "Glia", re.sub(
                         "_", " ", j)) for j in sources]]))
-        data_assignment.loc[:, col_assignment] = data_assignment[
-            col_assignment].replace(rename)
-    nrow = data_assignment.shape[0]
-    if data_assignment.reset_index().iloc[:, 0].duplicated().any():
-        data_assignment = data_assignment.reset_index()
-        data_assignment = data_assignment[
-            ~data_assignment.iloc[:, 0].duplicated()]
-        data_assignment = data_assignment.set_index(
-            list(data_assignment.columns)[0])
-        print(
-            f"Dropping {data_assignment.shape[0]} duplicate genes of {nrow}.")
-    data_assignment.index.name = None
-    data_assignment.columns = [col_assignment]
+        assign.loc[:, col_assignment] = assign[col_assignment].replace(rename)
+    nrow = assign.shape[0]
+    if assign.reset_index().iloc[:, 0].duplicated().any():
+        assign = assign.reset_index()
+        assign = assign[~assign.iloc[:, 0].duplicated()]
+        assign = assign.set_index(list(assign.columns)[0])
+        print(f"Dropping {assign.shape[0]} duplicate genes of {nrow}.")
+    assign.index.name = None
+    assign.columns = [col_assignment]
 
     # Assign marker gene metadata using reference dataset
     meta_gene = deepcopy(adata.var)
     shared_marks = list(set(meta_gene.index.tolist()).intersection(
-        data_assignment[col_assignment].index.tolist()))  # available genes
-    meta_gene.loc[shared_marks, "Markers"] = data_assignment.loc[
+        assign[col_assignment].index.tolist()))  # available genes
+    meta_gene.loc[shared_marks, "Markers"] = assign.loc[
         shared_marks, col_assignment]
 
     # Calculate Average Expression by Cluster
     ser_counts = adata.obs[col_cell_type].value_counts()
     ser_counts.name = "cell counts"
     meta_c = pd.DataFrame(ser_counts)
-    cat_name = "leiden"
-    sig_cl = pd.DataFrame(
-        columns=adata.var_names, index=adata.obs[cat_name].cat.categories)
+    sig_cl = pd.DataFrame(columns=adata.var_names, index=adata.obs[
+        col_cell_type].cat.categories)  # cell types (rows) ~ genes (columns)
     for c in adata.obs[col_cell_type].cat.categories:  # iterate cluters
         sig_cl.loc[c] = adata[adata.obs[col_cell_type].isin([c]), :].X.mean(0)
     sig_cl = sig_cl.transpose()
@@ -353,15 +355,14 @@ def annotate_by_markers(adata, data_assignment, col_assignment="Type",
     meta_gene = pd.DataFrame(index=sig_cl.index.tolist())
     meta_gene["info"] = pd.Series("", index=meta_gene.index.tolist())
     meta_gene["Markers"] = pd.Series("N.A.", index=sig_cl.index.tolist())
-    meta_gene.loc[shared_marks, "Markers"] = data_assignment.loc[
+    meta_gene.loc[shared_marks, "Markers"] = assign.loc[
         shared_marks, col_assignment]
 
     # Assign Cell Types
     meta_c[col_new] = pd.Series("N.A.", index=meta_c.index.tolist())
-    num_top_genes = 30
     for inst_cluster in sig_cl.columns.tolist():
         top_genes = (sig_cl[inst_cluster].sort_values(
-            ascending=False).index.tolist()[:num_top_genes])
+            ascending=False).index.tolist()[:n_top])
         inst_ser = meta_gene.loc[top_genes, "Markers"]
         inst_ser = inst_ser[inst_ser != "N.A."]
         ser_counts = inst_ser.value_counts()

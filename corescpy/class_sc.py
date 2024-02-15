@@ -18,6 +18,7 @@ import decoupler
 import spatialdata
 import muon
 import anndata
+import celltypist
 import pandas as pd
 import numpy as np
 import corescpy as cr
@@ -353,9 +354,9 @@ class Omics(object):
                 0] in self.rna.var_names:
             fig = cr.pl.plot_umap_multi(self.rna, color, **kws)  # multi-gene
         else:  # ...or single UMAP embedding (categorical or continous)
-            fig = sc.pl.umap(self.rna, color=color, **kws)  # UMAP
-            # if title:
-            #     fig
+            figsize = kws.pop("figsize", (10, 10))
+            with plt.rc_context({"figure.figsize": figsize}):
+                fig = sc.pl.umap(self.rna, color=color, **kws)  # UMAP
         return fig
 
     def plot_compare(self, genes, col_condition=None, col_cell_type=None,
@@ -528,31 +529,53 @@ class Omics(object):
 
     def annotate_clusters(self, model, mode="best match", layer="log1p",
                           p_threshold=0.5, over_clustering=None,
-                          min_proportion=0, copy=False, **kwargs):
-        """Use CellTypist to annotate clusters."""
+                          min_proportion=0, file_annotation_guide=None,
+                          copy=False, col_annotation="Annotation", **kwargs):
+        """
+        Use CellTypist or a marker dictionary file to annotate clusters.
+
+        Specify a CellTypist model for `model` to use CellTypist,
+        or a path to a file with the first column as gene symbols and
+        the second as annotations (i.e., mapping the markers
+        to cell types).
+        """
+        flavor = "celltypist" if model in list(
+            celltypist.models.models_description().model) else "annotations"
         adata, re_ix = self.rna.copy(), False
         re_ix = self._assay is not None and ":" in adata.var.index.values[0]
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
         if re_ix is True:  # rename multi-modal index if <assay>:<gene>
             adata.var = adata.var.rename(dict(zip(adata.var.index, ["".join(
                 x.split(":")[1:]) for x in adata.var.index])))
-        c_t = kwargs.pop("col_cell_type", self._columns["col_cell_type"])
-        ann, res, figs = cr.ax.perform_celltypist(
-            adata, model, majority_voting=True, p_threshold=p_threshold,
-            mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
-            min_proportion=min_proportion, **kwargs)  # annotate
-        self.figures["celltypist"], self.results["celltypist"] = figs, res
-        if re_ix is True:
+        if flavor == "celltypist":  # annotate with CellTypist
+            c_t = kwargs.pop("col_cell_type", self._columns["col_cell_type"])
+            adata, res, figs = cr.ax.perform_celltypist(
+                adata, model, majority_voting=True, p_threshold=p_threshold,
+                mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
+                min_proportion=min_proportion, **kwargs)  # annotate
+        else:  # annotate by marker dictionary
+            c_t = kwargs.pop("col_cell_type", "leiden" if (
+                "leiden" in self.rna.uns.keys()) else "louvain")
+            if col_annotation in adata.obs:
+                adata.obs = adata.obs.drop(col_annotation, axis=1)
+            _, res = cr.ax.annotate_by_markers(
+                adata, model, col_cell_type=c_t,
+                col_new=col_annotation, **kwargs)  # annotate
+            adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(
+                dict(zip(res.index, list(res[col_annotation]))))  # new column
+            figs = self.plot_umap(color=col_annotation)  # plot
+        if re_ix is True:  # back to original index if needed
             adata.var = adata.var.reset_index().set_index(
-                self.rna.var.index.names[0])  # back to original index
+                self.rna.var.index.names[0])
         if copy is False:  # assign if performing inplace
-            self.rna = ann
-            self.results["celltypist"], self.figures["celltypist"] = res, figs
-        return ann, [res, figs]
+            self.rna = adata
+            self.results[flavor], self.figures[flavor] = res, figs
+        return adata, [res, figs]
 
-    def find_markers(self, assay=None, n_genes=5, layer="log1p",
+    def find_markers(self, assay=None, n_genes=5, layer="log1p", copy=False,
                      method="wilcoxon", key_reference="rest", kws_plot=True,
-                     col_cell_type=None, copy=False, use_raw=False, **kwargs):
+                     col_cell_type=None, use_raw=False,
+                     out_file=None, **kwargs):
         """Find gene markers for clusters/cell types."""
         if assay is None:
             assay = self._assay
@@ -576,6 +599,13 @@ class Omics(object):
             else:
                 self.rna = adata
         marks.groupby(col_cell_type).apply(lambda x: print(x.head(3)))
+        if copy is False:
+            if "markers" not in self.rna.uns:
+                self.rna.uns["markers"] = {}
+            self.rna.uns["markers"].update({col_cell_type: marks})
+        if out_file:
+            print(f"\n\nWriting markers to {out_file}.\n\n")
+            marks.to_csv(out_file)
         return marks, figs_m
 
     def run_composition_analysis(self, assay=None, layer=None,
