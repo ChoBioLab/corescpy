@@ -81,7 +81,7 @@ def cluster(adata, layer=None, method_cluster="leiden",
         print(f"\n\n<<< PERFORMING PCA >>>\n{kws_pca}\n")
         ann_use = ann[:, ann.var_names.isin(genes_subset)] if (
             genes_subset not in [None, False]) else ann  # data for PCA
-        sc.pp.pca(ann_use, n_comps=n_comps, **kws_pca)  # run PCA
+        sc.pp.pca(ann_use, **kws_pca)  # run PCA
         if genes_subset not in [None, False]:  # subsetted genes data -> full
             ann = cr.tl.merge_pca_subset(ann, ann_use, retain_cols=False)
         else:  # if used full gene set
@@ -122,7 +122,7 @@ def cluster(adata, layer=None, method_cluster="leiden",
         sc.tl.paga(ann, groups=method_cluster)
         if plot is True:
             sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
-        if use_gpu is True:  #  GPU-accelerated UMAP
+        if use_gpu is True:  # GPU-accelerated UMAP
             raise NotImplementedError("Not yet implemented: GPU UMAP.")
             # rsc.tl.umap(ann, **kws_umap, init_pos="paga")  # UMAP with PAGA
         else:  # Vanilla UMAP

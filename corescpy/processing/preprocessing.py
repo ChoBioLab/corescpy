@@ -599,7 +599,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
                 print(h, v)
                 sc.pl.scatter(adata, x="total_counts", y=v, ax=aij,
                               color=h, frameon=False, show=False)  # scatter
-                if aij.legend_ is not None and v != "n_genes_by_counts":
+                if aij.legend_ is not None and v != scatter_vars[-1]:
                     aij.legend_.remove()  # legend only on last column
                 aij.set_title(f"{v} (by {h})" if h else v)  # title
             except Exception as err:
