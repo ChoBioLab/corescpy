@@ -56,8 +56,8 @@ dependencies = [
     # Other
     "docutils < 0.17,>= 0.10",
     # "numpy >=1.24.4",
-    "numpy<=1.24.3,>=1.22",
-    # "numpy>=1.26.0",
+    # "numpy<=1.24.3,>=1.22",
+    "numpy>=1.26.0",
     "pandas>=2.0.0",
     "jax==0.4.20",
     "jaxlib==0.4.20",

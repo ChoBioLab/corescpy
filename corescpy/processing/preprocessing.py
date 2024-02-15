@@ -580,10 +580,14 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
             len(adata.obs[h].unique()) > 1 for h in hhh])[0]])
         hhh = list(pd.unique(hht if len(hht) > 0 else [
             hhh[0]]))  # if no non-unique hue values, still color by subject
+    hhh = list(set(hhh).intersection(adata.obs.columns))  # available colors
+    if len(hhh) == 0:
+        hhh = [None]
 
     # % Counts (MT, RB, HB) versus Counts (Scatter Plots)
     scatter_vars = pct_n + ["n_genes_by_counts", "cell_area", "nucleus_area"]
-    scatter_vars = list(set(scatter_vars).intersection(adata.obs.columns))
+    scatter_vars = list(set(scatter_vars).intersection(
+        adata.obs.columns.union(adata.var.columns)))  # scatter plot variables
     rrs, ccs = len(pd.unique(hhh)), len(scatter_vars)
     fff, axs = plt.subplots(rrs, ccs, figsize=(
         5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
@@ -592,6 +596,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
             aij = axs if not isinstance(axs, np.ndarray) else axs[
                 i, j] if len(axs.shape) > 1 else axs[j] if ccs > 1 else axs[i]
             try:  # % mt, etc. vs. counts
+                print(h, v)
                 sc.pl.scatter(adata, x="total_counts", y=v, ax=aij,
                               color=h, frameon=False, show=False)  # scatter
                 if aij.legend_ is not None and v != "n_genes_by_counts":
