@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import scanpy as sc
 # import rapids_singlecell as rsc
 import pandas as pd
+import numpy as np
 import corescpy as cr
 
 
@@ -292,7 +293,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
     return ann, res, figs
 
 
-def annotate_by_markers(adata, data_assignment, method="overlap_counts",
+def annotate_by_markers(adata, data_assignment, method="overlap_count",
                         col_assignment="Type", n_top=20,
                         col_cell_type="leiden", col_new="Annotation",
                         renaming=False, specific_only=True, **kwargs):
