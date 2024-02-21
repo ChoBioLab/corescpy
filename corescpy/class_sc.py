@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Base, general class from which others (e.g., Spatial, Crispr) inherit.
+
+Use directly for vanilla/uni-modal single-cell RNA-seq data.
+
 @author: E. N. Aslinger
 """
 
 import traceback
+import os
 from warnings import warn
 import functools
 from copy import deepcopy
@@ -198,6 +203,23 @@ class Omics(object):
             else:
                 self.adata = value
             self._rna = self.adata[self._assay] if self._assay else self.adata
+
+    def __repr__(self) -> str:
+        """Represent object."""
+        for q in [self._columns, self._keys]:
+            cr.tl.print_pretty_dictionary(q)
+        print("\n\n\n")
+        return self.adata
+
+    def write(self, out_file, **kwargs):
+        """Write object."""
+        print(f"\n\n***** Writing object to {out_file}...\n\n")
+        if os.path.splitext(out_file)[1] == ".h5ad":
+            self.rna.write_h5ad(out_file, **kwargs)
+        elif os.path.splitext(out_file)[1] == ".h5mu":
+            self.adata.write(out_file, **kwargs)
+        else:
+            raise ValueError("File extension must be .h5ad or .h5mu")
 
     def get_layer(self, layer=None, subset=None, inplace=False):
         """Get layer (and optionally, subset)."""
@@ -483,9 +505,7 @@ class Omics(object):
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,
                 kws_umap=None, kws_cluster=None, genes_subset=None,
-                kws_celltypist=None, file_annotation_guide=None,
-                col_annotation="Annotation",
-                colors=None, copy=False, **kwargs):
+                kws_celltypist=None, colors=None, copy=False, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
@@ -511,16 +531,6 @@ class Omics(object):
             kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
         for x in kws.items():
             adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
-        if file_annotation_guide is not None:  # annotation ~ file of markers
-            try:
-                _, annot = cr.ax.annotate_by_markers(
-                    adata, file_annotation_guide, renaming=True,
-                    col_new=col_annotation, col_cell_type=method_cluster)
-                adata.obs.loc[:, col_annotation] = adata.obs[
-                    method_cluster].replace(dict(zip(
-                        annot.index.values, list(annot[col_annotation]))))
-            except Exception:
-                print(f"{traceback.format_exc()}\n\nAnnotation failed!")
         if copy is False:
             self.figures.update({"clustering": figs_cl})
             self.rna = adata
@@ -563,13 +573,13 @@ class Omics(object):
                 col_new=col_annotation, **kwargs)  # annotate
             adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(
                 dict(zip(res.index, list(res[col_annotation]))))  # new column
-            figs = self.plot_umap(color=col_annotation)  # plot
         if re_ix is True:  # back to original index if needed
             adata.var = adata.var.reset_index().set_index(
                 self.rna.var.index.names[0])
         if copy is False:  # assign if performing inplace
             self.rna = adata
             self.results[flavor], self.figures[flavor] = res, figs
+            self.plot_umap(color=col_annotation)  # plot
         return adata, [res, figs]
 
     def find_markers(self, assay=None, n_genes=5, layer="log1p", copy=False,

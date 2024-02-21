@@ -330,9 +330,10 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
         assign = dict(assign.reset_index().groupby(col_assignment).apply(
             lambda x: list(pd.unique(x.Gene))))  # to marker dictionary
         overlap = sc.tl.marker_gene_overlap(
-            adata, assign, method, top_n_markers=n_top, **kwargs)  # overlap
-        overlap.T.join(overlap.apply(lambda x: overlap.index.values[np.argmax(
-            x)]).to_frame(col_new))
+            adata, assign, method=method,
+            top_n_markers=n_top, **kwargs)  # overlap scores
+        overlap = overlap.T.join(overlap.apply(lambda x: overlap.index.values[
+            np.argmax(x)]).to_frame(col_new))
         return adata, overlap
     else:
         nrow = assign.shape[0]
