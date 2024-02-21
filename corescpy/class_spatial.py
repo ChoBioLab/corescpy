@@ -12,6 +12,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import squidpy as sq
 import spatialdata
+import spatialdata_plot as sdp
 import liana
 from liana.method import MistyData, genericMistyData, lrMistyData
 import decoupler as dc
@@ -91,8 +92,17 @@ class Spatial(cr.Omics):
         self._library_id = library_id
         if isinstance(self.adata, spatialdata.SpatialData):
             self.rna = self.adata.table
+            self.adata.pl = sdp.pl.basic.PlotAccessor(self.adata)
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
+
+    def filter_by_quality(self, threshold):
+        """Filter `points` by transcript quality score (QV, phred-like)."""
+        if self._kind != "xenium":
+            raise ValueError("Filtering transcripts by quality"
+                             f"not available for {self._kind}.capitalize().")
+        self.adata.points["transcripts"] = self.adata.points["transcripts"][
+            self.adata.points["transcripts"].qv >= threshold]
 
     def update_from_h5ad(self, file=None):
         """Update SpatialData object `.table` from h5ad file."""
@@ -127,11 +137,19 @@ class Spatial(cr.Omics):
         else:
             self.adata.write(file, **{"overwrite": True, **kwargs})
 
+    def get_directories(self, library_id):
+        dirs = [str(self.rna[self.rna.obs[self._columns[
+            "col_sample_id"]] == x].obs["file_path"].iloc[0])
+                for x in cr.tl.to_list(library_id)] if (
+                    library_id) else self.rna.obs.file_path.unique()  # paths
+        return dirs
+
     def read_panel(self, directory=""):
         """Read gene panel for Xenium data."""
         drop = cr.pp._get_control_probe_names()
         if self._kind != "xenium":
-            raise ValueError("Gene panel reading not available for Visium.")
+            raise ValueError("Gene panel reading not available for "
+                             f"{self._kind.capitalize()}.")
         if os.path.splitext(directory)[1] == ".json":
             file_path = directory
         elif os.path.exists(os.path.join(directory, "gene_panel.json")):
@@ -155,40 +173,128 @@ class Spatial(cr.Omics):
             print(f"\n\n{self._library_id}: All expected genes present!")
         return expect
 
-    def read_parquet(self, directory=None, kind="transcripts"):
+    def read_parquet(self, directory=None, kind="transcripts",
+                     library_id=None):
         """
         Read parquet file.
 
         Specify 'transcripts', 'cell_boundaries', 'nucleus_boundaries'
         or another file stem preceding '.parquet' as `kind`.
         """
-        if directory is None:
-            directory = self._dir
-        for x in self.adata.uns["spatial"]:
-            file_parquet = os.path.join(os.path.dirname(self.adata.uns[
-                "spatial"][x]["metadata"]["file_path"]), f"{kind}.parquet")
-            return pd.read_parquet(file_parquet)
+        dirs = self.get_directories(library_id=library_id)
+        parqs = []
+        for x in dirs:
+            parqs += [pd.read_parquet(os.path.join(x, f"{kind}.parquet"))]
+        return dict(zip(libs, parqs)) if len(parqs) > 1 else parqs[0]
 
-    def print_tiff(self):
-        """Print information from tiff file."""
+    def print_tiff(self, file=None, library_id=None, plot=True,
+                   kind="mip", **kwargs):
+        """Print and, optionally, plot information from tiff file."""
+        if self._kind != "xenium":
+            raise NotImplementedError(
+                f"No support for kind {self._kind.capitalize()} TIFF plots.")
+        dirs = self.get_directories(library_id=library_id)
         print(f"\n\n\n{'=' * 80}\nTIFF INFORMATION\n{'=' * 80}\n\n")
-        for x in self.adata.uns["spatial"]:
-            print(f"\n\t\t{'-' * 40}\n{x}\n{'-' * 40}\n\n")
-            cr.pp.describe_tiff(os.path.dirname(self.adata.uns[
-                "spatial"][x]["metadata"]["file_path"]))
+        for x in dirs:  # iterate sample directories
+            fff = os.path.join(x, f"morphology_{kind}.tiff")
+            print(f"\n\t\t{'-' * 40}\n{fff}\n{'-' * 40}\n\n")
+            cr.pp.describe_tiff(fff)  # describe
+            if plot is True:
+                cr.pl.plot_tiff(fff)  # plot
+
+    def show(self, kinds="all", elements="all", color=None, layer=None,
+             palette=None, figsize=None, library_id=None, **kwargs):
+        """Plot spatial data using the spatialdata-plot framework."""
+        fxs, kws = [], []
+        print(self.adata)
+        libs = library_id if library_id else self._library_id
+        if isinstance(kinds, str) and kinds.lower() == "all":
+            kinds = ["points", "images", "shapes", "labels"]
+        kinds = list(set(cr.to_list(kinds)).intersection(dir(self.adata)))
+        plotter = sdp.pl.basic.PlotAccessor(self.adata)
+        if isinstance(elements, str) and elements.lower() == "all":
+            elements = []
+            for x in kinds:
+                if x in dir(self.adata):
+                    elements += list(getattr(self.adata, x).keys())
+        elements = cr.tl.to_list(elements)
+        for q in [color, palette]:
+            if isinstance(q, dict):  # if different palette ~ data type
+                for x in ["points", "images", "shapes", "labels"]:
+                    if x not in q:  # if certain type unspecified...
+                        q[x] = None  # ...add for consistency
+        if not isinstance(color, dict):
+            color = cr.to_list(color)
+        avail = list(set(self.rna.var_names.union(
+            self.rna.var.columns.union(self.rna.obs.columns))))  # variables
+
+        # Construct Function Calls ~ Data Type
+        if "points" in kinds and len(self.adata.points) > 0:
+            pnts = [v for v in elements if v in self.adata.points]
+            ptt = palette["points"] if isinstance(palette, dict) else palette
+            clr = color["points"] if isinstance(color, dict) else [
+                v for v in color if v in avail]  # genes
+            # pt_plter = sdp.pl.basic.PlotAccessor(self.adata) if (
+            #     points_fraction is None) else sdp.pl.basic.PlotAccessor(
+            #         self.adata[])
+            if len(pnts) > 0:
+                kws += [dict(elements=pnts[0] if len(pnts) == 1 else pnts if (
+                    len(pnts) > 0) else None, palette=ptt, color=clr)]
+                fxs += [plotter.render_points]
+        if "labels" in kinds and len(self.adata.labels) > 0:
+            labs = [v for v in elements if v in self.adata.labels]
+            clr = color["labels"] if isinstance(color, dict) else None  # hue
+            ptt = palette["labels"] if isinstance(palette, dict) else palette
+            if len(labs) > 0:
+                kws += [dict(layer=layer, palette=ptt, color=clr)]
+                fxs += [plotter.render_labels]
+        if "shapes" in kinds and len(self.adata.shapes) > 0:
+            shps = [v for v in elements if v in self.adata.shapes]
+            ptt = palette["shapes"] if isinstance(palette, dict) else palette
+            clr = color["shapes"] if isinstance(color, dict) else None  # hue
+            if len(shps) > 0:
+                kws += [dict(elements=shps, layer=layer,
+                             palette=ptt, color=clr)]
+                fxs += [plotter.render_shapes]
+        if "images" in kinds and len(self.adata.images) > 0:
+            imgs = [v for v in elements if v in self.adata.images]
+            ptt = palette["images"] if isinstance(palette, dict) else palette
+            clr = color["images"] if isinstance(color, dict) else None  # hue
+            if len(imgs) > 0:
+                k_i = dict(elements=imgs, channel=kwargs.pop("channel", None),
+                           palette=ptt, color=clr)
+                for x in ["cmap", "norm", "na_color", "alpha", "scale"]:
+                    if x in kwargs:
+                        k_i[x] = kwargs.pop(x)
+                kws += [k_i]
+                fxs += [plotter.render_images]
+
+        # Plot All
+        if len(fxs) > 1:  # multi-plot
+            fig, axs = plt.subplots(ncols=len(fxs), figsize=figsize, **kwargs)
+            for i, f in enumerate(fxs):
+                f(**kws[i]).pl.show(coordinate_systems=libs, ax=axs[i])
+        else:  # single plot
+            fxs[0](**kws[0]).pl.show(coordinate_systems=libs,
+                                     figsize=figsize, **kwargs)
+        return fig
 
     def plot_spatial(self, color=None, kind="dot", key_image=None,
                      col_sample_id=None, library_id=None, title="",
                      shape="hex", figsize=30, cmap="magma", wspace=0.4,
-                     **kwargs):
+                     mode="squidpy", layer=None, **kwargs):
         """Create basic spatial plots."""
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
+        color = None if color is False else color if color else self._columns[
+            "col_cell_type"]  # no color if False; clusters if unspecified
+        if color is not None:
+            color = list(pd.unique(self.get_variables(color)))
+        libid = library_id if library_id else self._library_id
         col_sample_id = col_sample_id if col_sample_id else kwargs.pop(
             "libary_key", self._columns["col_sample_id"])
         seg = None if kind.lower() == "dot" else kwargs.pop(
             "seg_cell_id", self._columns["col_segment"])  # segmentation ID
-        libid = library_id if library_id else self._library_id
         if isinstance(self.adata, spatialdata.SpatialData) and shape:
             warn("Can't currently use `shape` parameter with SpatialData.")
             shape = None
@@ -197,10 +303,6 @@ class Spatial(cr.Omics):
         # if library_id is None:  # all libraries if unspecified
         #     library_id = list(self.rna.obs[col_sample_id].unique())
         ann = self.rna.copy()
-        color = None if color is False else color if color else self._columns[
-            "col_cell_type"]  # no color if False; clusters if unspecified
-        if color is not None:
-            color = list(pd.unique(self.get_variables(color)))
         kws = cr.tl.merge(dict(figsize=figsize, shape=shape, cmap=cmap,
                                return_ax=True, library_key=col_sample_id,
                                library_id=libid, color=color, alt_var=cgs,
@@ -218,6 +320,8 @@ class Spatial(cr.Omics):
         except Exception:
             fig = str(traceback.format_exc())
             print(fig)
+
+        # Modify (e.g, Title)
         try:
             fig.figure.suptitle(title)
             fig.figure.tight_layout()
