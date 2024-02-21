@@ -215,11 +215,32 @@ class Omics(object):
         """Write object."""
         print(f"\n\n***** Writing object to {out_file}...\n\n")
         if os.path.splitext(out_file)[1] == ".h5ad":
-            self.rna.write_h5ad(out_file, **kwargs)
+            adata = self.rna.copy()
+            try:
+                adata.write_h5ad(file, **kwargs)
+            except TypeError:
+                _ = adata.uns.pop("markers")  # may not be able to write
+                adata.write_h5ad(file, **kwargs)
         elif os.path.splitext(out_file)[1] == ".h5mu":
             self.adata.write(out_file, **kwargs)
         else:
             raise ValueError("File extension must be .h5ad or .h5mu")
+
+    def load(self, file_path, file_path_markers=None,
+             method_cluster="leiden", **kwargs):
+        """Load AnnData."""
+        print(f"\n\n***** Writing object from {path}...\n\n")
+        if os.path.splitext(file_path)[1] == ".h5ad":
+            self.rna = sc.read_h5ad(file_path, **kwargs)
+        elif os.path.splitext(file_path)[1] == ".h5mu":
+            self.adata = muon.read(file_path, **kwargs)
+        else:
+            raise ValueError("File extension must be .h5ad or .h5mu")
+        if file_path_markers:
+            if "markers" not in self.rna.uns:
+                self.rna.uns["markers"] = {}
+            self.rna.uns["markers"][method_cluster] = pd.read_csv(
+                file_path_markers).set_index([method_cluster, "names"])
 
     def get_layer(self, layer=None, subset=None, inplace=False):
         """Get layer (and optionally, subset)."""
@@ -582,8 +603,9 @@ class Omics(object):
                 self.rna.var.index.names[0])
         if copy is False:  # assign if performing inplace
             self.rna = adata
+            if flavor != "celltypist":  # annotate with CellTypist
+                figs = self.plot_umap(color=col_annotation)  # plot
             self.results[flavor], self.figures[flavor] = res, figs
-            self.plot_umap(color=col_annotation)  # plot
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension
         return adata, [res, figs]

@@ -7,6 +7,7 @@
 import os
 import traceback
 import json
+from itertools import permutations
 from warnings import warn
 import matplotlib
 import matplotlib.pyplot as plt
@@ -14,9 +15,9 @@ import squidpy as sq
 import spatialdata
 import spatialdata_plot as sdp
 import liana
-from liana.method import MistyData, genericMistyData, lrMistyData
-import decoupler as dc
-import plotnine
+# from liana.method import MistyData, genericMistyData, lrMistyData
+# import decoupler as dc
+# import plotnine
 import scanpy as sc
 import pandas as pd
 import numpy as np
@@ -104,7 +105,8 @@ class Spatial(cr.Omics):
         self.adata.points["transcripts"] = self.adata.points["transcripts"][
             self.adata.points["transcripts"].qv >= threshold]
 
-    def update_from_h5ad(self, file=None):
+    def update_from_h5ad(self, file=None, file_path_markers=None,
+                         method_cluster="leiden"):
         """Update SpatialData object `.table` from h5ad file."""
         original_ix = self.rna.uns[
             "original_ix"] if "original_ix" in self.rna.uns else None
@@ -125,6 +127,11 @@ class Spatial(cr.Omics):
         if original_ix is not None and ("original_ix" not in self.rna.uns or (
                 len(self.rna.uns["original_ix"]) <= len(original_ix))):
             self.rna.uns["original_ix"] = original_ix
+        if file_path_markers:
+            if "markers" not in self.rna.uns:
+                self.rna.uns["markers"] = {}
+            self.rna.uns["markers"][method_cluster] = pd.read_csv(
+                file_path_markers).set_index([method_cluster, "names"])
 
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
@@ -133,7 +140,11 @@ class Spatial(cr.Omics):
             adata = self.adata.table.copy()  # copy so don't alter self
             if self._spatial_key in adata.uns:  # can't write all SpatialData
                 _ = adata.uns.pop(self._spatial_key)  # have to remove .images
-            adata.write_h5ad(file, **kwargs)
+            try:
+                adata.write_h5ad(file, **kwargs)
+            except TypeError:
+                _ = adata.uns.pop("markers")  # may not be able to write
+                adata.write_h5ad(file, **kwargs)
         else:
             self.adata.write(file, **{"overwrite": True, **kwargs})
 
@@ -185,7 +196,7 @@ class Spatial(cr.Omics):
         parqs = []
         for x in dirs:
             parqs += [pd.read_parquet(os.path.join(x, f"{kind}.parquet"))]
-        return dict(zip(libs, parqs)) if len(parqs) > 1 else parqs[0]
+        return dict(zip(dirs, parqs)) if len(parqs) > 1 else parqs[0]
 
     def print_tiff(self, file=None, library_id=None, plot=True,
                    kind="mip", **kwargs):
@@ -616,8 +627,8 @@ class Spatial(cr.Omics):
     #     print(misty.uns["interactions"].head())
     #     (
     #         liana.pl.interactions(misty, view="juxta", return_fig=True) +
-    #         plotnine.scale_fill_gradient2(low="blue", mid="white", high="red",
-    #                                       midpoint=0)
+    #         plotnine.scale_fill_gradient2(low="blue", mid="white",
+    #                                       high="red", midpoint=0)
     #     )
     #     return misty, fig
 

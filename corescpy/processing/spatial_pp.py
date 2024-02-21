@@ -14,9 +14,9 @@ segmentation-with-cellpose-and-generating-a-feature-cell-matrix'.
 import tifffile
 import csv
 import os
-import sys
+# import sys
 import re
-import corescpy as cr
+# import corescpy as cr
 import squidpy as sq
 # import scanpy as sc
 import spatialdata_io as sdio
@@ -83,7 +83,7 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
     #     adata.uns[spatial_key] = {library_id: cr.tl.merge(
     #         {"images": {}, "metadata": {
     #             "file_path": file_path, "source_image_path": file_path_image
-    #             }},  uns_spatial)}  # default spatial .uns merge w/ specified
+    #             }},  uns_spatial)}  # default .uns merge w/ specified
     # if col_sample_id not in adata.obs:
     #     adata.obs.loc[:, col_sample_id] = library_id
     if isinstance(visium, dict) or visium is True:
@@ -151,8 +151,9 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
     seg_data = np.load(file_cellpose, allow_pickle=True).item()
     mask_array = seg_data["masks"]
     # Use regular expression to extract dimensions from mask_array.shape
-    m = re.match("\((?P<z_size>\d+), (?P<y_size>\d+), (?P<x_size>\d+)", str(mask_array.shape))
-    mask_dims = { key:int(m.groupdict()[key]) for key in m.groupdict() }
+    m = re.match("\((?P<z_size>\d+), (?P<y_size>\d+), (?P<x_size>\d+)",
+                 str(mask_array.shape))
+    mask_dims = {key: int(m.groupdict()[key]) for key in m.groupdict()}
 
     # Read 5 columns from transcripts Parquet file
     transcripts_df = pd.read_parquet(
@@ -195,7 +196,7 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
         z_slice = min(max(0, z_slice), mask_dims["z_size"] - 1)
 
         # Look up cell_id assigned by Cellpose. Array is in ZYX order.
-        cell_id = mask_array[round(z_slice)] [round(y_pixel)] [round(x_pixel)]
+        cell_id = mask_array[round(z_slice)][round(y_pixel)][round(x_pixel)]
 
         # If cell_id is 0, Cellpose did not assign the pixel to a cell.
         # Need to perform neighborhood search. See if nearest nucleus is
@@ -213,21 +214,24 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
             x_neighborhood_max_pixel = min(mask_dims["x_size"], round(
                 x_pixel + nuc_exp_pixel+1))
 
-            # Call helper function to see if nearest nucleus is within user-specified distance.
+            # Call helper function to see if nearest nucleus is
+            # w/i user-specified distance.
             cell_id = nearest_cell(
                 x_pixel, y_pixel, z_slice, x_neighborhood_min_pixel,
                 y_neighborhood_min_pixel, z_neighborhood_min_slice, mask_array[
-                    z_neighborhood_min_slice : z_neighborhood_max_slice,
-                    y_neighborhood_min_pixel : y_neighborhood_max_pixel,
-                    x_neighborhood_min_pixel : x_neighborhood_max_pixel],
+                    z_neighborhood_min_slice: z_neighborhood_max_slice,
+                    y_neighborhood_min_pixel: y_neighborhood_max_pixel,
+                    x_neighborhood_min_pixel: x_neighborhood_max_pixel],
                 nuc_exp=nuc_exp)
 
-        # If cell_id is not 0 at this point, it means the transcript is associated with a cell
+        # If cell_id is not 0 at this point, it means the transcript is
+        # associated with a cell
         if cell_id != 0:
             # Increment count in feature-cell matrix
             matrix.at[feature_to_index[feature], cell_id] += 1
 
-    # Call a helper function to create Seurat and Scanpy compatible MTX output
+    # Call a helper function to create Seurat and
+    # Scanpy compatible MTX output
     write_sparse_mtx(directory, matrix, cells, features)
 
 
@@ -327,7 +331,7 @@ def extract_tiff(file_path="morphology.ome.tif", level=6, **kwargs):
                      tile=(1024, 1024), compression="JPEG_2000_LOSSY",
                      metadata={"axes": "ZYX"}), **kwargs
               }  # defaults for any unspecified variable keyword arguments
-    tifffile.imwrite("level_" + str(level)+ file_path, image, **kwargs)
+    tifffile.imwrite("level_" + str(level) + file_path, image, **kwargs)
 
 
 def describe_tiff(file_path="morphology.ome.tif"):
@@ -351,7 +355,8 @@ def command_cellpose(file_path="morphology.ome.tif", diameter=13.6,
     """Get CellPose command."""
     channels = [0, 0] if channels is None else channels
     file_path = os.path.abspath(file_path)
-    com = str(f"python -m cellpose --dir {file_path} --pretrained_model "
-    f"nuclei --chan {channels[0]} --chan2 {channels[1]} --img_filter "
-    f"_morphology.ome --diameter {diameter} --do_3D --save_tif --verbose")
+    com = str(
+        f"python -m cellpose --dir {file_path} --pretrained_model "
+        f"nuclei --chan {channels[0]} --chan2 {channels[1]} --img_filter "
+        f"_morphology.ome --diameter {diameter} --do_3D --save_tif --verbose")
     return com
