@@ -209,7 +209,7 @@ class Omics(object):
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
         print("\n\n\n")
-        return self.adata
+        return self.adata.__repr__
 
     def write(self, out_file, **kwargs):
         """Write object."""
@@ -217,10 +217,10 @@ class Omics(object):
         if os.path.splitext(out_file)[1] == ".h5ad":
             adata = self.rna.copy()
             try:
-                adata.write_h5ad(file, **kwargs)
+                adata.write_h5ad(out_file, **kwargs)
             except TypeError:
                 _ = adata.uns.pop("markers")  # may not be able to write
-                adata.write_h5ad(file, **kwargs)
+                adata.write_h5ad(out_file, **kwargs)
         elif os.path.splitext(out_file)[1] == ".h5mu":
             self.adata.write(out_file, **kwargs)
         else:
@@ -229,7 +229,7 @@ class Omics(object):
     def load(self, file_path, file_path_markers=None,
              method_cluster="leiden", **kwargs):
         """Load AnnData."""
-        print(f"\n\n***** Writing object from {path}...\n\n")
+        print(f"\n\n***** Writing object from {file_path}...\n\n")
         if os.path.splitext(file_path)[1] == ".h5ad":
             self.rna = sc.read_h5ad(file_path, **kwargs)
         elif os.path.splitext(file_path)[1] == ".h5mu":
@@ -565,7 +565,7 @@ class Omics(object):
                           p_threshold=0.5, over_clustering=None,
                           min_proportion=0, file_annotation_guide=None,
                           copy=False, col_annotation="Annotation",
-                          out_file=None, **kwargs):
+                          plot_markers=False, out_file=None, **kwargs):
         """
         Use CellTypist or a marker dictionary file to annotate clusters.
 
@@ -589,6 +589,7 @@ class Omics(object):
                 mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
                 min_proportion=min_proportion, **kwargs)  # annotate
         else:  # annotate by marker dictionary
+            figs = {}
             c_t = kwargs.pop("col_cell_type", "leiden" if (
                 "leiden" in self.rna.uns.keys()) else "louvain")
             if col_annotation in adata.obs:
@@ -596,15 +597,18 @@ class Omics(object):
             _, res = cr.ax.annotate_by_markers(
                 adata, model, col_cell_type=c_t,
                 col_new=col_annotation, **kwargs)  # annotate
-            adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(
-                dict(zip(res.index, list(res[col_annotation]))))  # new column
+            annots = dict(zip(res.index, list(res[col_annotation])))
+            adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(annots)
+            if plot_markers not in [None, False]:
+                figs["markers"] = cr.pl.plot_markers(
+                    adata, n_genes=5, rename=annots)  # replot markers
         if re_ix is True:  # back to original index if needed
             adata.var = adata.var.reset_index().set_index(
                 self.rna.var.index.names[0])
         if copy is False:  # assign if performing inplace
             self.rna = adata
             if flavor != "celltypist":  # annotate with CellTypist
-                figs = self.plot_umap(color=col_annotation)  # plot
+                figs["umap"] = self.plot_umap(color=col_annotation)  # plot
             self.results[flavor], self.figures[flavor] = res, figs
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension

@@ -293,7 +293,7 @@ class Spatial(cr.Omics):
     def plot_spatial(self, color=None, kind="dot", key_image=None,
                      col_sample_id=None, library_id=None, title="",
                      shape="hex", figsize=30, cmap="magma", wspace=0.4,
-                     mode="squidpy", layer=None, **kwargs):
+                     mode="squidpy", layer=None, title_offset=0.4, **kwargs):
         """Create basic spatial plots."""
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
@@ -317,7 +317,7 @@ class Spatial(cr.Omics):
         kws = cr.tl.merge(dict(figsize=figsize, shape=shape, cmap=cmap,
                                return_ax=True, library_key=col_sample_id,
                                library_id=libid, color=color, alt_var=cgs,
-                               wspace=wspace), kwargs)
+                               wspace=wspace), kwargs)  # keyword arguments
         kws["img_res_key"] = key_image if key_image else list(
             self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
         try:
@@ -334,7 +334,7 @@ class Spatial(cr.Omics):
 
         # Modify (e.g, Title)
         try:
-            fig.figure.suptitle(title)
+            fig.figure.suptitle(title, y=1 - title_offset)
             fig.figure.tight_layout()
         except Exception:
             pass

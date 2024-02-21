@@ -296,16 +296,13 @@ def perform_celltypist(adata, model, col_cell_type=None,
 def annotate_by_markers(adata, data_assignment, method="overlap_count",
                         col_assignment="Type", n_top=20,
                         col_cell_type="leiden", col_new="Annotation",
-                        renaming=False, specific_only=True, **kwargs):
+                        renaming=False, **kwargs):
     """
     Annotate based on markers (adapted from Squidpy tutorial).
 
     The argument `data_assignment` should be specified as a dataframe
     indexed by gene symbols and a single column of assignments to cell
     types for each marker (or a file path returning the same).
-
-    Set `specific_only` to True to use only markers that have one
-    associated cell type.
     """
     adata = adata.copy()
     col_bc = adata.obs.index.names[0]
