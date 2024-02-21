@@ -505,7 +505,8 @@ class Omics(object):
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,
                 kws_umap=None, kws_cluster=None, genes_subset=None,
-                kws_celltypist=None, colors=None, copy=False, **kwargs):
+                kws_celltypist=None, colors=None, copy=False,
+                out_file=None, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
         if assay is None:
             assay = self._assay
@@ -535,12 +536,15 @@ class Omics(object):
             self.figures.update({"clustering": figs_cl})
             self.rna = adata
             return figs_cl
+        if out_file:  # write to file if specified
+            self.write(out_file)  # write .adata or .rna, based on extension
         return adata
 
     def annotate_clusters(self, model, mode="best match", layer="log1p",
                           p_threshold=0.5, over_clustering=None,
                           min_proportion=0, file_annotation_guide=None,
-                          copy=False, col_annotation="Annotation", **kwargs):
+                          copy=False, col_annotation="Annotation",
+                          out_file=None, **kwargs):
         """
         Use CellTypist or a marker dictionary file to annotate clusters.
 
@@ -580,6 +584,8 @@ class Omics(object):
             self.rna = adata
             self.results[flavor], self.figures[flavor] = res, figs
             self.plot_umap(color=col_annotation)  # plot
+        if out_file:  # write to file if specified
+            self.write(out_file)  # write .adata or .rna, based on extension
         return adata, [res, figs]
 
     def find_markers(self, assay=None, n_genes=5, layer="log1p", copy=False,
