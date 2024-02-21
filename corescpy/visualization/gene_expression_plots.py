@@ -340,7 +340,8 @@ def plot_cat_split(adata, col_condition, col_cell_type="leiden", genes=None,
 
 def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
                  key_added="rank_genes_groups", col_wrap=None,
-                 key_reference=None, col_gene_symbols=None, **kwargs):
+                 key_reference=None, col_gene_symbols=None,
+                 rename=None, **kwargs):
     """Plot gene markers ~ cluster (adapted from Scanpy function)."""
     col_cell_type = str(adata.uns[key_added]["params"]["groupby"])
     if use_raw is None:
@@ -355,6 +356,7 @@ def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
         col_wrap = cr.pl.square_grid(len(cts))[0]  # number of grid columns
     mark, kws = [], {**dict(col_wrap=col_wrap, kind="violin", split="hue",
                             sharex=False, hue="hue"), **kwargs}
+    ctrn = []
     for g in cts:  # iterate cell types for which to get gene marker data
         dff = sc.get.obs_df(
             adata, list(adata.uns[key_added]["names"][g][:n_genes]),
@@ -366,8 +368,9 @@ def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
             dff.loc[~dff["hue"].isin([g, key_reference]), "hue"] = np.nan
         dff.loc[dff["hue"] == g, "hue"] = "Cluster"
         mark += [dff]  # add to list of GEX dataframes for each cell type
+        ctrn += list([g] if rename is None else [rename[g]])
     mark = pd.concat(mark, names=["Comparison", "barcode"], keys=[
-        f"{x} vs. {key_reference}" for x in cts]).set_index(
+        f"{x} vs. {key_reference}" for x in ctrn]).set_index(
             "hue", append=True)  # join all cell type data
     mark = mark.stack().rename_axis(mark.index.names + ["Gene"])
     fig = sb.catplot(data=mark.to_frame("Expression").reset_index(), x="Gene",
