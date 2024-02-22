@@ -687,4 +687,3 @@ class Spatial(cr.Omics):
         if copy is False:
             self.rna = adata
         return adata
-
