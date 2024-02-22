@@ -348,10 +348,11 @@ class Spatial(cr.Omics):
         selves = [self] + list(others)
         f_s = kwargs.pop("figsize", (5 * len(color), 20 * len(selves)))
         fig, axs = plt.subplots(len(color) + 1, len(selves), figsize=f_s)
-        for j, s in enumerate(selves):
+        for j, s in enumerate(selves):  # iterate objects
             goi = [s._columns["col_cell_type"]] + color
             for i, g in enumerate(goi):
-                s.plot_spatial(ax=axs[i, j], cmap=cmap, layer=layer, color=g)
+                s.plot_spatial(ax=axs[i, j], cmap=cmap, layer=layer,
+                               color=g, **kwargs)  # plot
                 if i == 0:
                     axs[i, j].set_title(s._library_id)
         plt.subplots_adjust(wspace=wspace)
@@ -677,13 +678,12 @@ class Spatial(cr.Omics):
             covariates=covariates, spatial_key=self._spatial_key, copy=False)
         print(adata.obsm["design_matrix"].head(20))
         if genes is not None:
-            genes = cr.tl.to_list(genes)
-            for g in genes:
-                sq.pl.var_by_distance(
-                    adata=adata, design_matrix_key=key_added, var=g,
-                    anchor_key=key_reference,
-                    covariate=covariates[0] if covariates else None,
-                    show_scatter=False, figsize=figsize, **kwargs)
+            sq.pl.var_by_distance(
+                adata=adata, design_matrix_key=key_added, var=genes,
+                anchor_key=key_reference,
+                covariate=covariates[0] if covariates else None,
+                color=covariates[1] if covariates else None,
+                show_scatter=False, figsize=figsize, **kwargs)
         if copy is False:
             self.rna = adata
         return adata
