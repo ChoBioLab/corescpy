@@ -567,7 +567,7 @@ class Omics(object):
 
     def subcluster(self, key_cell_types=None, col_cell_type=None,
                    col_new=None, method_cluster="leiden",
-                   copy=False, **kwargs):
+                   copy=False, kws_annotation=None, **kwargs):
         """Perform sub-clustering."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
@@ -576,12 +576,26 @@ class Omics(object):
         adata = self.rna.copy()  # full object
         if col_new is None:
             col_new = col_cell_type + "_subcluster"
+        adata.obs.loc[:, col_new] = adata.obs.loc[
+            :, method_cluster].astype(str)
         for x in key_cell_types:  # iterate cell types to sub-cluster
-            subs = adata.obs[col_cell_type] == x  # subset mask
-            ann, _ = self.cluster(subset=subs, copy=True,
-                                  method_cluster=method_cluster, **kwargs)
-            adata.obs.loc[subs, col_new] = ann.obs.loc[
-                adata.obs.loc[subs].index, method_cluster]  # put sub-clusters
+            clus = cr.tl.to_list(x)  # in case collapse multiple cell types
+            subs = adata.obs[col_cell_type].isin(clus)  # subset mask
+            ann = self.cluster(subset=subs, copy=True,
+                               method_cluster=method_cluster, **kwargs)
+            adata.obs.loc[subs, col_new] = ann.obs.loc[adata.obs.loc[
+                subs].index, method_cluster].astype(str)  # put sub-clusters
+        if kws_annotation is not None:  # annotate?
+            if isinstance(kws_annotation, str):  # if just provided file
+                model, kws_annotation = kws_annotation, {}
+            else:
+                model = kws_annotation.pop("model")
+            _, res = cr.ax.annotate_by_markers(
+                adata, model, col_cell_type=col_cell_type,
+                col_new=col_new, **kws_annotation)  # annotate
+            annots = dict(zip(res.index, list(res[col_new])))
+            adata.obs.loc[:, col_new] = adata.obs[col_new].replace(annots)
+        _ = self.plot_umap(color=col_new)  # plot
         if copy is False:
             self.rna = adata
         return adata
