@@ -292,8 +292,8 @@ class Spatial(cr.Omics):
 
     def plot_spatial(self, color=None, kind="dot", key_image=None,
                      col_sample_id=None, library_id=None, title="",
-                     shape="hex", figsize=30, cmap="magma", wspace=0.4,
-                     mode="squidpy", layer=None, title_offset=0.4, **kwargs):
+                     shape="hex", figsize=30, cmap="magma", wspace=0,
+                     mode="squidpy", layer=None, title_offset=0, **kwargs):
         """Create basic spatial plots."""
         if isinstance(figsize, (int, float)):
             figsize = (figsize, figsize)
@@ -321,13 +321,14 @@ class Spatial(cr.Omics):
         kws["img_res_key"] = key_image if key_image else list(
             self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
         try:
-            try:
-                fig = sq.pl.spatial_segment(ann, seg, **kws) if (
-                    seg) else sq.pl.spatial_scatter(ann, **kws)
-            except Exception:  # remove Leiden colors if evokes Squidpy bug
-                _ = ann.uns.pop("leiden_colors", None)
-                fig = sq.pl.spatial_segment(ann, seg, **kws) if (
-                    seg) else sq.pl.spatial_scatter(ann, **kws)
+            with plt.rc_context({"figure.constrained_layout.use": True}):
+                try:
+                    fig = sq.pl.spatial_segment(ann, seg, **kws) if (
+                        seg) else sq.pl.spatial_scatter(ann, **kws)
+                except Exception:  # remove Leiden colors if => Squidpy bug
+                    _ = ann.uns.pop("leiden_colors", None)
+                    fig = sq.pl.spatial_segment(ann, seg, **kws) if (
+                        seg) else sq.pl.spatial_scatter(ann, **kws)
         except Exception:
             fig = str(traceback.format_exc())
             print(fig)
@@ -335,7 +336,6 @@ class Spatial(cr.Omics):
         # Modify (e.g, Title)
         try:
             fig.figure.suptitle(title, y=1 - title_offset)
-            fig.figure.tight_layout()
         except Exception:
             pass
         return fig
@@ -654,3 +654,37 @@ class Spatial(cr.Omics):
             sc.pl.spatial(lrdata, layer="cats", color=combos, size=1.4,
                           cmap="coolwarm")
         return adata, lrdata
+
+    def calculate_spatial_distance(self, key_reference, col_reference=None,
+                                   genes=None, metric="euclidean",
+                                   covariates=None, copy=False, layer="counts",
+                                   figsize=None, **kwargs):
+        """Calculate distance measurements given a reference point."""
+        adata = self.get_layer(layer=layer, inplace=False)
+        if col_reference is None:
+            col_reference = self._columns["col_cell_type"]
+        # cid = kwargs.pop("library_key", "cell_id")
+        cid = kwargs.pop("col_sample_id", self._columns["col_sample_id"])
+        key_added = kwargs.pop("key_added", "design_matrix")
+        if covariates is True:  # can use default covariates if specify T
+            covariates = []
+            for x in ["col_condition", "col_sample_id"]:
+                if self._columns[x]:
+                    covariates += [self._columns[x]]
+        sq.tl.var_by_distance(
+            adata, groups=key_reference, cluster_key=col_reference,
+            library_key=cid, design_matrix_key=key_added, metric=metric,
+            covariates=covariates, spatial_key=self._spatial_key, copy=False)
+        print(adata.obsm["design_matrix"].head(20))
+        if genes is not None:
+            genes = cr.tl.to_list(genes)
+            for g in genes:
+                sq.pl.var_by_distance(
+                    adata=adata, design_matrix_key=key_added, var=g,
+                    anchor_key=key_reference,
+                    covariate=covariates[0] if covariates else None,
+                    show_scatter=False, figsize=figsize, **kwargs)
+        if copy is False:
+            self.rna = adata
+        return adata
+
