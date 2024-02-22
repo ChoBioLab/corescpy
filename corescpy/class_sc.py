@@ -527,8 +527,10 @@ class Omics(object):
                 resolution=1, kws_pca=None, kws_neighbors=None,
                 kws_umap=None, kws_cluster=None, genes_subset=None,
                 kws_celltypist=None, colors=None, copy=False,
-                out_file=None, **kwargs):
+                out_file=None, subset=None, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
+        if subset is not None:
+            copy = True  # copy must be true if subsetting
         if assay is None:
             assay = self._assay
         if self._integrated is True and kws_pca is not False:
@@ -541,6 +543,8 @@ class Omics(object):
                 if self._columns[x]:  # add UMAPs ~ ID
                     colors += [self._columns[x]]
         ann = self.get_layer(layer=layer, inplace=False)
+        if subset is not None:
+            ann = ann[subset]
         if copy is False:
             self.info["methods"]["clustering"] = method_cluster
         ann.obs.loc[:, "method_cluster"] = method_cluster
@@ -559,6 +563,27 @@ class Omics(object):
             return figs_cl
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension
+        return adata
+
+    def subcluster(self, key_cell_types=None, col_cell_type=None,
+                   col_new=None, method_cluster="leiden",
+                   copy=False, **kwargs):
+        """Perform sub-clustering."""
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        if key_cell_types is None:  # subcluster all if unspecified
+            key_cell_types = list(self.rna.obs[col_cell_type].unique())
+        adata = self.rna.copy()  # full object
+        if col_new is None:
+            col_new = col_cell_type + "_subcluster"
+        for x in key_cell_types:  # iterate cell types to sub-cluster
+            subs = adata.obs[col_cell_type] == x  # subset mask
+            ann, _ = self.cluster(subset=subs, copy=True,
+                                  method_cluster=method_cluster, **kwargs)
+            adata.obs.loc[subs, col_new] = ann.obs.loc[
+                adata.obs.loc[subs].index, method_cluster]  # put sub-clusters
+        if copy is False:
+            self.rna = adata
         return adata
 
     def annotate_clusters(self, model, mode="best match", layer="log1p",
