@@ -306,8 +306,8 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
     """
     adata = adata.copy()
     col_bc = adata.obs.index.names[0]
-    if col_new in adata.obs:
-        raise ValueError(f"`col_new ({col_new}) already exists in adata.obs!")
+    # if col_new in adata.obs:
+    #     raise ValueError(f"`col_new ({col_new}) already in adata.obs!")
 
     # Load Marker Groups
     if isinstance(data_assignment, (str, os.PathLike)):

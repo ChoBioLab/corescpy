@@ -7,6 +7,10 @@ Data manipulation utilities.
 @author: E. N. Aslinger
 """
 
+import tifffile as tf
+import sys
+import cv2
+import os
 import decoupler as dc
 import scanpy as sc
 import pandas as pd
@@ -72,6 +76,52 @@ def merge_pca_subset(adata, adata_subset,
         ann.obs = ann.obs.drop(list(ann.obs.columns.intersection(
             adata_subset.obs.columns)), axis=1).join(adata_subset.obs)
     return ann
+
+
+def write_ome_tif(file_path, subresolutions=7, pixelsize=0.2125):
+    """Write .tif file to .ome.tif (modified from 10x functions)."""
+    image = tf.imread(sys.argv[1])
+    if image.shape[2] > image.shape[0]:
+        image = np.transpose(image, (1, 2, 0))
+    f_n = os.path.splitext(file_path)[0] + ".ome.tif"
+    f_n = file_path.rsplit(".", 1)[0]
+    with tf.TiffWriter(f_n, bigtiff=True) as tif:
+        metadata = {
+            "SignificantBits": 8,
+            "PhysicalSizeX": pixelsize,
+            "PhysicalSizeXUnit": "µm",
+            "PhysicalSizeY": pixelsize,
+            "PhysicalSizeYUnit": "µm",
+            # "Channel": {"Name": ["newname1", "newname2", "newname3"]}
+            # # Use this line to edit channel names for multi-channel images
+        }
+        kwargs = dict(
+            photometric="minisblack",
+            tile=(1024, 1024),
+            compression="jpeg2000",
+            resolutionunit="CENTIMETER"
+        )
+        tif.write(
+            np.moveaxis(image, -1, 0),
+            subifds=subresolutions,
+            resolution=(1e4 / pixelsize, 1e4 / pixelsize),
+            metadata=metadata,
+            **kwargs
+        )
+
+        scale = 1
+        for i in range(subresolutions):
+            scale /= 2
+            width = int(np.floor(image.shape[1] * scale))
+            height = int(np.floor(image.shape[0] * scale))
+            downsample = cv2.resize(image, (width, height),
+                                    interpolation=cv2.INTER_AREA)
+            tif.write(
+                np.moveaxis(downsample, -1, 0),
+                subfiletype=1,
+                resolution=(1e4 / scale / pixelsize, 1e4 / scale / pixelsize),
+                **kwargs
+            )
 
 
 RFX_CONVERT = r"""
