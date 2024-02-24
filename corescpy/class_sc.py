@@ -648,8 +648,10 @@ class Omics(object):
             _, res = cr.ax.annotate_by_markers(
                 adata, model, col_cell_type=c_t,
                 col_new=col_annotation, **kwargs)  # annotate
+            print(res)
             annots = dict(zip(res.index, list(res[col_annotation])))
-            adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(annots)
+            adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(
+                annots).astype(str)
             if plot_markers not in [None, False]:
                 figs["markers"] = cr.pl.plot_markers(
                     adata, n_genes=5, rename=annots)  # replot markers
