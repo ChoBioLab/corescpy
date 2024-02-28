@@ -629,6 +629,8 @@ class Omics(object):
         adata, re_ix = self.rna.copy(), False
         re_ix = self._assay is not None and ":" in adata.var.index.values[0]
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
+        m_c = kwargs.pop("method_cluster", "leiden" if (
+            "leiden" in self.rna.uns.keys()) else "louvain")  # cluster method
         if re_ix is True:  # rename multi-modal index if <assay>:<gene>
             adata.var = adata.var.rename(dict(zip(adata.var.index, ["".join(
                 x.split(":")[1:]) for x in adata.var.index])))
@@ -638,16 +640,17 @@ class Omics(object):
                 adata, model, majority_voting=True, p_threshold=p_threshold,
                 mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
                 min_proportion=min_proportion, **kwargs)  # annotate
+            col_ann = ["majority_voting", "predicted_labels"]  # for writing
         else:  # annotate by marker dictionary
             figs = {}
-            c_t = kwargs.pop("col_cell_type", "leiden" if (
-                "leiden" in self.rna.uns.keys()) else "louvain")
+            c_t = kwargs.pop("col_cell_type", m_c)
             if col_annotation in adata.obs:
                 adata.obs = adata.obs.drop(col_annotation, axis=1)
             sc.tl.rank_genes_groups(adata, c_t, use_raw=False)  # rank
             _, res = cr.ax.annotate_by_markers(
                 adata, model, col_cell_type=c_t,
                 col_new=col_annotation, **kwargs)  # annotate
+            col_ann = [col_annotation]  # to write results (optional)
             print(res)
             annots = dict(zip(res.index, list(res[col_annotation])))
             adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(
@@ -665,6 +668,11 @@ class Omics(object):
             self.results[flavor], self.figures[flavor] = res, figs
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension
+            obs = adata.obs.set_index("cell_id") if (
+                "cell_id" in adata.obs) else adata.obs  # in case Xenium
+            for x in [m_c] + col_ann:  # write clusters & annotations
+                obs[x].to_frame("group").to_csv(os.path.splitext(
+                    out_file)[0] + f"_{x}.csv")
         return adata, [res, figs]
 
     def find_markers(self, assay=None, n_genes=5, layer="log1p", copy=False,

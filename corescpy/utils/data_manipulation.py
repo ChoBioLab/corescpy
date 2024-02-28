@@ -8,7 +8,6 @@ Data manipulation utilities.
 """
 
 import tifffile as tf
-import sys
 import cv2
 import os
 import decoupler as dc
@@ -84,7 +83,6 @@ def write_ome_tif(file_path, subresolutions=7, pixelsize=0.2125):
     if image.shape[2] > image.shape[0]:
         image = np.transpose(image, (1, 2, 0))
     f_n = os.path.splitext(file_path)[0] + ".ome.tif"
-    f_n = file_path.rsplit(".", 1)[0]
     with tf.TiffWriter(f_n, bigtiff=True) as tif:
         metadata = {
             "SignificantBits": 8,
