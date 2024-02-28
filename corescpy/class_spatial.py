@@ -91,6 +91,8 @@ class Spatial(cr.Omics):
             self.rna.obs.loc[:, self._columns["col_sample_id"]] = library_id
         self.figures["spatial"], self.results["spatial"] = {}, {}
         self._library_id = library_id
+        if self._kind == "xenium":
+            self.rna.ob = self.rna.obs.set_index("cell_id")
         if isinstance(self.adata, spatialdata.SpatialData):
             self.rna = self.adata.table
             self.adata.pl = sdp.pl.basic.PlotAccessor(self.adata)
