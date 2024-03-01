@@ -26,7 +26,7 @@ def cluster(adata, layer=None, method_cluster="leiden",
             paga=False,  # if issues with disconnected clusters, etc.
             resolution=1, n_comps=None, use_highly_variable=True,
             kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None,
-            genes_subset=None, seed=0, use_gpu=False,  kws_celltypist=None,
+            genes_subset=None, seed=0, use_gpu=False,
             plot=True, colors=None, **kwargs):
     """
     Perform clustering and visualize results.
@@ -306,8 +306,7 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
     """
     adata = adata.copy()
     col_bc = adata.obs.index.names[0]
-    # if col_new in adata.obs:
-    #     raise ValueError(f"`col_new ({col_new}) already in adata.obs!")
+    key_add = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
 
     # Load Marker Groups
     if isinstance(data_assignment, (str, os.PathLike)):
@@ -321,13 +320,19 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
                     " ")) > 1 else x for x in [re.sub("glia", "Glia", re.sub(
                         "_", " ", j)) for j in sources]]))
         assign.loc[:, col_assignment] = assign[col_assignment].replace(rename)
+    if col_assignment in assign.columns:
+        assign = assign[[col_assignment]]
+    cr.ax.find_marker_genes(
+        adata, col_cell_type=col_cell_type, n_genes=n_top, layer="log1p",
+        p_threshold=None, method="wilcoxon", kws_plot=False, use_raw=False,
+        key_added=key_add, **kwargs)  # find marker genes (rank DEGs)
     if method.lower() in ["overlap_count", "overlap_coef", "jaccard"]:
         assign = assign.rename_axis("Gene")
         assign.columns = [col_assignment]
         assign = dict(assign.reset_index().groupby(col_assignment).apply(
             lambda x: list(pd.unique(x.Gene))))  # to marker dictionary
         overlap = sc.tl.marker_gene_overlap(
-            adata, assign, method=method,
+            adata, assign, method=method, key_added=key_add,
             top_n_markers=n_top, **kwargs)  # overlap scores
         overlap = overlap.T.join(overlap.apply(lambda x: overlap.index.values[
             np.argmax(x)]).to_frame(col_new))

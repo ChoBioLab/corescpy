@@ -16,6 +16,7 @@ from copy import deepcopy
 import scanpy as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_hex
 import pertpy as pt
 # import blitzgsea as blitz
 import liana
@@ -571,13 +572,17 @@ class Omics(object):
         """Perform sub-clustering."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
+        col_annotation, col_ann_old = col_annotation if isinstance(
+            col_annotation, (list, tuple, np.ndarray)) else [
+                col_annotation, None]  # old annotation column to replace?
+        palette = kwargs.pop("palette", "Dark2")
         if kws_annotation is not None:  # annotate?
             if col_annotation is None:
                 col_annotation = "Annotation_subcluster"
-            if isinstance(kws_annotation, str):  # if just provided file
-                model, kws_annotation = kws_annotation, {}
-            else:
-                model = kws_annotation.pop("model")
+            if isinstance(kws_annotation, dict):  # if provided arguments
+                model = kws_annotation.pop("model")  # extract model argument
+            else:  # if just provided file, model name, or dataframe
+                model, kws_annotation = kws_annotation, {}  # model, defaults
             key_add = kws_annotation.pop(
                 "key_added", f"rank_genes_groups_{col_annotation}")
         adata = self.rna.copy()  # full object
@@ -586,35 +591,51 @@ class Omics(object):
         adata.obs.loc[:, col_new] = adata.obs[col_cell_type].astype(str)
         if key_cell_type is None:  # subcluster all if unspecified
             key_cell_type = list(self.rna.obs[col_cell_type].unique())
+        if col_ann_old:  # if pre-existing annotations
+            adata.obs.loc[:, col_annotation] = adata.obs[
+                col_ann_old].astype(str)  # start with original annotations
         for x in key_cell_type:  # iterate cell types to sub-cluster
             clus = cr.tl.to_list(x)  # in case collapse multiple cell types
             subs = adata.obs[col_cell_type].isin(clus)  # subset mask
-            if any(subs) is False:
+            i_x = adata.obs.loc[subs].index
+            if not any(subs):
                 continue
             ann = self.cluster(subset=subs, copy=True,
                                method_cluster=method_cluster, **kwargs)
-            ann.obs.loc[:, col_new] = ann.obs[method_cluster].copy()
-            adata.obs.loc[subs, col_new] = ann.obs.loc[adata.obs.loc[
-                subs].index, method_cluster].astype(str)  # put sub-clusters
+            ann.obs.loc[:, col_new] = ann.obs[method_cluster].apply(
+                lambda x: f"s{x}")  # prefix to Leiden clusters
+            adata.obs.loc[i_x, col_new] = ann.obs.loc[
+                i_x, method_cluster].astype(str)  # store sub-clusters
             if kws_annotation is not None:  # annotate?
-                sc.tl.rank_genes_groups(
-                    ann, col_new, key_added=key_add, use_raw=False)  # rank
                 _, res = cr.ax.annotate_by_markers(
-                    ann, model, col_cell_type=method_cluster, key=key_add,
+                    ann, model, col_cell_type=col_new, key=key_add,
+                    col_annotation=col_annotation,
                     col_new=col_annotation, **kws_annotation)  # annotate
                 annots = dict(zip(res.index, list(res[col_annotation])))
-                adata.obs.loc[subs, col_annotation] = ann.obs.loc[
-                    adata.obs.loc[subs].index, col_new].astype(
-                        str).replace(annots)
+                print(annots)
+                adata.obs.loc[i_x, col_annotation] = ann.obs.loc[
+                    i_x, col_new].replace(annots).astype(str)
+            cmap = plt.get_cmap(palette)
+        for x in [col_new, col_annotation]:  # add cluster color maps
+            if x is not None:
+                cmap = plt.get_cmap(palette)
+                adata.uns[f"{x}_colors"] = [to_hex(x) for x in cmap(
+                    np.linspace(0, 1, len(adata.obs[x].unique())))]  # colors
         sc.pl.umap(adata, color=col_annotation if col_annotation else col_new)
         if copy is False:
             self.rna.obs.loc[:, col_new] = adata.obs[col_new]
+            if col_annotation:
+                self.rna.obs.loc[
+                    :, col_annotation] = adata.obs[col_annotation]
+            for x in [col_new, col_annotation]:  # add cluster color maps
+                if x is not None:
+                    self.rna.uns[f"{x}_colors"] = adata.uns[f"{x}_colors"]
         return adata
 
     def annotate_clusters(self, model, mode="best match", layer="log1p",
                           p_threshold=0.5, over_clustering=None,
-                          min_proportion=0, file_annotation_guide=None,
-                          copy=False, col_annotation="Annotation",
+                          col_annotation="Annotation",  # not for CellTypist
+                          min_proportion=0, copy=False,
                           plot_markers=False, out_file=None, **kwargs):
         """
         Use CellTypist or a marker dictionary file to annotate clusters.
@@ -624,8 +645,11 @@ class Omics(object):
         the second as annotations (i.e., mapping the markers
         to cell types).
         """
-        flavor = "celltypist" if model in list(
-            celltypist.models.models_description().model) else "annotations"
+        if isinstance(model, pd.DataFrame) or model not in list(
+                celltypist.models.models_description().model):
+            flavor = "annotations"
+        else:
+            flavor = "celltypist"
         adata, re_ix = self.rna.copy(), False
         re_ix = self._assay is not None and ":" in adata.var.index.values[0]
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
@@ -646,9 +670,11 @@ class Omics(object):
             c_t = kwargs.pop("col_cell_type", m_c)
             if col_annotation in adata.obs:
                 adata.obs = adata.obs.drop(col_annotation, axis=1)
-            sc.tl.rank_genes_groups(adata, c_t, use_raw=False)  # rank
+            key_add = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")
+            sc.tl.rank_genes_groups(adata, c_t, use_raw=False,
+                                    key_added=key_add)  # rank DEGs
             _, res = cr.ax.annotate_by_markers(
-                adata, model, col_cell_type=c_t,
+                adata, model, col_cell_type=c_t, key_added=key_add,
                 col_new=col_annotation, **kwargs)  # annotate
             col_ann = [col_annotation]  # to write results (optional)
             print(res)

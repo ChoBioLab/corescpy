@@ -89,13 +89,18 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
               legend_loc="on data", genes=None, col_gene_symbols=None,
               cell_types_circle=None,  # create plot with cell types circled
               figsize=30,  # scale of shorter axis (long plots proportional)
+              size=None,  # point size
               **kwargs):
     """Make UMAP-based plots."""
     figs = {}
     if "cmap" in kwargs:  # in case use wrong form of argument
         kwargs["color_map"] = kwargs.pop("cmap")
+    if size is None:  # calculate point size ~ # cells & figure size
+        wide = 10 if figsize is None else figsize if isinstance(figsize,
+            (int, float)) else figsize[0]  # figure width
+        size = (wide / 10)  * 120000 / adata.obs.shape[0]
     kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE,
-              "frameon": False, "vcenter": 0, **kwargs}
+              "frameon": False, "vcenter": 0, "size": size, **kwargs}
     if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
         print("\n<<< PLOTTING UMAP >>>")
         try:
