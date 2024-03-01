@@ -9,11 +9,14 @@ import traceback
 import json
 from itertools import permutations
 from warnings import warn
+from copy import deepcopy
+from dask_image.imread import imread
 import matplotlib
 import matplotlib.pyplot as plt
 import squidpy as sq
 import spatialdata
 import spatialdata_plot as sdp
+import spatialdata_io as sdio
 import liana
 # from liana.method import MistyData, genericMistyData, lrMistyData
 # import decoupler as dc
@@ -48,8 +51,8 @@ class Spatial(cr.Omics):
                         (Scanpy/AnnData/Muon-compatible),
                     - an AnnData or MuData object (e.g., already
                         loaded with Scanpy or Muon), or
-                    - a dictionary containing keyword arguments to
-                        pass to `corescpy.pp.combine_matrix_protospacer`
+                    - a dictionary containing keyword arguments to pass
+                        to `corescpy.pp.combine_matrix_protospacer`
                         (in order to load information about
                         perturbations from other file(s); see
                         function documentation), or
@@ -184,7 +187,7 @@ class Spatial(cr.Omics):
             print("This may be normal if you've filtered the data.")
         else:
             print(f"\n\n{self._library_id}: All expected genes present!")
-        return expect
+        return expect, panel
 
     def read_parquet(self, directory=None, kind="transcripts",
                      library_id=None):
@@ -214,6 +217,50 @@ class Spatial(cr.Omics):
             cr.pp.describe_tiff(fff)  # describe
             if plot is True:
                 cr.pl.plot_tiff(fff)  # plot
+
+    def add_image(self, file, name=None, file_align=None,
+                  dim="2d", **kwargs):
+        """Add image (optionally, align from Xenium alignment file).
+
+        Args:
+            name (str): Desired name of image (used as key in certain
+                `.adata`/`.rna` object attributes).
+            file (str or PathLike, optional): Path to iamge or
+                MultiscaleSpatialImage object. Defaults to None
+                (will use base path if `file` is provided as a path).
+            file_align (str, dict, or PathLike, optional): Path to
+                Xenium image alignment file if image is not aligned.
+                Provide as dictionary with the file path keyed by
+                'file_align' (for the path to the image alignment file)
+                and 'imread_kwargs' and 'image_models_kwargs' for
+                arguments to pass to the eponymous arguments in the
+                `spatialdata_io.xenium_aligned_image()` function.
+                Defaults to None.
+            dim (str, optional): "2d" or "3d" image. nDefaults to "2d".
+            kwargs (dict, optional): Keyword arguments to pass to
+                `spatialdata.SpatialData.add_image()`.
+
+        Raises:
+            NotImplementedError: Image alignment for Visium data.
+        """
+        if name is None:  # if image name not provided, use path as name
+            if not isinstance(file, (str, os.PathLike)):
+                raise ValueError("Please provide a name for image if `file` "
+                                 "is not provided as a file path.")
+            name = os.path.splitext(os.path.basename(file))[0]  # name=path
+        if file_align is not None:  # if image alignment file exists
+            if self._kind.lower() == "visium":  # if Visium
+                raise NotImplementedError("Visium alignment not supported.")
+            akw = deepcopy(file_align) if isinstance(file_align, dict) else {}
+            if isinstance(file_align, dict):  # if keyword arguments provided
+                file_align = akw.pop("file_align")
+            img = sdio.xenium_aligned_image(file, file_align, **akw)
+        else:  # if image already aligned
+            data = np.array(file) if isinstance(file, (
+                np.ndarray, pd.DataFrame)) else imread(file)  # image -> array
+            img = spatialdata.models.Image3DModel.parse(data) if (
+                dim == "3d") else spatialdata.models.Image2DModel.parse(data)
+        self.adata.add_image(name, img, **kwargs)
 
     def show(self, kinds="all", elements="all", color=None, layer=None,
              palette=None, figsize=None, library_id=None, **kwargs):
@@ -328,7 +375,9 @@ class Spatial(cr.Omics):
                     fig = sq.pl.spatial_segment(ann, seg, **kws) if (
                         seg) else sq.pl.spatial_scatter(ann, **kws)
                 except Exception:  # remove Leiden colors if => Squidpy bug
-                    _ = ann.uns.pop("leiden_colors", None)
+                    for c in color:
+                        _ = ann.uns.pop(f"{c}_colors", None)
+                    print(ann)
                     fig = sq.pl.spatial_segment(ann, seg, **kws) if (
                         seg) else sq.pl.spatial_scatter(ann, **kws)
         except Exception:
@@ -476,7 +525,7 @@ class Spatial(cr.Omics):
                         copy=False, **kwargs):
         """Cluster using spatial data (per SC Best Practices)."""
         adata = self.get_layer(layer=layer, inplace=False)
-        key_added = kwargs.pop("key_added", "squidpy_domains")
+        key_added = kwargs.pop("key_added", "spatial_domains")
         wspace = kwargs.pop("wspace", 1)
         if isinstance(adata, spatialdata.SpatialData):
             adata = adata.table.copy()  # AnnData from SpatialData object
@@ -491,6 +540,7 @@ class Spatial(cr.Omics):
         fig = plt.gcf()
         if copy is False:
             self.rna = adata
+            self._columns.update({"spatial_domains": key_added})
         return adata, fig
 
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
