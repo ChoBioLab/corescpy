@@ -567,11 +567,14 @@ class Omics(object):
         return adata
 
     def subcluster(self, key_cell_type=None, col_cell_type=None,
-                   col_new=None, method_cluster="leiden", col_annotation=None,
-                   copy=False, kws_annotation=None, **kwargs):
+                   col_annotation=None, layer="scaled", copy=False,
+                   kws_annotation=None, **kwargs):
         """Perform sub-clustering."""
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
+        col_cell_type, col_new = col_annotation if isinstance(
+            col_cell_type, (list, tuple, np.ndarray)) else [
+                col_cell_type, col_cell_type + "_subcluster"]  # original, new
         col_annotation, col_ann_old = col_annotation if isinstance(
             col_annotation, (list, tuple, np.ndarray)) else [
                 col_annotation, None]  # old annotation column to replace?
@@ -600,12 +603,8 @@ class Omics(object):
             i_x = adata.obs.loc[subs].index
             if not any(subs):
                 continue
-            ann = self.cluster(subset=subs, copy=True,
-                               method_cluster=method_cluster, **kwargs)
-            ann.obs.loc[:, col_new] = ann.obs[method_cluster].apply(
-                lambda x: f"s{x}")  # prefix to Leiden clusters
-            adata.obs.loc[i_x, col_new] = ann.obs.loc[
-                i_x, method_cluster].astype(str)  # store sub-clusters
+            ann = self.cluster(copy=True, key_added=col_new, layer=layer,
+                               restrict_to=(col_cell_type, clus), **kwargs)
             if kws_annotation is not None:  # annotate?
                 _, res = cr.ax.annotate_by_markers(
                     ann, model, col_cell_type=col_new, key=key_add,

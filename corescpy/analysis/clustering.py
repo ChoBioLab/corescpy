@@ -7,14 +7,13 @@ Preprocessing CRISPR experiment data.
 @author: E. N. Aslinger
 """
 
-import warnings
+from warnings import warn
 import os
 import re
 from copy import deepcopy
+import seaborn as sns
 import celltypist
 from anndata import AnnData
-import seaborn as sns
-import matplotlib.pyplot as plt
 import scanpy as sc
 # import rapids_singlecell as rsc
 import pandas as pd
@@ -27,6 +26,7 @@ def cluster(adata, layer=None, method_cluster="leiden",
             resolution=1, n_comps=None, use_highly_variable=True,
             kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None,
             genes_subset=None, seed=0, use_gpu=False,
+            restrict_to=None,  # for subclustering (column, keys in column)
             plot=True, colors=None, **kwargs):
     """
     Perform clustering and visualize results.
@@ -45,34 +45,36 @@ def cluster(adata, layer=None, method_cluster="leiden",
                 (variance expalined by PCA components).
 
     """
-    figs = {}  # for figures
     ann = adata.copy()
+    if use_gpu is True:
+        raise NotImplementedError("GPU-accelerated UMAP not yet implemented.")
+    # pkg = rsc if use_gpu is True else sc  # Scanpy or Rapids?
+    pkg = sc  # Scanpy, because Rapids not yet implemented
+    if method_cluster not in ["leiden", "louvain"]:
+        raise ValueError("`method_cluster` must be 'leiden' or 'louvain'.")
     if layer:
         print(f"\n\n*** Using layer: {layer}.\n\n")
         ann.X = adata.layers[layer].copy()  # set layer
     if ann.var.index.values[0] not in ann.var_names:
         raise ValueError("`adata.var_names` must be index of `.var`.")
-    if isinstance(kws_pca, dict):
-        for k, x in zip(["n_comps", "use_highly_variable"],
-                        [n_comps, use_highly_variable]):
-            if k in kws_pca and x != kws_pca[k]:
-                raise ValueError(f"Can't use `{k}` & `kws_pca['{k}']`.")
-        kws_pca.update(dict(use_highly_variable=use_highly_variable,
-                            n_comps=n_comps))
-    elif kws_pca is not False:
-        kws_pca = dict(use_highly_variable=use_highly_variable,
-                       n_comps=n_comps)
-    else:
-        print(f"\n\n`kws_pca`=False. Using existing if present:\n\n{ann}\n\n")
-    if kws_pca is not False:
-        kws_pca["random_state"] = seed  # seed to PCA arguments
+    kws_pca_d = dict(use_highly_variable=use_highly_variable, n_comps=n_comps,
+                     random_state=seed)  # start with PCA-specific arguments
+    if kws_pca is not False:  # use or merge with main PCA keywords
+        if isinstance(kws_pca, dict):  # if specified additional PCA arguments
+            for k, x in zip(["n_comps", "use_highly_variable"],
+                            [n_comps, use_highly_variable]):
+                if k in kws_pca and x != kws_pca[k]:
+                    raise ValueError(f"Can't use `{k}` & `kws_pca['{k}']`.")
+        kws_pca = cr.tl.merge(kws_pca_d, {} if kws_pca is True else kws_pca)
         if use_highly_variable is True and "highly_variable" not in ann.var:
-            warnings.warn("`use_highly_variable`=True & 'highly_variable'"
-                          " not in `.var`. Setting to False.")
+            warn("'highly_variable' not in `.var`. Setting to False.")
             kws_pca["use_highly_variable"] = False
+    else:  # if kws_pca = False, use existing (e.g., for integrated samples)
+        print(f"\n\n`kws_pca`=False. Using existing if present:\n\n{ann}\n\n")
     kws_neighbors, kws_umap, kws_cluster = [cr.tl.merge({
         "random_state": seed}, x) for x in [
             kws_neighbors, kws_umap, kws_cluster]]  # seed->arguments; None={}
+    kws_cluster["restrict_to"] = restrict_to  # subclustering?
     kws_neighbors["n_pcs"] = n_comps  # components for neighbors = for PCA
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")
@@ -94,28 +96,13 @@ def cluster(adata, layer=None, method_cluster="leiden",
 
     # UMAP Embedding
     print(f"\n\n<<< EMBEDDING UMAP >>>\n{kws_umap}\n")
-    if use_gpu is True:
-        raise NotImplementedError("GPU-accelerated UMAP not yet implemented.")
-        # rsc.tl.umap(ann, **kws_umap)  # UMAP with rapids (GPU-accelerated)
-    else:
-        sc.tl.umap(ann, **kws_umap)  # vanilla Scanpy UMAP
+    # pkg = sc if use_gpu is False else rsc  # package
+    pkg.tl.umap(ann, **kws_umap)  # UMAP
 
     # Clustering with Leiden or Louvain
     print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
-    if method_cluster == "leiden":  # Leiden clustering
-        if use_gpu is True:
-            raise NotImplementedError("GPU-acceleration not yet supported.")
-            # rsc.tl.leiden(ann, resolution=resolution, **kws_cluster)
-        else:
-            sc.tl.leiden(ann, resolution=resolution, **kws_cluster)
-    elif method_cluster == "louvain":  # Louvain clustering
-        if use_gpu is True:
-            raise NotImplementedError("GPU-acceleration not yet supported.")
-            # rsc.tl.louvain(ann, resolution=resolution, **kws_cluster)
-        else:
-            sc.tl.louvain(ann, resolution=resolution, **kws_cluster)
-    else:
-        raise ValueError("method_cluster must be 'leiden' or 'louvain'")
+    f_x = pkg.tl.leiden if method_cluster == "leiden" else pkg.tl.louvain
+    f_x(ann, resolution=resolution, **kws_cluster)  # clustering
 
     # PAGA Correction (Optional)
     if paga is True:  # recompute with PAGA (optional)
@@ -123,32 +110,12 @@ def cluster(adata, layer=None, method_cluster="leiden",
         sc.tl.paga(ann, groups=method_cluster)
         if plot is True:
             sc.pl.paga(ann, plot=False)  # plot=True for coarse-grained graph
-        if use_gpu is True:  # GPU-accelerated UMAP
-            raise NotImplementedError("Not yet implemented: GPU UMAP.")
-            # rsc.tl.umap(ann, **kws_umap, init_pos="paga")  # UMAP with PAGA
-        else:  # Vanilla UMAP
-            sc.tl.umap(ann, **kws_umap, init_pos="paga")  # UMAP with PAGA
+        pkg.tl.umap(ann, **kws_umap, init_pos="paga")  # UMAP with PAGA
 
     # Plotting
-    print("\n\n<<< CREATING PLOTS >>>")
-    if plot is True:
-        try:  # scree-like plot for PCA components
-            sc.pl.pca_variance_ratio(ann, log=True)
-            figs["pca_var_ratio"] = plt.gcf()
-        except Exception as err:
-            warnings.warn(f"Failed to plot PCA variance ratio: {err}")
-        try:  # plot UMAP by clusters
-            figs["umap"] = sc.pl.umap(ann, color=method_cluster, title="",
-                                      frameon=False, legend_loc="on data")
-        except Exception as err:
-            warnings.warn(f"Failed to plot UMAP: {err}")
-        if colors is not None:  # plot UMAP + extra color coding subplots
-            try:
-                figs["umap_extra"] = sc.pl.umap(ann, color=list(pd.unique(
-                    [method_cluster] + list(colors))), wspace=(
-                        len(colors) + 1) * 0.075)  # UMAP extra panels
-            except Exception as err:
-                warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
+    print(f"\n\n<<< {'CREATING' if plot is True else 'SKIPPING'} PLOTS >>>")
+    figs = cr.pl.plot_clustering(ann, method_cluster, colors=colors) if (
+        plot is True) else {}  # plot, or just empty dictionary for `figs`
     return ann, figs
 
 
@@ -256,7 +223,7 @@ def perform_celltypist(adata, model, col_cell_type=None,
                     figs["markers"][y][f"markers_{x}"] = sc.pl.violin(
                         ann, markers, groupby=col_cell_type, rotation=90)
                 except Exception as err:
-                    warnings.warn(f"{err}\n\n\nError in {y}={x} marker plot!")
+                    warn(f"{err}\n\n\nError in {y}={x} marker plot!")
                     figs["markers"][y][f"markers_{x}"] = err
 
     # Plot Label Transfer (Majority Voting vs. Predicted Labels)
