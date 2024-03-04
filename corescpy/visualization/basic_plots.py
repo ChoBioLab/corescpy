@@ -19,6 +19,30 @@ COLOR_PALETTE = "tab20"
 COLOR_MAP = "magma"
 
 
+def plot_clustering(adata, method_cluster="leiden", legend_loc="on data",
+                    colors=None, title="", **kwargs):
+    """Plot PCA & clustering results."""
+    figs, kws = {}, {"frameon": False, "legend_loc": legend_loc,
+                     "title": title, **kwargs}
+    try:  # scree-like plot for PCA components
+        sc.pl.pca_variance_ratio(adata, log=True)
+        figs["pca_var_ratio"] = plt.gcf()
+    except Exception as err:
+        warnings.warn(f"Failed to plot PCA variance ratio: {err}")
+    try:  # plot UMAP by clusters
+        figs["umap"] = sc.pl.umap(adata, color=method_cluster, **kws)
+    except Exception as err:
+        warnings.warn(f"Failed to plot UMAP: {err}")
+    if colors is not None:  # plot UMAP + extra color coding subplots
+        try:
+            figs["umap_extra"] = sc.pl.umap(adata, color=list(pd.unique(
+                [method_cluster] + list(colors))), wspace=(
+                    len(colors) + 1) * 0.075, **kws)  # UMAP extra panels
+        except Exception as err:
+            warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
+    return figs
+
+
 def plot_by_cluster(adata, genes, method_cluster=None, plot_types="all"):
     """Make plots facetted/split by cell type/cluster."""
     if not isinstance(plot_types, str):
@@ -96,9 +120,9 @@ def plot_umap(adata, col_cell_type="leiden", title="UMAP", color=None,
     if "cmap" in kwargs:  # in case use wrong form of argument
         kwargs["color_map"] = kwargs.pop("cmap")
     if size is None:  # calculate point size ~ # cells & figure size
-        wide = 10 if figsize is None else figsize if isinstance(figsize,
-            (int, float)) else figsize[0]  # figure width
-        size = (wide / 10)  * 120000 / adata.obs.shape[0]
+        wide = 10 if figsize is None else figsize if isinstance(figsize, (
+            int, float)) else figsize[0]  # figure width
+        size = (wide / 10) * 120000 / adata.obs.shape[0]
     kwargs = {"color_map": COLOR_MAP, "palette": COLOR_PALETTE,
               "frameon": False, "vcenter": 0, "size": size, **kwargs}
     if "X_umap" in adata.obsm or col_cell_type in adata.obs.columns:
