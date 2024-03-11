@@ -17,12 +17,15 @@ import os
 # import sys
 import re
 # import corescpy as cr
+import scanpy as sc
 import squidpy as sq
 # import scanpy as sc
+import spatialdata
 import spatialdata_io as sdio
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
+import tangram as tg
 import pandas as pd
 import numpy as np
 
@@ -123,6 +126,89 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         if col_sample_id not in adata.table.obs:
             adata.table.obs.loc[:, col_sample_id] = library_id
         return adata
+
+
+def integrate_spatial(sdata, adata_sc, col_cell_type="leiden", markers=100,
+                      gene_to_lowercase=False, num_epochs=500, device="cpu",
+                      density_prior="rna_count_based", mode="cells",
+                      plot=True, plot_genes=None, **kwargs):
+    """
+    Integrate scRNA-seq with spatial data (mode=').
+
+    Args:
+        sdata (_type_): _description_
+        adata_sc (_type_): _description_
+        col_cell_type (str, optional): Either a string indicating the
+            cell type column shared between spatial and scRNA-seq,
+            or a list [scRNA-seq, spatial cell type column].
+            Defaults to "leiden".
+        markers (int or list, optional): Either a number of random
+            genes to use for training mapping, or a list of genes.
+            Defaults to 1000.
+        gene_to_lowercase (bool, optional): Turn genes to all lowercase
+            to reconcile capitalization differences? Defaults to False.
+        num_epochs (int, optional): Number of epochs for training.
+            Defaults to 500.
+        device (str, optional): Use "cpu" or "gpu" (or other specified
+            device; "gpu" is automatically changed to "cuda:0").
+            Defaults to "cpu".
+        density_prior (str, optional): _description_.
+            Defaults to "rna_count_based".
+        mode (str, optional): Map by "cells" or "clusters"?
+            Defaults to "cells".
+        plot (bool, optional): Plot? Defaults to True.
+        plot_genes (_type_, optional): Genes of interest to focus on
+            for certain plots. Defaults to None.
+        kwargs (Any, optional): Additional keyword arguments to pass
+            to `tangram.map_cells_to_space()`.
+
+    Returns:
+        tuple: New spatial data, old spatial data, old scRNA-seq data,
+            mapping result object, comparison dataframe
+    """
+    if device == "gpu":
+        device = "cuda:0"
+    sdata = (sdata.table if isinstance(
+        sdata, spatialdata.SpatialData) else sdata).copy()  # spatial anndata
+    col_cell_type, col_cell_type_spatial = [col_cell_type, col_cell_type] if (
+        isinstance(col_cell_type, str)) else col_cell_type
+    if plot is True:
+        fig, axs = plt.subplots(1, 2, figsize=(20, 5))
+        sc.pl.spatial(
+            sdata, color=col_cell_type_spatial, alpha=0.7, frameon=False, show=False, ax=axs[0]
+        )
+        sc.pl.umap(
+            adata_sc, color="cell_subclass", size=10, frameon=False, show=False, ax=axs[1]
+        )
+        plt.tight_layout()
+    key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}" if (
+        "rank_genes_groups" in sdata.uns) else "rank_genes_groups")
+    sc.tl.rank_genes_groups(adata_sc, groupby=col_cell_type, use_raw=False,
+                            key_added="rank_genes_groups")
+    if isinstance(markers, (int, float)):
+        # if markers = # of genes to select randomly instead of specified list
+        markers = list(pd.Series(np.unique(pd.DataFrame(adata_sc.uns[key][
+            "names"]).melt().value.values)).sample(int(markers)))  # choose
+    tg.pp_adatas(sdata, adata_sc, genes=markers,
+                 gene_to_lowercase=gene_to_lowercase)  # preprocess
+    if mode == "clusters":  # if mapping ~ clusters rather than cells...
+        kwargs["cluster_label"] = col_cell_type  # ...must give label column
+    ad_map = tg.map_cells_to_space(
+        adata_sc, sdata, mode=mode, device=device, num_epochs=num_epochs,
+        density_prior=density_prior, **kwargs)  # map cells onto space
+    tg.project_cell_annotations(
+        ad_map, sdata, annotation=col_cell_type)  # project clusters on space
+    sdata_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
+    df_compare = tg.compare_spatial_geneexp(sdata_new, sdata, adata_sc)
+    if plot is True:  # plotting
+        tg.plot_cell_annotation_sc(sdata, list(pd.unique(adata_sc.obs[
+            col_cell_type])), perc=0.02)  # annotations spatial plot
+        tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train scores
+        tg.plot_auc(df_compare)  # area under the curve
+        if plot_genes:
+            tg.plot_genes_sc(plot_genes, adata_measured=sdata,
+                             adata_predicted=sdata_new, perc=0.02)
+    return sdata_new, sdata, adata_sc, ad_map, df_compare
 
 
 def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):

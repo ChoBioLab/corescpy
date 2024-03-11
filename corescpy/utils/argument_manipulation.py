@@ -19,7 +19,7 @@ def to_list(arg, unique=False):
     arg = [arg] if isinstance(arg, str) else [arg[k] for k in arg] if (
         isinstance(arg, dict)) else list(arg)
     if unique is True:
-        arg = pd.unique(arg)
+        arg = list(pd.unique(arg))
     return arg
 
 

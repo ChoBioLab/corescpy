@@ -526,18 +526,13 @@ class Spatial(cr.Omics):
         """Cluster using spatial data (per SC Best Practices)."""
         adata = self.get_layer(layer=layer, inplace=False)
         key_added = kwargs.pop("key_added", "spatial_domains")
-        wspace = kwargs.pop("wspace", 1)
-        if isinstance(adata, spatialdata.SpatialData):
-            adata = adata.table.copy()  # AnnData from SpatialData object
-        nn_graph_genes = adata.obsp["connectivities"]
+        graph_g = adata.obsp["connectivities"]  # gene connectivity
         if "spatial_connectivities" not in adata.obsp:
-            sq.gr.spatial_neighbors(adata)
-        nn_graph_space = adata.obsp["spatial_connectivities"]
-        joint_graph = (1 - alpha) * nn_graph_genes + alpha * nn_graph_space
+            sq.gr.spatial_neighbors(adata)  # calculate neighborhood if needed
+        graph_s = adata.obsp["spatial_connectivities"]  # spatial connectivity
+        joint_graph = (1 - alpha) * graph_g + alpha * graph_s  # gene-spatial
         sc.tl.leiden(adata, adjacency=joint_graph, key_added=key_added)  # run
-        self.plot_spatial(color=["cluster", key_added],
-                          wspace=wspace, **kwargs)  # plot
-        fig = plt.gcf()
+        fig = self.plot_spatial(color=key_added, **kwargs)  # plot
         if copy is False:
             self.rna = adata
             self._columns.update({"spatial_domains": key_added})
