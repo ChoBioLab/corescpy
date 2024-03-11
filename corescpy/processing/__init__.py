@@ -4,8 +4,7 @@ from .preprocessing import (create_object,
                             process_data,
                             check_normalization,
                             z_normalize_by_reference,
-                            perform_qc,
-                            filter_qc)
+                            perform_qc, filter_qc)
 
 from .guide_rna import process_guide_rna
 
