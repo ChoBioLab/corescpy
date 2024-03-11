@@ -21,7 +21,7 @@ import numpy as np
 import corescpy as cr
 
 
-def cluster(adata, layer=None, method_cluster="leiden",
+def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
             paga=False,  # if issues with disconnected clusters, etc.
             resolution=1, n_comps=None, use_highly_variable=True,
             kws_pca=None, kws_neighbors=None, kws_umap=None, kws_cluster=None,
@@ -52,6 +52,8 @@ def cluster(adata, layer=None, method_cluster="leiden",
     pkg = sc  # Scanpy, because Rapids not yet implemented
     if method_cluster not in ["leiden", "louvain"]:
         raise ValueError("`method_cluster` must be 'leiden' or 'louvain'.")
+    if key_added is None:
+        key_added = method_cluster
     if layer:
         print(f"\n\n*** Using layer: {layer}.\n\n")
         ann.X = adata.layers[layer].copy()  # set layer
@@ -75,6 +77,7 @@ def cluster(adata, layer=None, method_cluster="leiden",
         "random_state": seed}, x) for x in [
             kws_neighbors, kws_umap, kws_cluster]]  # seed->arguments; None={}
     kws_cluster["restrict_to"] = restrict_to  # subclustering?
+    kws_cluster["key_added"] = key_added  # column in which to store clusters
     kws_neighbors["n_pcs"] = n_comps  # components for neighbors = for PCA
     if kwargs:
         print(f"\n\nUn-used Keyword Arguments: {kwargs}")

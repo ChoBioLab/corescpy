@@ -8,6 +8,7 @@ Visualizing CRISPR experiment analysis results.
 """
 
 import scanpy as sc
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 # import cowplot
 import warnings
@@ -22,22 +23,27 @@ COLOR_MAP = "magma"
 def plot_clustering(adata, method_cluster="leiden", legend_loc="on data",
                     colors=None, title="", **kwargs):
     """Plot PCA & clustering results."""
-    figs, kws = {}, {"frameon": False, "legend_loc": legend_loc,
+    figsize = kwargs.pop("figsize", (15, 15))
+    size = kwargs.pop("size", (figsize[0] / 10) * 120000 / adata.obs.shape[0])
+    figs, kws = {}, {"frameon": False, "legend_loc": legend_loc, "size": size,
                      "title": title, **kwargs}
     try:  # scree-like plot for PCA components
-        sc.pl.pca_variance_ratio(adata, log=True)
-        figs["pca_var_ratio"] = plt.gcf()
+        with mpl.rc_context({"figsize": (5, 5)}):
+            sc.pl.pca_variance_ratio(adata, log=True)
+            figs["pca_var_ratio"] = plt.gcf()
     except Exception as err:
         warnings.warn(f"Failed to plot PCA variance ratio: {err}")
     try:  # plot UMAP by clusters
-        figs["umap"] = sc.pl.umap(adata, color=method_cluster, **kws)
+        with mpl.rc_context({"figsize": figsize}):
+            figs["umap"] = sc.pl.umap(adata, color=method_cluster, **kws)
     except Exception as err:
         warnings.warn(f"Failed to plot UMAP: {err}")
     if colors is not None:  # plot UMAP + extra color coding subplots
         try:
-            figs["umap_extra"] = sc.pl.umap(adata, color=list(pd.unique(
-                [method_cluster] + list(colors))), wspace=(
-                    len(colors) + 1) * 0.075, **kws)  # UMAP extra panels
+            with mpl.rc_context({"figsize": figsize}):
+                figs["umap_extra"] = sc.pl.umap(adata, color=list(pd.unique(
+                    [method_cluster] + list(colors))), wspace=(
+                        len(colors) + 1) * 0.075, **kws)  # UMAP extra panels
         except Exception as err:
             warnings.warn(f"Failed to plot UMAP with extra colors: {err}")
     return figs

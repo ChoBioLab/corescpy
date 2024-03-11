@@ -16,7 +16,6 @@ from copy import deepcopy
 import scanpy as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib.colors import to_hex
 import pertpy as pt
 # import blitzgsea as blitz
 import liana
@@ -489,7 +488,6 @@ class Omics(object):
             adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
         if copy is False:
             self.rna = adata
-            self.figures["preprocessing"] = figs
             # if assay_protein is not None:  # if includes protein assay
             #     self.adata[assay_protein] = ad_p
         return adata, figs
@@ -527,109 +525,61 @@ class Omics(object):
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,
                 kws_umap=None, kws_cluster=None, genes_subset=None,
-                kws_celltypist=None, colors=None, copy=False,
-                out_file=None, subset=None, **kwargs):
+                kws_celltypist=None, colors=None, copy=False, use_gpu=False,
+                out_file=None, **kwargs):
         """Perform dimensionality reduction and create UMAP."""
-        if subset is not None:
-            copy = True  # copy must be true if subsetting
-        if assay is None:
-            assay = self._assay
+        key_added = kwargs.pop("key_added", method_cluster)
         if self._integrated is True and kws_pca is not False:
             warn("Setting kws_pca to False to use Harmony-adjusted PCA!")
             kws_pca = False  # so will use Harmony-adjusted PCA
-        if self._columns["col_sample_id"] or self._columns["col_batch"]:
-            if colors is None:
-                colors = []
-            for x in ["col_sample_id", "col_batch", "col_subject"]:
-                if self._columns[x]:  # add UMAPs ~ ID
-                    colors += [self._columns[x]]
+        cids = [self._columns[x] for x in [
+            "col_sample_id", "col_batch", "col_subject"] if self._columns[x]]
+        colors = list(pd.unique(cids + (cr.tl.to_list(colors) if colors else [
+            ]))) if colors or len(cids) > 0 else None  # UMAPs ~ ID(s)?
         ann = self.get_layer(layer=layer, inplace=False)
-        if subset is not None:
-            ann = ann[subset]
-        if copy is False:
-            self.info["methods"]["clustering"] = method_cluster
-        ann.obs.loc[:, "method_cluster"] = method_cluster
         kws = dict(
             method_cluster=method_cluster, kws_pca=kws_pca, kws_umap=kws_umap,
             kws_neighbors=kws_neighbors, kws_cluster=kws_cluster,
-            resolution=resolution, genes_subset=genes_subset)  # arguments
-        adata, figs_cl = cr.ax.cluster(
-            ann, assay=assay, **self._columns, **self._keys, colors=colors,
-            kws_celltypist=kws_celltypist, **kws, **kwargs)  # cluster data
+            resolution=resolution, use_gpu=use_gpu,
+            genes_subset=genes_subset, key_added=key_added)  # arguments
+        ann, figs = cr.ax.cluster(ann, assay=assay, colors=colors,
+                                  **kws, **kwargs)  # clustering
         for x in kws.items():
-            adata.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
+            ann.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
         if copy is False:
-            self.figures.update({"clustering": figs_cl})
-            self.rna = adata
-            return figs_cl
+            self.info["methods"]["clustering"] = method_cluster
+            self.rna = ann
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension
-        return adata
+        return ann
 
-    def subcluster(self, key_cell_type=None, col_cell_type=None,
-                   col_annotation=None, layer="scaled", copy=False,
-                   kws_annotation=None, **kwargs):
-        """Perform sub-clustering."""
-        if col_cell_type is None:
-            col_cell_type = self._columns["col_cell_type"]
-        col_cell_type, col_new = col_annotation if isinstance(
-            col_cell_type, (list, tuple, np.ndarray)) else [
-                col_cell_type, col_cell_type + "_subcluster"]  # original, new
-        col_annotation, col_ann_old = col_annotation if isinstance(
-            col_annotation, (list, tuple, np.ndarray)) else [
-                col_annotation, None]  # old annotation column to replace?
-        palette = kwargs.pop("palette", "Dark2")
-        if kws_annotation is not None:  # annotate?
-            if col_annotation is None:
-                col_annotation = "Annotation_subcluster"
-            if isinstance(kws_annotation, dict):  # if provided arguments
-                model = kws_annotation.pop("model")  # extract model argument
-            else:  # if just provided file, model name, or dataframe
-                model, kws_annotation = kws_annotation, {}  # model, defaults
-            key_add = kws_annotation.pop(
-                "key_added", f"rank_genes_groups_{col_annotation}")
-        adata = self.rna.copy()  # full object
-        if col_new is None:
-            col_new = col_cell_type + "_subcluster"
-        adata.obs.loc[:, col_new] = adata.obs[col_cell_type].astype(str)
-        if key_cell_type is None:  # subcluster all if unspecified
-            key_cell_type = list(self.rna.obs[col_cell_type].unique())
-        if col_ann_old:  # if pre-existing annotations
-            adata.obs.loc[:, col_annotation] = adata.obs[
-                col_ann_old].astype(str)  # start with original annotations
-        for x in key_cell_type:  # iterate cell types to sub-cluster
-            clus = cr.tl.to_list(x)  # in case collapse multiple cell types
-            subs = adata.obs[col_cell_type].isin(clus)  # subset mask
-            i_x = adata.obs.loc[subs].index
-            if not any(subs):
-                continue
-            ann = self.cluster(copy=True, key_added=col_new, layer=layer,
-                               restrict_to=(col_cell_type, clus), **kwargs)
-            if kws_annotation is not None:  # annotate?
-                _, res = cr.ax.annotate_by_markers(
-                    ann, model, col_cell_type=col_new, key=key_add,
-                    col_annotation=col_annotation,
-                    col_new=col_annotation, **kws_annotation)  # annotate
-                annots = dict(zip(res.index, list(res[col_annotation])))
-                print(annots)
-                adata.obs.loc[i_x, col_annotation] = ann.obs.loc[
-                    i_x, col_new].replace(annots).astype(str)
-            cmap = plt.get_cmap(palette)
-        for x in [col_new, col_annotation]:  # add cluster color maps
-            if x is not None:
-                cmap = plt.get_cmap(palette)
-                adata.uns[f"{x}_colors"] = [to_hex(x) for x in cmap(
-                    np.linspace(0, 1, len(adata.obs[x].unique())))]  # colors
-        sc.pl.umap(adata, color=col_annotation if col_annotation else col_new)
+    def subcluster(self, restrict_to=None, layer="scaled", resolution=1,
+                   method_cluster="leiden", key_added=None,
+                   use_gpu=False, copy=False, **kwargs):
+        """Perform subclustering."""
+        # pkg = rsc.tl if use_gpu is True else sc.tl  # Scanpy or Rapids?
+        ann = self.get_layer(layer=layer, inplace=False)
+        # pkg = sc.tl if use_gpu is False else rsc.tl
+        pkg = sc.tl  # Scanpy, because Rapids not yet implemented
+        f_x = pkg.leiden if method_cluster == "leiden" else pkg.louvain
+        col_sub, key_sub = restrict_to  # unpack cell type column, keys
+        if key_added is None:
+            key_added = col_sub + "_sub"
+        ann.obs.loc[:, key_added] = ann.obs[col_sub].copy()
+        if key_sub is None:  # subcluster all if unspecified
+            key_sub = list(ann.obs[col_sub].unique())
+        if not isinstance(key_sub, (np.ndarray, list, tuple)) or (
+                not isinstance(key_sub[0], (np.ndarray, list, tuple))):
+            key_sub = [[key_sub]] if isinstance(key_sub, str) else [
+                key_sub]  # in case only subclustering one
+        for x in key_sub:
+            kwss = cr.tl.merge(kwargs, {
+                "key_added": key_added, "restrict_to": (key_added, x)})
+            f_x(ann, resolution=resolution, **kwss)  # sub-cluster
+            cr.pl.plot_clustering(ann, key_added, title=", ".join(x))  # plot
         if copy is False:
-            self.rna.obs.loc[:, col_new] = adata.obs[col_new]
-            if col_annotation:
-                self.rna.obs.loc[
-                    :, col_annotation] = adata.obs[col_annotation]
-            for x in [col_new, col_annotation]:  # add cluster color maps
-                if x is not None:
-                    self.rna.uns[f"{x}_colors"] = adata.uns[f"{x}_colors"]
-        return adata
+            self.rna = ann
+        return ann
 
     def annotate_clusters(self, model, mode="best match", layer="log1p",
                           p_threshold=0.5, over_clustering=None,
@@ -690,7 +640,7 @@ class Omics(object):
             self.rna = adata
             if flavor != "celltypist":  # annotate with CellTypist
                 figs["umap"] = self.plot_umap(color=col_annotation)  # plot
-            self.results[flavor], self.figures[flavor] = res, figs
+            self.results[flavor] = res
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension
             obs = adata.obs.set_index("cell_id") if (

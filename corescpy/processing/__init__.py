@@ -13,8 +13,8 @@ from .importing import (combine_matrix_protospacer,
                         process_multimodal_crispr)
 
 from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
-                         segment, read_spatial, update_spatial_uns,
-                         _get_control_probe_names,
+                         read_spatial, update_spatial_uns,
+                         _get_control_probe_names, integrate_spatial,
                          SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
 
 __all__ = [
@@ -23,5 +23,6 @@ __all__ = [
     "filter_qc", "process_guide_rna", "combine_matrix_protospacer",
     "process_multimodal_crispr", "describe_tiff", "extract_tiff",
     "command_cellpose", "read_spatial", "update_spatial_uns",
-    "_get_control_probe_names", "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP"
+    "integrate_spatial", "_get_control_probe_names",
+    "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP",
 ]
