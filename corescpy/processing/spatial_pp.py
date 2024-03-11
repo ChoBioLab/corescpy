@@ -16,7 +16,9 @@ import csv
 import os
 # import sys
 import re
+import traceback
 # import corescpy as cr
+import matplotlib.pyplot as plt
 import scanpy as sc
 import squidpy as sq
 # import scanpy as sc
@@ -118,31 +120,32 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         if col_sample_id in adata.table.obs:
             rna = adata.table[adata.table.obs[col_sample_id] == library_id]
         rna.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-        rna.uns[SPATIAL_KEY]["library_id"] = library_id
+        # rna.uns[SPATIAL_KEY]["library_id"] = library_id
         return rna
     else:
         adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-        adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
+        # adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
         if col_sample_id not in adata.table.obs:
             adata.table.obs.loc[:, col_sample_id] = library_id
         return adata
 
 
-def integrate_spatial(sdata, adata_sc, col_cell_type="leiden", markers=100,
+def integrate_spatial(sdata, adata_sc, col_cell_type, markers=100,
                       gene_to_lowercase=False, num_epochs=500, device="cpu",
                       density_prior="rna_count_based", mode="cells",
                       plot=True, plot_genes=None, **kwargs):
     """
-    Integrate scRNA-seq with spatial data (mode=').
+    Integrate scRNA-seq with spatial data.
 
     Args:
-        sdata (_type_): _description_
-        adata_sc (_type_): _description_
+        sdata (SpatialData | AnnData): Spatial data object.
+        adata_sc (AnnData): sc-RNA-seq data (AnnData object).
         col_cell_type (str, optional): Either a string indicating the
             cell type column shared between spatial and scRNA-seq,
             or a list [scRNA-seq, spatial cell type column].
-            Defaults to "leiden".
-        markers (int or list, optional): Either a number of random
+            The spatial cell type column is currently only
+            used for plotting.
+        markers (int | list, optional): Either a number of random
             genes to use for training mapping, or a list of genes.
             Defaults to 1000.
         gene_to_lowercase (bool, optional): Turn genes to all lowercase
@@ -157,7 +160,7 @@ def integrate_spatial(sdata, adata_sc, col_cell_type="leiden", markers=100,
         mode (str, optional): Map by "cells" or "clusters"?
             Defaults to "cells".
         plot (bool, optional): Plot? Defaults to True.
-        plot_genes (_type_, optional): Genes of interest to focus on
+        plot_genes (list, optional): Genes of interest to focus on
             for certain plots. Defaults to None.
         kwargs (Any, optional): Additional keyword arguments to pass
             to `tangram.map_cells_to_space()`.
@@ -172,15 +175,19 @@ def integrate_spatial(sdata, adata_sc, col_cell_type="leiden", markers=100,
         sdata, spatialdata.SpatialData) else sdata).copy()  # spatial anndata
     col_cell_type, col_cell_type_spatial = [col_cell_type, col_cell_type] if (
         isinstance(col_cell_type, str)) else col_cell_type
+    if col_cell_type_spatial not in sdata.obs:
+        col_cell_type_spatial = None  # if not present, ignore for plotting
     if plot is True:
-        fig, axs = plt.subplots(1, 2, figsize=(20, 5))
-        sc.pl.spatial(
-            sdata, color=col_cell_type_spatial, alpha=0.7, frameon=False, show=False, ax=axs[0]
-        )
-        sc.pl.umap(
-            adata_sc, color="cell_subclass", size=10, frameon=False, show=False, ax=axs[1]
-        )
-        plt.tight_layout()
+        try:
+            fig, axs = plt.subplots(1, 2, figsize=(20, 5))
+            if col_cell_type_spatial:
+                sc.pl.spatial(sdata, color=col_cell_type_spatial, alpha=0.7,
+                            frameon=False, show=False, ax=axs[0])
+            sc.pl.umap(adata_sc, color=col_cell_type, size=10, frameon=False,
+                    show=False, ax=axs[1])
+            plt.tight_layout()
+        except Exception:
+            print(traceback.format_exc(), "\n\n", "Plotting failed!")
     key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}" if (
         "rank_genes_groups" in sdata.uns) else "rank_genes_groups")
     sc.tl.rank_genes_groups(adata_sc, groupby=col_cell_type, use_raw=False,
@@ -201,13 +208,16 @@ def integrate_spatial(sdata, adata_sc, col_cell_type="leiden", markers=100,
     sdata_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
     df_compare = tg.compare_spatial_geneexp(sdata_new, sdata, adata_sc)
     if plot is True:  # plotting
-        tg.plot_cell_annotation_sc(sdata, list(pd.unique(adata_sc.obs[
-            col_cell_type])), perc=0.02)  # annotations spatial plot
-        tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train scores
-        tg.plot_auc(df_compare)  # area under the curve
-        if plot_genes:
-            tg.plot_genes_sc(plot_genes, adata_measured=sdata,
-                             adata_predicted=sdata_new, perc=0.02)
+        try:
+            tg.plot_cell_annotation_sc(sdata, list(pd.unique(adata_sc.obs[
+                col_cell_type])), perc=0.02)  # annotations spatial plot
+            tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train score
+            tg.plot_auc(df_compare)  # area under the curve
+            if plot_genes:
+                tg.plot_genes_sc(plot_genes, adata_measured=sdata,
+                                adata_predicted=sdata_new, perc=0.02)
+        except Exception:
+            print(traceback.format_exc(), "\n\n", "Plotting failed!")
     return sdata_new, sdata, adata_sc, ad_map, df_compare
 
 
