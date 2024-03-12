@@ -344,8 +344,6 @@ class Spatial(cr.Omics):
                      shape="hex", figsize=30, cmap="magma", wspace=0,
                      mode="squidpy", layer=None, title_offset=0, **kwargs):
         """Create basic spatial plots."""
-        if isinstance(figsize, (int, float)):
-            figsize = (figsize, figsize)
         color = None if color is False else color if color else self._columns[
             "col_cell_type"]  # no color if False; clusters if unspecified
         if color is not None:
@@ -369,26 +367,7 @@ class Spatial(cr.Omics):
                                wspace=wspace), kwargs)  # keyword arguments
         kws["img_res_key"] = key_image if key_image else list(
             self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
-        try:
-            with plt.rc_context({"figure.constrained_layout.use": True}):
-                try:
-                    fig = sq.pl.spatial_segment(ann, seg, **kws) if (
-                        seg) else sq.pl.spatial_scatter(ann, **kws)
-                except Exception:  # remove Leiden colors if => Squidpy bug
-                    for c in color:
-                        _ = ann.uns.pop(f"{c}_colors", None)
-                    print(ann)
-                    fig = sq.pl.spatial_segment(ann, seg, **kws) if (
-                        seg) else sq.pl.spatial_scatter(ann, **kws)
-        except Exception:
-            fig = str(traceback.format_exc())
-            print(fig)
-
-        # Modify (e.g, Title)
-        try:
-            fig.figure.suptitle(title, y=1 - title_offset)
-        except Exception:
-            pass
+        fig = cr.pl.plot_spatial(ann, col_segment=seg, **kws)
         return fig
 
     def plot_compare_spatial(self, others, color, cmap="magma",

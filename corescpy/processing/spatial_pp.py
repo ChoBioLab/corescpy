@@ -129,8 +129,9 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         return adata
 
 
-def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
-                      gene_to_lowercase=False, num_epochs=500, device="cpu",
+def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=None,
+                      gene_to_lowercase=False, device="cpu",
+                      learning_rate=0.1, num_epochs=1000,
                       density_prior=None, mode="cells", plot=True,
                       plot_genes=None, seed=0, inplace=False, **kwargs):
     """
@@ -146,7 +147,7 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
             used for plotting.
         markers (int | list, optional): Either a number of random
             genes to use for training mapping, or a list of genes.
-            Defaults to 1000.
+            Defaults to None (use all).
         gene_to_lowercase (bool, optional): Turn genes to all lowercase
             to reconcile capitalization differences? Defaults to False.
         num_epochs (int, optional): Number of epochs for training.
@@ -156,10 +157,10 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
             Defaults to "cpu".
         density_prior (str | None, optional): None, "rna_count_based".
             or "uniform". Defaults to None.
-        mode (str, optional): Map by "cells" or "clusters"? It is
-            recommended to use "clusters" when the spatial and
-            sc-RNA-seq data come from different subjects/specimens.
-            Defaults to "cells".
+        mode (str, optional): Map by "cells" or "clusters" or
+            "constrained"? It is recommended to use "clusters" when
+            the spatial and sc-RNA-seq data come from different
+            subjects/specimens. Defaults to "cells".
         plot (bool, optional): Plot? Defaults to True.
         plot_genes (list, optional): Genes of interest to focus on
             for certain plots. Defaults to None.
@@ -199,7 +200,7 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
             ).value.values)).intersection(set(adata_sp.var_names))
         markers = list(pd.Series(list(mks)).sample(
             int(markers)))  # random subset of overlapping markers
-    tg.pp_adatas(adata_sp, adata_sc, genes=markers,
+    tg.pp_adatas(adata_sc, adata_sp, genes=markers,
                  gene_to_lowercase=gene_to_lowercase)  # preprocess
     if "uniform_density" not in adata_sp.obs:  # issue with Tangram?
         adata_sp.obs["uniform_density"] = np.ones(adata_sp.X.shape[
@@ -208,12 +209,17 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
         ct_spot = np.array(adata_sp.X.sum(axis=1)).squeeze()  # cts per spot
         adata_sp.obs["rna_count_based_density"] = ct_spot / np.sum(ct_spot)
     ad_map = tg.map_cells_to_space(
-        adata_sc, adata_sp, mode=mode, device=device, num_epochs=num_epochs,
-        density_prior=density_prior, random_state=seed, **kwargs)  # mapping
+        adata_sc, adata_sp, mode=mode, device=device, random_state=seed,
+        learning_rate=learning_rate, num_epochs=num_epochs,
+        density_prior=density_prior, **kwargs)  # map cells on spatial spots
     tg.project_cell_annotations(
         ad_map, adata_sp, annotation=col_cell_type)  # clusters -> space
-    adata_sp_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
-    df_compare = tg.compare_spatial_geneexp(adata_sp_new, adata_sp, adata_sc)
+    if mode == "cells":  # if mapped by cells
+        adata_sp_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
+        df_compare = tg.compare_spatial_geneexp(
+            adata_sp_new, adata_sp, adata_sc)
+    else:
+        adata_sp_new, df_compare = None, None
     if plot is True:  # plotting
         try:
             figs = cr.pl.plot_integration_spatial(
