@@ -539,7 +539,7 @@ class Omics(object):
             key_added=key, inplace=True, **kwargs)  # integrate
         if inplace is False:
             self.rna = adata_sp
-        return adata_sc
+        return sdata_new, sdata, adata_sc, ad_map, df_comp
 
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,

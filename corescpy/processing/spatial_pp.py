@@ -18,11 +18,9 @@ import os
 import re
 import traceback
 # import corescpy as cr
-import matplotlib.pyplot as plt
 import scanpy as sc
 import squidpy as sq
 # import scanpy as sc
-import spatialdata
 import spatialdata_io as sdio
 import scipy.sparse as sparse
 import scipy.io as sio
@@ -30,6 +28,7 @@ import subprocess
 import tangram as tg
 import pandas as pd
 import numpy as np
+import corescpy as cr
 
 # Define constant.
 # z-slices are 3 microns apart
@@ -183,22 +182,10 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
         device = "cuda:0"
     if inplace is False:
         adata_sc, adata_sp = adata_sc.copy(), adata_sp.copy()
-    col_cell_type, col_cell_type_spatial = [col_cell_type, col_cell_type] if (
+    col_cell_type, col_cell_type_sp = [col_cell_type, col_cell_type] if (
         isinstance(col_cell_type, str)) else col_cell_type
-    if col_cell_type_spatial not in adata_sp.obs:
-        col_cell_type_spatial = None  # if not present, ignore for plotting
-    # if plot is True:
-    #     try:
-    #         if col_cell_type_spatial:
-    #             fig, axs = plt.subplots(1, 2, figsize=(20, 5))
-    #             sc.pl.spatial(adata_sp, color=col_cell_type_spatial, alpha=0.7,
-    #                           frameon=False, show=False, ax=axs[0])  # spatial
-    #         sc.pl.umap(adata_sc, color=col_cell_type, size=10, frameon=False,
-    #                    show=False if col_cell_type_spatial else True,
-    #                    ax=axs[1] if col_cell_type_spatial else None)  # UMAP
-    #         plt.tight_layout()
-    #     except Exception:
-    #         print(traceback.format_exc(), "\n\n", "Plotting failed!")
+    if col_cell_type_sp not in adata_sp.obs:
+        col_cell_type_sp = None  # if not present, ignore for plotting
     key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}" if (
         "rank_genes_groups" in adata_sp.uns) else "rank_genes_groups")
     if key not in adata_sc.uns:  # if need to rank genes (not already done)
@@ -219,20 +206,18 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
         density_prior=density_prior, random_state=seed, **kwargs)  # mapping
     tg.project_cell_annotations(
         ad_map, adata_sp, annotation=col_cell_type)  # clusters -> space
-    sdata_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
-    df_compare = tg.compare_spatial_geneexp(sdata_new, adata_sp, adata_sc)
+    adata_sp_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
+    df_compare = tg.compare_spatial_geneexp(adata_sp_new, adata_sp, adata_sc)
     if plot is True:  # plotting
         try:
-            tg.plot_cell_annotation_sc(adata_sp, list(pd.unique(adata_sc.obs[
-                col_cell_type])), perc=0.02)  # annotations spatial plot
-            tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train score
-            tg.plot_auc(df_compare)  # area under the curve
-            if plot_genes:
-                tg.plot_genes_sc(plot_genes, adata_measured=adata_sp,
-                                 adata_predicted=sdata_new, perc=0.02)
+            figs = cr.pl.plot_integration_spatial(
+                adata_sp, adata_sp_new, adata_sc=None,
+                col_cell_type=[col_cell_type, col_cell_type_sp],
+                ad_map=ad_map, df_compare=df_compare, plot_genes=plot_genes)
         except Exception:
             print(traceback.format_exc(), "\n\n", "Plotting failed!")
-    return sdata_new, adata_sp, adata_sc, ad_map, df_compare
+            figs = traceback.format_exc()
+    return adata_sp_new, adata_sp, adata_sc, ad_map, df_compare, figs
 
 
 def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):
