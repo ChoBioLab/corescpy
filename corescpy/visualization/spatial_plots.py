@@ -37,6 +37,7 @@ def plot_tiff(file_tiff, levels=None, size=16, kind=None):
 def plot_integration_spatial(adata_sp, adata_sp_new, adata_sc=None,
                              col_cell_type=None, ad_map=None,
                              df_compare=None, plot_genes=None):
+    """Plot integration (see `corescpy.pp.integrate_spatial`)."""
     figs = {}
     col_cell_type, col_cell_type_sp = [None, None] if (
         col_cell_type) is None else [col_cell_type, col_cell_type] if (
