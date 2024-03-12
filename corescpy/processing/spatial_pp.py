@@ -186,6 +186,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
         isinstance(col_cell_type, str)) else col_cell_type
     if col_cell_type_sp not in adata_sp.obs:
         col_cell_type_sp = None  # if not present, ignore for plotting
+    if mode == "clusters":  # if mapping ~ clusters rather than cells...
+        kwargs["cluster_label"] = col_cell_type  # ...must give label column
     key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}" if (
         "rank_genes_groups" in adata_sp.uns) else "rank_genes_groups")
     if key not in adata_sc.uns:  # if need to rank genes (not already done)
@@ -199,8 +201,12 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
             int(markers)))  # random subset of overlapping markers
     tg.pp_adatas(adata_sp, adata_sc, genes=markers,
                  gene_to_lowercase=gene_to_lowercase)  # preprocess
-    if mode == "clusters":  # if mapping ~ clusters rather than cells...
-        kwargs["cluster_label"] = col_cell_type  # ...must give label column
+    if "uniform_density" not in adata_sp.obs:  # issue with Tangram?
+        adata_sp.obs["uniform_density"] = np.ones(adata_sp.X.shape[
+            0]) / adata_sp.X.shape[0]  # uniform density calculation -> .obs
+    if "rna_count_based_density" not in adata_sp.obs:  # issue with Tangram?
+        ct_spot = np.array(adata_sp.X.sum(axis=1)).squeeze()  # cts per spot
+        adata_sp.obs["rna_count_based_density"] = ct_spot / np.sum(ct_spot)
     ad_map = tg.map_cells_to_space(
         adata_sc, adata_sp, mode=mode, device=device, num_epochs=num_epochs,
         density_prior=density_prior, random_state=seed, **kwargs)  # mapping
@@ -246,8 +252,8 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
     seg_data = np.load(file_cellpose, allow_pickle=True).item()
     mask_array = seg_data["masks"]
     # Use regular expression to extract dimensions from mask_array.shape
-    m = re.match("\((?P<z_size>\d+), (?P<y_size>\d+), (?P<x_size>\d+)",
-                 str(mask_array.shape))
+    patt = "\((?P<z_size>\d+), (?P<y_size>\d+), (?P<x_size>\d+)"  # noqa: W605
+    m = re.match(patt, str(mask_array.shape))
     mask_dims = {key: int(m.groupdict()[key]) for key in m.groupdict()}
 
     # Read 5 columns from transcripts Parquet file
@@ -263,7 +269,7 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
     for index, val in enumerate(features):
         feature_to_index[str(val, "utf-8")] = index
 
-    # Find distinct set of cells. Discard the first entry which is 0 (non-cell)
+    # Find distinct set of cells. Discard first entry which is 0 (non-cell)
     cells = np.unique(mask_array)[1:]
 
     # Create a cells x features data frame, initialized with 0
@@ -313,7 +319,8 @@ def segment(directory, nuc_exp=10, file_cellpose=None, file_transcript=None,
             # w/i user-specified distance.
             cell_id = nearest_cell(
                 x_pixel, y_pixel, z_slice, x_neighborhood_min_pixel,
-                y_neighborhood_min_pixel, z_neighborhood_min_slice, mask_array[
+                y_neighborhood_min_pixel, z_neighborhood_min_slice,
+                mask_array[
                     z_neighborhood_min_slice: z_neighborhood_max_slice,
                     y_neighborhood_min_pixel: y_neighborhood_max_pixel,
                     x_neighborhood_min_pixel: x_neighborhood_max_pixel],
