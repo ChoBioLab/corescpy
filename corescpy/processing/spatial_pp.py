@@ -130,15 +130,15 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         return adata
 
 
-def integrate_spatial(sdata, adata_sc, col_cell_type, markers=100,
+def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=100,
                       gene_to_lowercase=False, num_epochs=500, device="cpu",
-                      density_prior="rna_count_based", mode="cells",
-                      plot=True, plot_genes=None, **kwargs):
+                      density_prior=None, mode="cells", plot=True,
+                      plot_genes=None, seed=0, inplace=False, **kwargs):
     """
     Integrate scRNA-seq with spatial data.
 
     Args:
-        sdata (SpatialData | AnnData): Spatial data object.
+        adata_sp (AnnData): Spatial data object.
         adata_sc (AnnData): sc-RNA-seq data (AnnData object).
         col_cell_type (str, optional): Either a string indicating the
             cell type column shared between spatial and scRNA-seq,
@@ -155,15 +155,25 @@ def integrate_spatial(sdata, adata_sc, col_cell_type, markers=100,
         device (str, optional): Use "cpu" or "gpu" (or other specified
             device; "gpu" is automatically changed to "cuda:0").
             Defaults to "cpu".
-        density_prior (str, optional): _description_.
-            Defaults to "rna_count_based".
-        mode (str, optional): Map by "cells" or "clusters"?
+        density_prior (str | None, optional): None, "rna_count_based".
+            or "uniform". Defaults to None.
+        mode (str, optional): Map by "cells" or "clusters"? It is
+            recommended to use "clusters" when the spatial and
+            sc-RNA-seq data come from different subjects/specimens.
             Defaults to "cells".
         plot (bool, optional): Plot? Defaults to True.
         plot_genes (list, optional): Genes of interest to focus on
             for certain plots. Defaults to None.
+        seed (int, optional): Random seed for reproducibility.
+            Defaults to 0.
+        inplace (bool, optional): Modify data objects in-place? Copy
+            if False. Defaults to True.
         kwargs (Any, optional): Additional keyword arguments to pass
-            to `tangram.map_cells_to_space()`.
+            to `tangram.map_cells_to_space()`. If contains `key_added`
+            argument, will use that key within `adata_sc.uns` for
+            ranked gene markers (if present) instead of re-running
+            `scanpy.tl.rank_genes_groups()`; otherwise, will store
+            new ranking under "rank_genes_groups_<col_cell_type>".
 
     Returns:
         tuple: New spatial data, old spatial data, old scRNA-seq data,
@@ -171,54 +181,58 @@ def integrate_spatial(sdata, adata_sc, col_cell_type, markers=100,
     """
     if device == "gpu":
         device = "cuda:0"
-    sdata = (sdata.table if isinstance(
-        sdata, spatialdata.SpatialData) else sdata).copy()  # spatial anndata
+    if inplace is False:
+        adata_sc, adata_sp = adata_sc.copy(), adata_sp.copy()
     col_cell_type, col_cell_type_spatial = [col_cell_type, col_cell_type] if (
         isinstance(col_cell_type, str)) else col_cell_type
-    if col_cell_type_spatial not in sdata.obs:
+    if col_cell_type_spatial not in adata_sp.obs:
         col_cell_type_spatial = None  # if not present, ignore for plotting
-    if plot is True:
-        try:
-            fig, axs = plt.subplots(1, 2, figsize=(20, 5))
-            if col_cell_type_spatial:
-                sc.pl.spatial(sdata, color=col_cell_type_spatial, alpha=0.7,
-                            frameon=False, show=False, ax=axs[0])
-            sc.pl.umap(adata_sc, color=col_cell_type, size=10, frameon=False,
-                    show=False, ax=axs[1])
-            plt.tight_layout()
-        except Exception:
-            print(traceback.format_exc(), "\n\n", "Plotting failed!")
+    # if plot is True:
+    #     try:
+    #         if col_cell_type_spatial:
+    #             fig, axs = plt.subplots(1, 2, figsize=(20, 5))
+    #             sc.pl.spatial(adata_sp, color=col_cell_type_spatial, alpha=0.7,
+    #                           frameon=False, show=False, ax=axs[0])  # spatial
+    #         sc.pl.umap(adata_sc, color=col_cell_type, size=10, frameon=False,
+    #                    show=False if col_cell_type_spatial else True,
+    #                    ax=axs[1] if col_cell_type_spatial else None)  # UMAP
+    #         plt.tight_layout()
+    #     except Exception:
+    #         print(traceback.format_exc(), "\n\n", "Plotting failed!")
     key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}" if (
-        "rank_genes_groups" in sdata.uns) else "rank_genes_groups")
-    sc.tl.rank_genes_groups(adata_sc, groupby=col_cell_type, use_raw=False,
-                            key_added="rank_genes_groups")
+        "rank_genes_groups" in adata_sp.uns) else "rank_genes_groups")
+    if key not in adata_sc.uns:  # if need to rank genes (not already done)
+        sc.tl.rank_genes_groups(adata_sc, groupby=col_cell_type,
+                                use_raw=False, key_added=key)  # rank markers
     if isinstance(markers, (int, float)):
         # if markers = # of genes to select randomly instead of specified list
-        markers = list(pd.Series(np.unique(pd.DataFrame(adata_sc.uns[key][
-            "names"]).melt().value.values)).sample(int(markers)))  # choose
-    tg.pp_adatas(sdata, adata_sc, genes=markers,
+        mks = set(np.unique(pd.DataFrame(adata_sc.uns[key]["names"]).melt(
+            ).value.values)).intersection(set(adata_sp.var_names))
+        markers = list(pd.Series(list(mks)).sample(
+            int(markers)))  # random subset of overlapping markers
+    tg.pp_adatas(adata_sp, adata_sc, genes=markers,
                  gene_to_lowercase=gene_to_lowercase)  # preprocess
     if mode == "clusters":  # if mapping ~ clusters rather than cells...
         kwargs["cluster_label"] = col_cell_type  # ...must give label column
     ad_map = tg.map_cells_to_space(
-        adata_sc, sdata, mode=mode, device=device, num_epochs=num_epochs,
-        density_prior=density_prior, **kwargs)  # map cells onto space
+        adata_sc, adata_sp, mode=mode, device=device, num_epochs=num_epochs,
+        density_prior=density_prior, random_state=seed, **kwargs)  # mapping
     tg.project_cell_annotations(
-        ad_map, sdata, annotation=col_cell_type)  # project clusters on space
+        ad_map, adata_sp, annotation=col_cell_type)  # clusters -> space
     sdata_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
-    df_compare = tg.compare_spatial_geneexp(sdata_new, sdata, adata_sc)
+    df_compare = tg.compare_spatial_geneexp(sdata_new, adata_sp, adata_sc)
     if plot is True:  # plotting
         try:
-            tg.plot_cell_annotation_sc(sdata, list(pd.unique(adata_sc.obs[
+            tg.plot_cell_annotation_sc(adata_sp, list(pd.unique(adata_sc.obs[
                 col_cell_type])), perc=0.02)  # annotations spatial plot
             tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train score
             tg.plot_auc(df_compare)  # area under the curve
             if plot_genes:
-                tg.plot_genes_sc(plot_genes, adata_measured=sdata,
-                                adata_predicted=sdata_new, perc=0.02)
+                tg.plot_genes_sc(plot_genes, adata_measured=adata_sp,
+                                 adata_predicted=sdata_new, perc=0.02)
         except Exception:
             print(traceback.format_exc(), "\n\n", "Plotting failed!")
-    return sdata_new, sdata, adata_sc, ad_map, df_compare
+    return sdata_new, adata_sp, adata_sc, ad_map, df_compare
 
 
 def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):

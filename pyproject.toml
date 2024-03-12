@@ -52,7 +52,7 @@ dependencies = [
     "cellpose",
     "napari[pyqt5]; platform_system != 'Windows'",
     "napari[pyside2]; platform_system == 'Windows'",
-    "tangram",
+    "tangram-sc",
 
     # Other
     "docutils < 0.17,>= 0.10",
