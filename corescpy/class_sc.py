@@ -522,6 +522,25 @@ class Omics(object):
             self.pdata = pdata
         return pdata
 
+    def integrate(self, adata_sc, col_cell_type=None, mode="cells",
+                  layer="log1p", device="cpu", inplace=True, **kwargs):
+        """Integrate scRNA-seq with spatial data."""
+        adata_sp = self.get_layer(layer, inplace=inplace)  # get layer
+        if col_cell_type is None:  # if unspecified, default cluster column
+            col_cell_type = self._columns["col_cell_type"]
+        if inplace is False:  # if don't want to modify objects inplace...
+            adata_sc = adata_sc.copy()  # ...copy scRNA-seq
+        if layer and layer in adata_sc.layers:  # if specified layer in scRNA
+            adata_sc.X = adata_sc.layers[layer].copy()  # scRNA-seq layer
+        key = kwargs.pop("key_added", f"key_added_{col_cell_type}"
+                         )  # key to add (or use, if exists) in .uns for DEGs
+        sdata_new, sdata, adata_sc, ad_map, df_comp = cr.pp.integrate_spatial(
+            adata_sp, adata_sc, col_cell_type=col_cell_type, mode=mode,
+            key_added=key, inplace=True, **kwargs)  # integrate
+        if inplace is False:
+            self.rna = adata_sp
+        return adata_sc
+
     def cluster(self, assay=None, method_cluster="leiden", layer="scaled",
                 resolution=1, kws_pca=None, kws_neighbors=None,
                 kws_umap=None, kws_cluster=None, genes_subset=None,
