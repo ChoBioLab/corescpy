@@ -129,10 +129,11 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         return adata
 
 
-def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=None,
-                      gene_to_lowercase=False, device="cpu",
+def integrate_spatial(adata_sp, adata_sc, col_cell_type,
+                      col_annotation="tangram_prediction",
+                      markers=None, gene_to_lowercase=False, device="cpu",
                       learning_rate=0.1, num_epochs=1000,
-                      density_prior=None, mode="cells", plot=True,
+                      density_prior=None, mode="cells", plot=True, perc=0.01,
                       plot_genes=None, seed=0, inplace=False, **kwargs):
     """
     Integrate scRNA-seq with spatial data.
@@ -145,6 +146,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=None,
             or a list [scRNA-seq, spatial cell type column].
             The spatial cell type column is currently only
             used for plotting.
+        col_annotation (str, optional): Name of the column in which
+            to store the predicted cell type in `adata_sp.obs`.
         markers (int | list, optional): Either a number of random
             genes to use for training mapping, or a list of genes.
             Defaults to None (use all).
@@ -162,6 +165,7 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=None,
             the spatial and sc-RNA-seq data come from different
             subjects/specimens. Defaults to "cells".
         plot (bool, optional): Plot? Defaults to True.
+        perc (float, optional): Percentile for colormap. Defaults to 0.01.
         plot_genes (list, optional): Genes of interest to focus on
             for certain plots. Defaults to None.
         seed (int, optional): Random seed for reproducibility.
@@ -185,6 +189,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=None,
         adata_sc, adata_sp = adata_sc.copy(), adata_sp.copy()
     col_cell_type, col_cell_type_sp = [col_cell_type, col_cell_type] if (
         isinstance(col_cell_type, str)) else col_cell_type
+    if col_annotation is None:
+        col_annotation = col_cell_type
     if col_cell_type_sp not in adata_sp.obs:
         col_cell_type_sp = None  # if not present, ignore for plotting
     if mode == "clusters":  # if mapping ~ clusters rather than cells...
@@ -213,23 +219,100 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type, markers=None,
         learning_rate=learning_rate, num_epochs=num_epochs,
         density_prior=density_prior, **kwargs)  # map cells on spatial spots
     tg.project_cell_annotations(
-        ad_map, adata_sp, annotation=col_cell_type)  # clusters -> space
-    if mode == "cells":  # if mapped by cells
-        adata_sp_new = tg.project_genes(adata_map=ad_map, adata_sc=adata_sc)
-        df_compare = tg.compare_spatial_geneexp(
-            adata_sp_new, adata_sp, adata_sc)
-    else:
-        adata_sp_new, df_compare = None, None
+        ad_map, adata_sp, annotation=col_annotation)  # clusters -> space
+    c_l = col_cell_type if mode == "clusters" else None
+    adata_sp_new = project_genes_m(ad_map, adata_sp, cluster_label=c_l,
+                                   gene_to_lowercase=gene_to_lowercase)  # GEX
+    df_compare = tg.compare_spatial_geneexp(adata_sp_new, adata_sp, adata_sc)
+    tmp, dfp, preds = construct_obs_spatial_integration(
+        adata_sp_new.copy(), adata_sc.copy(), perc=perc, suffix=None,
+        col_annotation=col_annotation)  # get normalized densities; labels
+    adata_sp_new.obsm["tangram"] = tmp.obs[dfp.columns]
+    adata_sp_new.obs = adata_sp_new.obs.join(preds)
     if plot is True:  # plotting
         try:
             figs = cr.pl.plot_integration_spatial(
                 adata_sp, adata_sp_new, adata_sc=None,
                 col_cell_type=[col_cell_type, col_cell_type_sp],
+                col_annotation=col_annotation,
                 ad_map=ad_map, df_compare=df_compare, plot_genes=plot_genes)
         except Exception:
             print(traceback.format_exc(), "\n\n", "Plotting failed!")
             figs = traceback.format_exc()
     return adata_sp_new, adata_sp, adata_sc, ad_map, df_compare, figs
+
+
+def project_genes_m(adata_map, adata_sc, cluster_label=None, scale=True,
+                    gene_to_lowercase=False):
+    """
+    Transfer gene expression from the single cell onto space.
+    Modfied from Tangram's `project_genes()`.
+
+    Args:
+        adata_map (AnnData): Mapping data.
+        adata_sc (AnnData): Single-cell data
+        cluster_label (AnnData): Optional. Should be consistent with
+            the 'cluster_label' argument passed to
+            `map_cells_to_space` function.
+        scale (bool): Optional. Should be consistent with the 'scale'
+            argument passed to `map_cells_to_space` function.
+
+    Returns:
+        AnnData: spot-by-gene AnnData containing spatial gene
+            expression from the single cell data.
+    """
+
+    # put all var index to lower case to align
+    if gene_to_lowercase is True:
+        adata_sc.var.index = [g.lower() for g in adata_sc.var.index]
+
+    # make varnames unique for adata_sc
+    adata_sc.var_names_make_unique()
+
+    # remove all-zero-valued genes
+    sc.pp.filter_genes(adata_sc, min_cells=1)
+
+    if cluster_label:
+        adata_sc = tg.mapping_utils.adata_to_cluster_expression(
+            adata_sc, cluster_label, scale=scale)
+
+    if not adata_map.obs.index.equals(adata_sc.obs.index):
+        raise ValueError("The two AnnDatas need to have same `obs` index.")
+    if hasattr(adata_sc.X, "toarray"):
+        adata_sc.X = adata_sc.X.toarray()
+    x_space = adata_map.X.T @ adata_sc.X
+    adata_ge = sc.AnnData(
+        X=x_space, obs=adata_map.var, var=adata_sc.var, uns=adata_sc.uns
+    )
+    training_genes = adata_map.uns["train_genes_df"].index.values
+    adata_ge.var["is_training"] = adata_ge.var.index.isin(training_genes)
+    return adata_ge
+
+
+def construct_obs_spatial_integration(adata_sp, adata_sc, col_cell_type,
+                                      perc=0, suffix=None,
+                                      col_annotation="tangram_prediction"):
+    """
+    Helper function to normalize densities/probabilities & transfer
+    cell type prediction labels from Tangram (modified).
+    Also incorporates code from
+    https://github.com/broadinstitute/Tangram/issues/96.
+    """
+    adata = adata_sp.copy()
+    annots = list(pd.unique(adata_sc.obs[col_cell_type]))
+    dfp = adata.obsm["tangram_ct_pred"][annots]
+    adata.obs = adata.obs.drop(list(dfp.columns), axis=1, errors="ignore")
+    dfp = dfp.reindex(adata.obs.index)
+    dfp = dfp.clip(dfp.quantile(perc), dfp.quantile(1 - perc), axis=1)  # clip
+    dfp = (dfp - dfp.min()) / (dfp.max() - dfp.min())  # normalize
+    if suffix:
+        dfp = dfp.add_suffix(" ({})".format(suffix))
+    adata.obs = pd.concat([adata.obs, dfp], axis=1)
+    preds = pd.DataFrame()
+    preds[col_annotation] = adata.obsm["tangram_ct_pred"].idxmax(axis=1)
+    preds["tangram_score"] = adata.obsm["tangram_ct_pred"].apply(
+        lambda x: max(x), axis=1)  # scores
+    return adata, dfp, preds
 
 
 def map_transcripts_to_cells(file_transcripts="transcripts.parquet"):

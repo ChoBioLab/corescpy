@@ -10,7 +10,8 @@ from .gene_expression_plots import (
     plot_markers)
 from .communication_plots import plot_receptor_ligand, plot_cooccurrence
 from .scanpy_plots import plot_hvgs
-from .spatial_plots import plot_tiff, plot_spatial, plot_integration_spatial
+from .spatial_plots import (plot_tiff, plot_spatial,
+                            plot_integration_spatial)
 
 __all__ = [
     "square_grid", "plot_umap", "plot_clustering",
