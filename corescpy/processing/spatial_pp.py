@@ -111,10 +111,15 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
     """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
     imgs = {}
     for x in adata.images:
+        scales = [int(i.split("scale")[1]) for i in adata.images[x] if (
+            "scale") in i] if "focus" in x else []
         for i in adata.images[x]:
             key = f"{library_id}{SPATIAL_IMAGE_KEY_SEP}{x}_{i}"
             imgs[key] = sq.im.ImageContainer(
                 adata.images[x][i].image, library_id=library_id)
+            if len(scales) > 0 and "scale" in i and str(i.split(
+                    "scale")[1]) == str(min(scales)):
+                imgs["hires"] = imgs[key]  # Squidpy/Visium-Xenium compatible
     if rna_only is True:
         if col_sample_id in adata.table.obs:
             rna = adata.table[adata.table.obs[col_sample_id] == library_id]
@@ -133,8 +138,9 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
                       col_annotation="tangram_prediction",
                       markers=None, gene_to_lowercase=False, device="cpu",
                       learning_rate=0.1, num_epochs=1000,
-                      density_prior=None, mode="cells", plot=True, perc=0.01,
-                      plot_genes=None, seed=0, inplace=False, **kwargs):
+                      density_prior=None, mode="cells", perc=0.01,
+                      plot=True, plot_genes=None, plot_density=False,
+                      seed=0, inplace=False, **kwargs):
     """
     Integrate scRNA-seq with spatial data.
 
@@ -165,7 +171,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
             the spatial and sc-RNA-seq data come from different
             subjects/specimens. Defaults to "cells".
         plot (bool, optional): Plot? Defaults to True.
-        perc (float, optional): Percentile for colormap. Defaults to 0.01.
+        perc (float, optional): Percentile for colormap.
+            Defaults to 0.01.
         plot_genes (list, optional): Genes of interest to focus on
             for certain plots. Defaults to None.
         seed (int, optional): Random seed for reproducibility.
@@ -185,6 +192,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
     """
     if device == "gpu":
         device = "cuda:0"
+    kws = {"suffix": kwargs.pop("suffix", None)
+           }  # to construct .obs; suffix, density columns for each cell type
     if inplace is False:
         adata_sc, adata_sp = adata_sc.copy(), adata_sp.copy()
     col_cell_type, col_cell_type_sp = [col_cell_type, col_cell_type] if (
@@ -200,12 +209,15 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
     if key not in adata_sc.uns:  # if need to rank genes (not already done)
         sc.tl.rank_genes_groups(adata_sc, groupby=col_cell_type,
                                 use_raw=False, key_added=key)  # rank markers
-    if isinstance(markers, (int, float)):
-        # if markers = # of genes to select randomly instead of specified list
+    if isinstance(markers, (int, float)) or markers is None:
+        # if makers not a list of pre-specified genes
         mks = set(np.unique(pd.DataFrame(adata_sc.uns[key]["names"]).melt(
             ).value.values)).intersection(set(adata_sp.var_names))
-        markers = list(pd.Series(list(mks)).sample(
-            int(markers)))  # random subset of overlapping markers
+        if isinstance(markers, (int, float)):  # if markers = #...
+            markers = list(pd.Series(list(mks)).sample(
+                int(markers)))  # ...random subset of overlapping markers
+        else:  # if markers = None...
+            markers = list(mks)  # ...use all overlapping genes
     tg.pp_adatas(adata_sc, adata_sp, genes=markers,
                  gene_to_lowercase=gene_to_lowercase)  # preprocess
     if "uniform_density" not in adata_sp.obs:  # issue with Tangram?
@@ -219,22 +231,26 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
         learning_rate=learning_rate, num_epochs=num_epochs,
         density_prior=density_prior, **kwargs)  # map cells on spatial spots
     tg.project_cell_annotations(
-        ad_map, adata_sp, annotation=col_annotation)  # clusters -> space
+        ad_map, adata_sp, annotation=col_cell_type)  # clusters -> space
     c_l = col_cell_type if mode == "clusters" else None
-    adata_sp_new = project_genes_m(ad_map, adata_sp, cluster_label=c_l,
+    adata_sp_new = project_genes_m(ad_map, adata_sc, cluster_label=c_l,
                                    gene_to_lowercase=gene_to_lowercase)  # GEX
+    adata_sp_new.obsm["tangram_ct_pred"] = adata_sp.obsm[
+        "tangram_ct_pred"].loc[adata_sp_new.obs.index]  # predictions -> new
     df_compare = tg.compare_spatial_geneexp(adata_sp_new, adata_sp, adata_sc)
     tmp, dfp, preds = construct_obs_spatial_integration(
-        adata_sp_new.copy(), adata_sc.copy(), perc=perc, suffix=None,
-        col_annotation=col_annotation)  # get normalized densities; labels
+        adata_sp_new.copy(), adata_sc.copy(), col_cell_type, perc=perc,
+        col_annotation=col_annotation, **kws)  # normalized densities; labels
     adata_sp_new.obsm["tangram"] = tmp.obs[dfp.columns]
     adata_sp_new.obs = adata_sp_new.obs.join(preds)
+    for x in set(adata_sp.uns.keys()).difference(adata_sp_new.uns.keys()):
+        adata_sp_new.uns[x] = adata_sp.uns[x]
     if plot is True:  # plotting
         try:
             figs = cr.pl.plot_integration_spatial(
                 adata_sp, adata_sp_new, adata_sc=None,
                 col_cell_type=[col_cell_type, col_cell_type_sp],
-                col_annotation=col_annotation,
+                col_annotation=col_annotation, plot_density=plot_density,
                 ad_map=ad_map, df_compare=df_compare, plot_genes=plot_genes)
         except Exception:
             print(traceback.format_exc(), "\n\n", "Plotting failed!")

@@ -46,7 +46,8 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     ann = adata.copy()
     if isinstance(figsize, (int, float)):
         figsize = (figsize, figsize)
-    libid = library_id if library_id else list(ann.uns[spatial_key].keys())
+    libid = library_id if library_id else list(ann.uns[
+        spatial_key].keys()) if spatial_key in ann.uns else None
     if col_sample_id:
         libid = list(set(libid).intersection(set(adata.obs[
             col_sample_id].unique())))
@@ -88,7 +89,8 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
 def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
                              col_cell_type=None, ad_map=None, cmap="magma",
                              df_compare=None, plot_genes=None, perc=0.01,
-                             col_annotation=None, figsize=20, **kwargs):
+                             col_annotation=None, figsize=5,
+                             plot_density=False, **kwargs):
     """Plot integration (see `corescpy.pp.integrate_spatial`)."""
     figs = {}
     col_cell_type, col_cell_type_sp = [None, None] if (
@@ -113,16 +115,18 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
             figs["clusters"] = plt.gcf()
         except Exception:
             figs["clusters"] = tb.format_exc()
-            print(tb.format_exc(), "\n\n", "Plotting UMAPs/spatial failed!")
-        try:  # plot integration-inferred spatial cell types
-            tmp, dfp, _ = cr.pp.construct_obs_spatial_integration(
-                adata_sp.copy(), adata_sc.copy(), col_cell_type, perc=perc,
-                suffix=None)  # spatial AnnData + cell type density columns
-            figs["spatial_density"] = plot_spatial(tmp, color=list(pd.unique(
-                adata_sc.obs[col_cell_type])), cmap=cmap)  # cell types plot
-        except Exception:
-            figs["clusters"] = tb.format_exc()
-            print(tb.format_exc(), "\n\n", "Plotting UMAPs/spatial failed!")
+        if plot_density is True:
+            print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
+            try:  # plot integration-inferred spatial cell types
+                tmp, dfp, _ = cr.pp.construct_obs_spatial_integration(
+                    adata_sp.copy(), adata_sc.copy(), col_cell_type,
+                    perc=perc)  # spatial AnnData + cell type density
+                figs["spatial_density"] = plot_spatial(
+                    tmp, color=list(pd.unique(adata_sc.obs[
+                        col_cell_type])), cmap=cmap)  # cell types plot
+            except Exception:
+                figs["spatial_density"] = tb.format_exc()
+                print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
     if ad_map is not None:  # plot training scores
         tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train score
         figs["scores_training"] = plt.gcf()
@@ -136,7 +140,7 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
         figs["genes"] = plt.gcf()
     if col_annotation is not None:  # predicted cell types spatial plot
         figs["spatial"] = plot_spatial(
-            adata_sp, color=col_annotation, **kwargs)  # plot predicted types
+            adata_sp_new, color=col_annotation, **kwargs)  # plot
     return figs
 
 
