@@ -206,6 +206,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
         kwargs["cluster_label"] = col_cell_type  # ...must give label column
     key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}" if (
         "rank_genes_groups" in adata_sp.uns) else "rank_genes_groups")
+
+    # Obtain Marker/Training Genes for Whole Transcriptome Cell Types
     if key not in adata_sc.uns:  # if need to rank genes (not already done)
         sc.tl.rank_genes_groups(adata_sc, groupby=col_cell_type,
                                 use_raw=False, key_added=key)  # rank markers
@@ -218,6 +220,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
                 int(markers)))  # ...random subset of overlapping markers
         else:  # if markers = None...
             markers = list(mks)  # ...use all overlapping genes
+
+    # Preprocessing
     tg.pp_adatas(adata_sc, adata_sp, genes=markers,
                  gene_to_lowercase=gene_to_lowercase)  # preprocess
     if "uniform_density" not in adata_sp.obs:  # issue with Tangram?
@@ -226,6 +230,8 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
     if "rna_count_based_density" not in adata_sp.obs:  # issue with Tangram?
         ct_spot = np.array(adata_sp.X.sum(axis=1)).squeeze()  # cts per spot
         adata_sp.obs["rna_count_based_density"] = ct_spot / np.sum(ct_spot)
+
+    # Spatially Map Cells (Calculate Densities/Probabilities for Cell Types)
     ad_map = tg.map_cells_to_space(
         adata_sc, adata_sp, mode=mode, device=device, random_state=seed,
         learning_rate=learning_rate, num_epochs=num_epochs,
@@ -233,18 +239,28 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
     tg.project_cell_annotations(
         ad_map, adata_sp, annotation=col_cell_type)  # clusters -> space
     c_l = col_cell_type if mode == "clusters" else None
+
+    # Project/Impute Gene Expression onto Spatial Data
     adata_sp_new = project_genes_m(ad_map, adata_sc, cluster_label=c_l,
                                    gene_to_lowercase=gene_to_lowercase)  # GEX
     adata_sp_new.obsm["tangram_ct_pred"] = adata_sp.obsm[
         "tangram_ct_pred"].loc[adata_sp_new.obs.index]  # predictions -> new
     df_compare = tg.compare_spatial_geneexp(adata_sp_new, adata_sp, adata_sc)
+
+    # Assign Deterministic Labels Based on Densities/Probabilities
     tmp, dfp, preds = construct_obs_spatial_integration(
         adata_sp_new.copy(), adata_sc.copy(), col_cell_type, perc=perc,
         col_annotation=col_annotation, **kws)  # normalized densities; labels
     adata_sp_new.obsm["tangram"] = tmp.obs[dfp.columns]
     adata_sp_new.obs = adata_sp_new.obs.join(preds)
+
+    # Add Back `.uns` & `.obsm` Missing from New Spatial Data Object
     for x in set(adata_sp.uns.keys()).difference(adata_sp_new.uns.keys()):
         adata_sp_new.uns[x] = adata_sp.uns[x]
+    for x in set(adata_sp.obsm.keys()).difference(adata_sp_new.obsm.keys()):
+        adata_sp_new.obsm[x] = adata_sp.obsm[x]
+
+    # Plot
     if plot is True:  # plotting
         try:
             figs = cr.pl.plot_integration_spatial(
