@@ -59,9 +59,10 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
                            return_ax=True, library_key=col_sample_id,
                            library_id=libid, color=color, alt_var=cgs,
                            wspace=wspace), kwargs)  # keyword arguments
-    kws["img_res_key"] = key_image if key_image else list(
-        ann.uns[spatial_key][libid if isinstance(libid, str) else libid[0]][
-            "images"].keys())[0]
+    img_names = list(ann.uns[spatial_key][libid if isinstance(
+        libid, str) else libid[0]]["images"].keys())
+    kws["img_res_key"] = key_image if key_image else "hires" if (
+        "hires" in img_names) else img_names[0]
 
     # Plot
     try:
