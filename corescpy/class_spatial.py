@@ -391,7 +391,7 @@ class Spatial(cr.Omics):
 
     def impute(self, adata_sc, col_cell_type=None, mode="cells",
                layer="log1p", device="cpu", inplace=True,
-               col_annotation="tangram_prediction", **kwargs):
+               col_annotation="tangram_prediction", out_file=None,  **kwargs):
         """Impute scRNA-seq GEX & annotations onto spatial data."""
         adata_sp = self.get_layer(layer, inplace=inplace)  # get layer
         if col_cell_type is None:  # if unspecified, default cluster column
@@ -409,6 +409,13 @@ class Spatial(cr.Omics):
         if inplace is False:
             self.rna.uns["tangram_object"] = out[0]
             self.rna.obs.loc[:, col_annotation] = out[0].obs[col_annotation]
+        if out_file is not None:
+            if os.path.isdir(out_file):  # directory -> standardized file path
+                out_file = os.path.join(
+                    out_file, f"{self._library_id}_{col_annotation}.csv")
+            (out[0].obs.set_index("cell_id") if "cell_id" in out[
+                0].obs else out[0].obs)[col_annotation].to_frame(
+                    "group").to_csv(out_file)
         return out
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
