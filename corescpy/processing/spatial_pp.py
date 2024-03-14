@@ -134,15 +134,15 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         return adata
 
 
-def integrate_spatial(adata_sp, adata_sc, col_cell_type,
-                      col_annotation="tangram_prediction",
-                      markers=None, gene_to_lowercase=False, device="cpu",
-                      learning_rate=0.1, num_epochs=1000,
-                      density_prior=None, mode="cells", perc=0.01,
-                      plot=True, plot_genes=None, plot_density=False,
-                      seed=0, inplace=False, **kwargs):
+def impute_spatial(adata_sp, adata_sc, col_cell_type,
+                   col_annotation="tangram_prediction",
+                   markers=None, gene_to_lowercase=False, device="cpu",
+                   learning_rate=0.1, num_epochs=1000,
+                   density_prior=None, mode="cells", perc=0.01,
+                   plot=True, plot_genes=None, plot_density=False,
+                   seed=0, inplace=False, **kwargs):
     """
-    Integrate scRNA-seq with spatial data.
+    Impute scRNA-seq GEX & annotations onto spatial data.
 
     Args:
         adata_sp (AnnData): Spatial data object.
@@ -248,7 +248,7 @@ def integrate_spatial(adata_sp, adata_sc, col_cell_type,
     df_compare = tg.compare_spatial_geneexp(adata_sp_new, adata_sp, adata_sc)
 
     # Assign Deterministic Labels Based on Densities/Probabilities
-    tmp, dfp, preds = construct_obs_spatial_integration(
+    tmp, dfp, preds = construct_obs_spatial_imputation(
         adata_sp_new.copy(), adata_sc.copy(), col_cell_type, perc=perc,
         col_annotation=col_annotation, **kws)  # normalized densities; labels
     adata_sp_new.obsm["tangram"] = tmp.obs[dfp.columns]
@@ -321,9 +321,9 @@ def project_genes_m(adata_map, adata_sc, cluster_label=None, scale=True,
     return adata_ge
 
 
-def construct_obs_spatial_integration(adata_sp, adata_sc, col_cell_type,
-                                      perc=0, suffix=None,
-                                      col_annotation="tangram_prediction"):
+def construct_obs_spatial_imputation(adata_sp, adata_sc, col_cell_type,
+                                     perc=0, suffix=None,
+                                     col_annotation="tangram_prediction"):
     """
     Helper function to normalize densities/probabilities & transfer
     cell type prediction labels from Tangram (modified).
