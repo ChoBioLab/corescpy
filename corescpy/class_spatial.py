@@ -402,7 +402,7 @@ class Spatial(cr.Omics):
             adata_sc.X = adata_sc.layers[layer].copy()  # scRNA-seq layer
         key = kwargs.pop("key_added", f"key_added_{col_cell_type}"
                          )  # key to add (or use, if exists) in .uns for DEGs
-        out = cr.pp.integrate_spatial(
+        out = cr.pp.impute_spatial(
             adata_sp, adata_sc.copy(), col_cell_type=col_cell_type, mode=mode,
             key_added=key, inplace=True,
             col_annotation=col_annotation, **kwargs)  # integrate
