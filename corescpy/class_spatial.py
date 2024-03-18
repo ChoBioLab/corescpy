@@ -117,6 +117,9 @@ class Spatial(cr.Omics):
             "original_ix"] if "original_ix" in self.rna.uns else None
         self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
         csid = self._columns["col_sample_id"]
+        if file_path_markers and not os.path.exists(file_path_markers):
+            file_path_markers = None
+            warn(f"Marker file {file_path_markers} does not exist; skipping.")
         if isinstance(self.adata, spatialdata.SpatialData) and (
                 len(self.rna.obs[csid].unique()) > 1):  # multi-sample
             print("\n\n<<< RESTORING MULTI-SAMPLE FROM h5ad >>>\n")

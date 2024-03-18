@@ -249,7 +249,7 @@ def impute_spatial(adata_sp, adata_sc, col_cell_type,
 
     # Assign Deterministic Labels Based on Densities/Probabilities
     tmp, dfp, preds = construct_obs_spatial_imputation(
-        adata_sp_new.copy(), adata_sc.copy(), col_cell_type, perc=perc,
+        adata_sp_new, adata_sc.copy(), col_cell_type, perc=perc,
         col_annotation=col_annotation, **kws)  # normalized densities; labels
     adata_sp_new.obsm["tangram"] = tmp.obs[dfp.columns]
     adata_sp_new.obs = adata_sp_new.obs.join(preds)
@@ -271,6 +271,8 @@ def impute_spatial(adata_sp, adata_sc, col_cell_type,
         except Exception:
             print(traceback.format_exc(), "\n\n", "Plotting failed!")
             figs = traceback.format_exc()
+    else:
+        figs = None
     return adata_sp_new, adata_sp, adata_sc, ad_map, df_compare, figs
 
 
