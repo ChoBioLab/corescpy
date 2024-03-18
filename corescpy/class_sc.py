@@ -226,6 +226,29 @@ class Omics(object):
         else:
             raise ValueError("File extension must be .h5ad or .h5mu")
 
+    def write_clusters(self, out_directory, col_cell_type="leiden",
+                       file_prefix=None, overwrite=False,
+                       n_top=True, **kwargs):
+        """Write clusters (and, if `n_top` != False, markers)."""
+        pre = "" if file_prefix is None else f"{file_prefix}_"
+        file_mks, file_grp = [os.path.join(
+            out_directory, f"{pre}{col_cell_type}{s}.csv") for s in [
+                "", "_markers"]]  # file names
+        if overwrite is False:
+            for x in [file_mks, file_grp]:
+                if os.path.exists(x):
+                    raise ValueError(f"File {x} already exists.")
+        (self.rna.obs.set_index("cell_id") if (
+            "cell_id" in self.rna.obs) and isinstance(
+                self, cr.Spatial) else self.rna.obs)[
+                    col_cell_type].to_frame("group").to_csv(file_grp)
+        if n_top is not False and "markers" in self.rna.uns and (
+                col_cell_type in self.rna.uns["markers"]):
+            mks = self.rna.uns["markers"][col_cell_type]  # marker genes df
+            (mks.groupby(col_cell_type).apply(lambda x: x.iloc[:n_top]) if (
+                isinstance(n_top, (int, float))) else mks).to_csv(file_mks)
+        print(f"Markers File: {file_mks}\nClusters File: {file_grp}")
+
     def load(self, file_path, file_path_markers=None,
              method_cluster="leiden", **kwargs):
         """Load AnnData."""

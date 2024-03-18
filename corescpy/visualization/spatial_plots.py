@@ -97,6 +97,7 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
     col_cell_type, col_cell_type_sp = [None, None] if (
         col_cell_type) is None else [col_cell_type, col_cell_type] if (
             isinstance(col_cell_type, str)) else col_cell_type
+    marker_genes_dict = kwargs.pop("marker_genes_dict", None)
     if isinstance(figsize, (int, float)):
         figsize = (figsize, figsize)
     if adata_sc and col_cell_type:
@@ -139,6 +140,9 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
         tg.plot_genes_sc(plot_genes, adata_measured=adata_sp,
                          adata_predicted=adata_sp_new, perc=0.02)
         figs["genes"] = plt.gcf()
+        figs["gex"] = cr.pl.plot_gex(
+            adata_sp_new, col_annotation, marker_genes_dict=marker_genes_dict,
+            genes=plot_genes, kind=["dot", "matrix"])  # plot GEX matrix & dot
     if col_annotation is not None:  # predicted cell types spatial plot
         figs["spatial"] = plot_spatial(
             adata_sp_new, color=col_annotation, **kwargs)  # plot
