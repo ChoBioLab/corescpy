@@ -227,26 +227,31 @@ class Omics(object):
             raise ValueError("File extension must be .h5ad or .h5mu")
 
     def write_clusters(self, out_directory, col_cell_type="leiden",
-                       file_prefix=None, overwrite=False,
-                       n_top=True, **kwargs):
+                       file_prefix=None, overwrite=False, n_top=True):
         """Write clusters (and, if `n_top` != False, markers)."""
         pre = "" if file_prefix is None else f"{file_prefix}_"
-        file_mks, file_grp = [os.path.join(
+        file_grp, file_mks = [os.path.join(
             out_directory, f"{pre}{col_cell_type}{s}.csv") for s in [
                 "", "_markers"]]  # file names
+        file_mks = None if n_top is False else file_mks
         if overwrite is False:
-            for x in [file_mks, file_grp]:
-                if os.path.exists(x):
+            for x in [file_grp, file_mks]:
+                if x is not None and os.path.exists(x):
                     raise ValueError(f"File {x} already exists.")
         (self.rna.obs.set_index("cell_id") if (
             "cell_id" in self.rna.obs) and isinstance(
                 self, cr.Spatial) else self.rna.obs)[
-                    col_cell_type].to_frame("group").to_csv(file_grp)
+                    col_cell_type].to_frame("group").to_csv(file_grp)  # write
         if n_top is not False and "markers" in self.rna.uns and (
                 col_cell_type in self.rna.uns["markers"]):
             mks = self.rna.uns["markers"][col_cell_type]  # marker genes df
-            (mks.groupby(col_cell_type).apply(lambda x: x.iloc[:n_top]) if (
-                isinstance(n_top, (int, float))) else mks).to_csv(file_mks)
+            if isinstance(n_top, (int, float)):
+                if any(mks.groupby(col_cell_type).apply(len) < n_top):
+                    warn(f"At least 1 cluster {col_cell_type} has < `n_top` "
+                         f"({n_top}) markers stored in `.uns['markers']`.")
+                mks = mks.groupby(col_cell_type).apply(lambda x: x.iloc[:min(
+                    x.shape[0], n_top)])  # subset to `n_top` DEGs per cluster
+            mks.to_csv(file_mks)  # write markers
         print(f"Markers File: {file_mks}\nClusters File: {file_grp}")
 
     def load(self, file_path, file_path_markers=None,
