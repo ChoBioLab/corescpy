@@ -245,12 +245,12 @@ class Omics(object):
         if n_top is not False and "markers" in self.rna.uns and (
                 col_cell_type in self.rna.uns["markers"]):
             mks = self.rna.uns["markers"][col_cell_type]  # marker genes df
-            if isinstance(n_top, (int, float)):
+            if isinstance(n_top, (int, float)) and n_top is not True:
                 if any(mks.groupby(col_cell_type).apply(len) < n_top):
                     warn(f"At least 1 cluster {col_cell_type} has < `n_top` "
                          f"({n_top}) markers stored in `.uns['markers']`.")
                 mks = mks.groupby(col_cell_type).apply(lambda x: x.iloc[:min(
-                    x.shape[0], n_top)])  # subset to `n_top` DEGs per cluster
+                    x.shape[0], n_top)]).reset_index()  # n_top DEGs per type
             mks.to_csv(file_mks)  # write markers
         print(f"Markers File: {file_mks}\nClusters File: {file_grp}")
 
