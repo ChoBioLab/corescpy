@@ -56,6 +56,8 @@ dependencies = [
     "tangram-sc",
 
     # Other
+    "dask==2023.11.0",
+    "distributed==2023.11.0",
     "docutils < 0.17,>= 0.10",
     # "numpy >=1.24.4",
     # "numpy<=1.24.3,>=1.22",
