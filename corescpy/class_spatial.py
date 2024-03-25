@@ -407,7 +407,7 @@ class Spatial(cr.Omics):
                          )  # key to add (or use, if exists) in .uns for DEGs
         out = cr.pp.impute_spatial(
             adata_sp, adata_sc.copy(), col_cell_type=col_cell_type, mode=mode,
-            key_added=key, inplace=True,
+            key_added=key, inplace=True, device=device,
             col_annotation=col_annotation, **kwargs)  # integrate
         if inplace is False:
             self.rna.uns["tangram_object"] = out[0]
