@@ -103,7 +103,8 @@ def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
     pkg.tl.umap(ann, **kws_umap)  # UMAP
 
     # Clustering with Leiden or Louvain
-    print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>")
+    print(f"\n\n<<< CLUSTERING WITH {method_cluster.upper()} METHOD >>>"
+          f"\nResolution={resolution}")
     f_x = pkg.tl.leiden if method_cluster == "leiden" else pkg.tl.louvain
     f_x(ann, resolution=resolution, **kws_cluster)  # clustering
 
