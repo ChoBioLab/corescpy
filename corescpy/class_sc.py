@@ -128,8 +128,6 @@ class Omics(object):
         self._layers = {**cr.pp.get_layer_dict(),
                         "layer_perturbation": "X_pert"}
         self._integrated = kws_multi is not None
-        if kwargs:
-            print(f"Unused keyword arguments: {kwargs}.\n")
 
         # Create Attributes to Store Results/Figures/Methods
         self.results, self.figures = {}, {}
@@ -572,13 +570,15 @@ class Omics(object):
             genes_subset=genes_subset, key_added=key_added)  # arguments
         ann, figs = cr.ax.cluster(ann, assay=assay, colors=colors,
                                   **kws, **kwargs)  # clustering
-        for x in kws.items():
-            ann.obs.loc[:, x[0]] = str(x[1])  # store parameters in `.obs`
+        for x in kws.items():  # store specifications in `.uns`
+            if "specifications" not in ann.uns:
+                ann.uns["specifications"] = {"clustering": {}}
+            ann.uns["specifications"]["clustering"][key_added] = x[1]
         if copy is False:
             self.info["methods"]["clustering"] = method_cluster
             self.rna = ann
-        if out_file:  # write to file if specified
-            self.write(out_file)  # write .adata or .rna, based on extension
+            if out_file:  # write to file if specified
+                self.write(out_file)  # write .rna to h5ad/h5mu
         return ann
 
     def subcluster(self, restrict_to=None, layer="scaled", resolution=1,

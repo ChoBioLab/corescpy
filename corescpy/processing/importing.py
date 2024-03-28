@@ -233,6 +233,21 @@ def combine_matrix_protospacer(directory="",
     return adata
 
 
+def construct_file(run="CHO-001", panel_id="TUQ97N", directory=None):
+    """Construct file path from information."""
+    if "outputs" not in directory and os.path.exists(
+            os.path.join(directory, "outputs")):
+        directory = os.path.join(directory, "outputs")
+    run = [run] if isinstance(run, str) else run
+    panel_id = [panel_id] * len(run) if isinstance(
+        panel_id, str) else panel_id
+    fff = []
+    for i, x in enumerate(run):
+        d_x = os.path.join(directory, panel_id[i], x)
+        fff += [os.path.join(d_x, y) for y in os.listdir(d_x)]
+    return fff
+
+
 def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
                               col_num_umis="num_umis", feature_split="|",
                               guide_split="-", keep_extra_columns=True):
