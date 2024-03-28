@@ -136,10 +136,13 @@ class Spatial(cr.Omics):
                 len(self.rna.uns["original_ix"]) <= len(original_ix))):
             self.rna.uns["original_ix"] = original_ix
         if file_path_markers:
-            if "markers" not in self.rna.uns:
-                self.rna.uns["markers"] = {}
-            self.rna.uns["markers"][method_cluster] = pd.read_csv(
-                file_path_markers).set_index([method_cluster, "names"])
+            if os.path.exists(file_path_markers) is False:
+                raise ValueError(f"{file_path_markers} not found.")
+            else:
+                if "markers" not in self.rna.uns:
+                    self.rna.uns["markers"] = {}
+                self.rna.uns["markers"][method_cluster] = pd.read_csv(
+                    file_path_markers).set_index([method_cluster, "names"])
 
     def write(self, file, mode="h5ad", **kwargs):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""

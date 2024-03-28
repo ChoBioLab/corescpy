@@ -133,6 +133,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         adata = file.copy() if "copy" in dir(file) else file
         if "table" in dir(adata) and "original_ix" not in adata.table.uns:
             adata.table.uns["original_ix"] = adata.table.obs.index.values
+
     # Spatial Data
     elif spatial not in [None, False]:
         kwargs = {**dict(prefix=prefix, col_sample_id=csid,
@@ -161,7 +162,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         print(f"\n\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
 
-    # For CRISPR Data with gRNAA in Separate Assay of Muon Object
+    # For CRISPR Data with gRNA in Separate Assay of Muon Object
     if assay_gdo:
         print(f"\n\n<<< Joining {assay_gdo} (gRNA) & {assay} assay data >>>")
         kws_pmc = dict(assay=[assay, assay_gdo])
@@ -214,7 +215,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
             kws_process_guide_rna) else None  # to group counts ~ cell type
         cr.tl.print_counts(adata, title="Post-gRNA Processing", group_by=cct)
 
-    # Layers & QC
+    # Initial Counts Layer (If Not Present)
     layers = cr.pp.get_layer_dict()  # standard layer names
     rna = adata.table if isinstance(adata, spatialdata.SpatialData
                                     ) else adata[assay] if assay else adata
@@ -231,7 +232,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
 
 
 def process_data(adata, col_gene_symbols=None, col_cell_type=None,
-                 outlier_mads=None, cell_filter_pmt=None,
+                 outlier_mads=None, cell_filter_pmt=None, method_norm="log",
                  cell_filter_ncounts=None, cell_filter_ngene=None,
                  gene_filter_ncell=None, gene_filter_ncounts=None,
                  remove_malat1=False, target_sum=1e4, kws_hvg=True,
@@ -246,6 +247,12 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             index in `.var` containing gene symbols. Defaults to None.
         col_cell_type (str, optional): The name of the column
             in `.obs` containing cell types. Defaults to None.
+        method_norm (str, optional): The method to use for
+            normalization to be stored in the log1p layer
+            (even if another method is used, for consistency).
+            Users should leave as default "log" for most data.
+            The "sqrt" method is 10x-recommended for Xenium data.
+            Defaults to "log".
         target_sum (float, optional): Total-count normalize to
             <target_sum> reads per cell, allowing between-cell
             comparability of counts. If None, total count-normalization
@@ -323,15 +330,10 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         figs (dict): A dictionary of generated figures.
     """
     # Setup Object
+    figs = {}
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
-    if custom_thresholds:  # filter on custom thresholds
-        for x in custom_thresholds:
-            dff = ann.obs[x] if x in ann.obs else ann.var[x]  # .obs or .var?
-            if custom_thresholds[x][0]:  # filter by minimum
-                ann = ann[ann.obs[x] >= custom_thresholds[x][0]]
-            if custom_thresholds[x][1]:  # filter by maximum
-                ann = ann[dff <= custom_thresholds[x][1]]
+    print(ann)
     if layers["counts"] not in ann.layers:
         if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(
@@ -344,29 +346,40 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     ann.obs["log_counts"] = np.log(ann.obs["n_counts"])
     ann.obs["n_genes"] = (ann.X > 0).sum(1)
 
-    # Initial Information/Arguments
+    # Argument Processing
     if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
         col_gene_symbols = None  # ...so functions will refer to index name
-    figs = {}
+    if outlier_mads is not None:  # if filtering based on calculating outliers
+        if isinstance(outlier_mads, (int, float)):  # same MADs, all metrics
+            qc_mets = ["log1p_total_counts", "log1p_n_genes_by_counts",
+                       "pct_counts_in_top_20_genes"]
+            outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
+    max_val, cen = [kws_scale.pop(x, None) for x in [
+        "max_value", "zero_center"]] if isinstance(
+            kws_scale, dict) else [0, True]  # extract scale keywords if need
     if isinstance(kws_scale, dict):  # if extracted all sc.pp.scale arguments
-        max_val, cen = [kws_scale.pop(x, None)
-                        for x in ["max_value", "zero_center"]]
         if any((i for i in [max_val, cen])) and len(
                 kws_scale) == 0:  # if extracted all regular-scale keywords
             kws_scale = True  # so doesn't think scaling by reference (CRISPR)
-    else:
-        max_val, cen = 0, True
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)
     sids = [np.nan if f"col_{x}" not in kwargs else np.nan if kwargs[
         f"col_{x}"] is None else kwargs.pop(f"col_{x}") for x in [
             "sample_id", "subject", "batch"]]  # batch/sample/subject
-    sids = list(pd.Series(sids).dropna().unique())  # unique & not None
-    if len(sids) == 0:
-        sids = None
+    sids = list(pd.Series(sids).dropna().unique()) if pd.Series(sids).dropna(
+        ).any() else None  # unique & not None
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
+
+    # Filter by Custom Variables?
+    if custom_thresholds:  # filter on custom thresholds
+        for x in custom_thresholds:
+            dff = ann.obs[x] if x in ann.obs else ann.var[x]  # .obs or .var?
+            if custom_thresholds[x][0]:  # filter by minimum
+                ann = ann[dff >= custom_thresholds[x][0]]
+            if custom_thresholds[x][1]:  # filter by maximum
+                ann = ann[dff <= custom_thresholds[x][1]]
 
     # Highly Expressed Genes
     try:
@@ -379,11 +392,6 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         figs["highly_expressed_genes"] = err
 
     # Set Up Layer & Variables
-    if outlier_mads is not None:  # if filtering based on calculating outliers
-        if isinstance(outlier_mads, (int, float)):  # same MADs, all metrics
-            qc_mets = ["log1p_total_counts", "log1p_n_genes_by_counts",
-                       "pct_counts_in_top_20_genes"]
-            outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
     cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
 
     # Exploration & QC Metrics
@@ -422,11 +430,21 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     if target_sum is not None:  # total-count normalization INPLACE
         print("\n\t*** Total-count normalizing...")
         sc.pp.normalize_total(ann, target_sum=target_sum, copy=False)
-    print(ann)
-    print(f"\n\t*** Log-normalizing => `.X` & {layers['log1p']} layer...")
-    sc.pp.log1p(ann)  # log-transformed; INPLACE
+    if method_norm:
+        print(f"\n\t*** Normalizing data ({method_norm} method) & storing in"
+              f" `.X` & {layers['log1p']} layer .")
+        if method_norm == "log":
+            print("\n\t*** Performing log-normalization...")
+            sc.pp.log1p(ann)  # log-transformed; INPLACE
+        elif method_norm == "sqrt":
+            print("\n\t*** Performing square root normalization...")
+            ann.X = np.sqrt(ann.X.toarray()) + np.sqrt(ann.X.toarray() + 1)
+        else:
+            raise ValueError(f"Unknown normalization method {method_norm}.")
+    else:
+        print("\n\t*** Skipping normalization...")
     ann.layers[layers["log1p"]] = ann.X.copy()  # also keep in layer
-    ann.raw = ann.copy()  # before HVG, batch correction, etc.
+    # ann.raw = ann.copy()  # before HVG, batch correction, etc.
 
     # Gene Variability (Detection, Optional Filtering)
     print("\n<<< DETECTING VARIABLE GENES >>>")
@@ -437,7 +455,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         ann = ann[:, ann.var.highly_variable]  # filter by HVGs
         cr.tl.print_counts(ann, title="HVGs", group_by=col_cell_type)
 
-    # Set .raw if Needed
+    # Set .raw?
     if regress_out or max_val:
         adata.raw = adata.copy()
 
@@ -448,7 +466,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         sc.pp.regress_out(ann, regress_out, copy=False)
         warn("Confound regression doesn't yet properly use layers.")
 
-    # Gene Expression Normalization
+    # Scale Gene Expression
     if kws_scale is not None:  # scale by overall or reference
         print("\n<<< NORMALIZING RAW GENE EXPRESSION >>>")
         normalize_genes(ann, kws_reference=kws_scale if isinstance(
