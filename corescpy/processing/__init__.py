@@ -8,7 +8,7 @@ from .preprocessing import (create_object,
 
 from .guide_rna import process_guide_rna
 
-from .importing import (combine_matrix_protospacer,
+from .importing import (combine_matrix_protospacer, construct_file,
                         process_multimodal_crispr)
 
 from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
@@ -24,6 +24,6 @@ __all__ = [
     "process_multimodal_crispr", "describe_tiff", "extract_tiff",
     "command_cellpose", "read_spatial", "update_spatial_uns",
     "impute_spatial", "_get_control_probe_names",
-    "construct_obs_spatial_imputation",
+    "construct_file", "construct_obs_spatial_imputation",
     "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP",
 ]

@@ -12,6 +12,7 @@ from warnings import warn
 import traceback
 from copy import deepcopy
 import matplotlib.pyplot as plt
+from scipy.sparse import csr_array
 # import anndata
 from anndata import AnnData
 import scanpy as sc
@@ -391,10 +392,8 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         warn(f"\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
         figs["highly_expressed_genes"] = err
 
-    # Set Up Layer & Variables
-    cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
-
     # Exploration & QC Metrics
+    cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
     figs["qc_metrics"] = cr.pp.perform_qc(ann, hue=sids)  # QC metrics & plots
 
@@ -402,10 +401,10 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>")
     if cell_filter_ngene:
         sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
-    cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
+    cr.tl.print_counts(ann, title="Post-`min_gene`", group_by=col_cell_type)
     if gene_filter_ncell:
         sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
-    cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
+    cr.tl.print_counts(ann, title="Post-`min_cell`", group_by=col_cell_type)
 
     # Further Filtering
     print("\n<<< FURTHER CELL & GENE FILTERING >>>")
@@ -438,7 +437,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             sc.pp.log1p(ann)  # log-transformed; INPLACE
         elif method_norm == "sqrt":
             print("\n\t*** Performing square root normalization...")
-            ann.X = np.sqrt(ann.X.toarray()) + np.sqrt(ann.X.toarray() + 1)
+            ann.X = csr_array(np.sqrt(adata.X) + np.sqrt(adata.X + 1))
         else:
             raise ValueError(f"Unknown normalization method {method_norm}.")
     else:

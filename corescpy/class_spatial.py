@@ -719,8 +719,8 @@ class Spatial(cr.Omics):
 
     def calculate_spatial_distance(self, key_reference, col_reference=None,
                                    genes=None, metric="euclidean",
-                                   covariates=None, copy=False, layer="counts",
-                                   figsize=None, **kwargs):
+                                   covariates=None, copy=False,
+                                   layer="counts", figsize=None, **kwargs):
         """Calculate distance measurements given a reference point."""
         adata = self.get_layer(layer=layer, inplace=False)
         if col_reference is None:
