@@ -142,12 +142,20 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
         figs["marker_rankings"] = cr.pl.plot_markers(
             adata, n_genes=n_genes, key_added=key_added, use_raw=use_raw,
             key_reference=key_reference, **{"col_wrap": 3, **kws_plot})
-    ranks = sc.get.rank_genes_groups_df(
-        adata, None, key=key_added, pval_cutoff=p_threshold,
+    ranks = make_marker_genes_df(
+        adata, col_cell_type, key_added=key_added, p_threshold=p_threshold,
         log2fc_min=None, log2fc_max=None, gene_symbols=col_gene_symbols)
+    return ranks, figs
+
+
+def make_marker_genes_df(adata, col_cell_type, key_added="leiden",
+                         p_threshold=None, **kwargs):
+    """Make marker gene dictionary in `.uns` into a dataframe."""
+    ranks = sc.get.rank_genes_groups_df(adata, None, key=key_added,
+                                        pval_cutoff=p_threshold, **kwargs)
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
-    return ranks, figs
+    return ranks
 
 
 def perform_celltypist(adata, model, col_cell_type=None,
