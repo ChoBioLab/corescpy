@@ -225,8 +225,10 @@ class Omics(object):
             raise ValueError("File extension must be .h5ad or .h5mu")
 
     def write_clusters(self, out_directory, col_cell_type="leiden",
-                       file_prefix=None, overwrite=False, n_top=True):
+                       file_prefix=None, n_top=True,
+                       p_threshold=None, overwrite=False, **kwargs):
         """Write clusters (and, if `n_top` != False, markers)."""
+        key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
         pre = "" if file_prefix is None else f"{file_prefix}_"
         file_grp, file_mks = [os.path.join(
             out_directory, f"{pre}{col_cell_type}{s}.csv") for s in [
@@ -236,13 +238,14 @@ class Omics(object):
             for x in [file_grp, file_mks]:
                 if x is not None and os.path.exists(x):
                     raise ValueError(f"File {x} already exists.")
+        print(file_grp, file_mks)
         (self.rna.obs.set_index("cell_id") if (
             "cell_id" in self.rna.obs) and isinstance(
                 self, cr.Spatial) else self.rna.obs)[
                     col_cell_type].to_frame("group").to_csv(file_grp)  # write
-        if n_top is not False and "markers" in self.rna.uns and (
-                col_cell_type in self.rna.uns["markers"]):
-            mks = self.rna.uns["markers"][col_cell_type]  # marker genes df
+        if n_top is not False and key in self.rna.uns:  # if markers available
+            mks = cr.ax.make_marker_genes_df(
+                self.rna, col_cell_type, key_added=key)  # marker genes df
             if isinstance(n_top, (int, float)) and n_top is not True:
                 if any(mks.groupby(col_cell_type).apply(len) < n_top):
                     warn(f"At least 1 cluster {col_cell_type} has < `n_top` "
