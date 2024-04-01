@@ -651,8 +651,9 @@ class Omics(object):
             if col_annotation in adata.obs:
                 adata.obs = adata.obs.drop(col_annotation, axis=1)
             key_add = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")
-            sc.tl.rank_genes_groups(adata, c_t, use_raw=False,
-                                    key_added=key_add)  # rank DEGs
+            if key_add not in adata.uns:
+                sc.tl.rank_genes_groups(adata, c_t, use_raw=False,
+                                        key_added=key_add)  # rank DEGs
             _, res = cr.ax.annotate_by_markers(
                 adata, model, col_cell_type=c_t, key_added=key_add,
                 col_new=col_annotation, **kwargs)  # annotate
@@ -688,6 +689,7 @@ class Omics(object):
         """Find gene markers for clusters/cell types."""
         if assay is None:
             assay = self._assay
+        key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
         adata = self.rna.copy() if copy is True else self.rna  # copy?
         if col_cell_type is None:  # if cell type column not specified...
             if "clustering" in self.info["methods"]:  # use leiden/louvain #s
@@ -698,7 +700,7 @@ class Omics(object):
         adata = adata if all(n_clus) else adata[adata.obs[
             col_cell_type].isin(n_clus[n_clus > 1].index.values)].copy()
         marks, figs_m = cr.ax.find_marker_genes(
-            adata, assay=assay, method=method, n_genes=n_genes,
+            adata, assay=assay, method=method, n_genes=n_genes, key_added=key,
             layer=layer, key_reference=key_reference, kws_plot=kws_plot,
             col_cell_type=col_cell_type, use_raw=use_raw, **kwargs)  # markers
         if copy is False:
