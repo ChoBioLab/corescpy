@@ -121,8 +121,9 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
                     "scale")[1]) == str(min(scales)):
                 imgs["hires"] = imgs[key]  # Squidpy/Visium-Xenium compatible
     if rna_only is True:
-        if col_sample_id in adata.table.obs:
-            rna = adata.table[adata.table.obs[col_sample_id] == library_id]
+        # if col_sample_id in adata.table.obs:
+        #     rna = adata.table[adata.table.obs[col_sample_id] == library_id]
+        rna = adata.table
         rna.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
         # rna.uns[SPATIAL_KEY]["library_id"] = library_id
         return rna

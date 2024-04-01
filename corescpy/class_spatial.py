@@ -415,13 +415,8 @@ class Spatial(cr.Omics):
         if inplace is False:
             self.rna.uns["tangram_object"] = out[0]
             self.rna.obs.loc[:, col_annotation] = out[0].obs[col_annotation]
-        if out_file is not None:
-            if os.path.isdir(out_file):  # directory -> standardized file path
-                out_file = os.path.join(
-                    out_file, f"{self._library_id}_{col_annotation}.csv")
-            (out[0].obs.set_index("cell_id") if "cell_id" in out[
-                0].obs else out[0].obs)[col_annotation].to_frame(
-                    "group").to_csv(out_file)
+            if out_file and os.path.splitext(out_file)[1] != ".csv":
+                self.write(out_file)
         return out
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
