@@ -301,10 +301,11 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
         assign.loc[:, col_assignment] = assign[col_assignment].replace(rename)
     if col_assignment in assign.columns:
         assign = assign[[col_assignment]]
-    cr.ax.find_marker_genes(
-        adata, col_cell_type=col_cell_type, n_genes=n_top, layer="log1p",
-        p_threshold=None, method="wilcoxon", kws_plot=False, use_raw=False,
-        key_added=key_add, **kwargs)  # find marker genes (rank DEGs)
+    if key_add not in adata.uns:
+        cr.ax.find_marker_genes(
+            adata, col_cell_type=col_cell_type, n_genes=n_top, layer="log1p",
+            p_threshold=None, method="wilcoxon", kws_plot=False,
+            use_raw=False, key_added=key_add, **kwargs)  # find marker genes
     if method.lower() in ["overlap_count", "overlap_coef", "jaccard"]:
         assign = assign.rename_axis("Gene")
         assign.columns = [col_assignment]
