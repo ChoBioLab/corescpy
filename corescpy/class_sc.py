@@ -253,7 +253,7 @@ class Omics(object):
                 mks = mks.groupby(col_cell_type).apply(lambda x: x.iloc[:min(
                     x.shape[0], n_top)]).reset_index()  # n_top DEGs per type
             mks.to_csv(file_mks)  # write markers
-        print(f"Markers File: {file_mks}\nClusters File: {file_grp}")
+        print(f"Markers File: {file_mks}\nClusters File: {file_grp}\n\n")
 
     def load(self, file_path, file_path_markers=None,
              method_cluster="leiden", **kwargs):
