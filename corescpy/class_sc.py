@@ -238,7 +238,6 @@ class Omics(object):
             for x in [file_grp, file_mks]:
                 if x is not None and os.path.exists(x):
                     raise ValueError(f"File {x} already exists.")
-        print(file_grp, file_mks)
         (self.rna.obs.set_index("cell_id") if (
             "cell_id" in self.rna.obs) and isinstance(
                 self, cr.Spatial) else self.rna.obs)[

@@ -46,7 +46,7 @@ dependencies = [
     # Spatial
     "squidpy>=1.4.0",
     "spatialdata[extra]>=0.0.15",
-    "spatialdata_io>=0.0.9",
+    "spatialdata_io>=0.1.2",
     "spatialdata-plot",
     "tifffile",
     "cellpose",
