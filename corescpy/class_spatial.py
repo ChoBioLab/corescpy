@@ -429,9 +429,10 @@ class Spatial(cr.Omics):
         """
         # Connectivity & Centrality
         print("\t*** Building connectivity matrix...")
-        adata = self.adata
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
+        self.rna.obs = self.rna.obs.astype({cct: "category"})
+        adata = self.adata
         f_s = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (30, 7) if figsize is None else figsize
         if isinstance(palette, list):
@@ -451,7 +452,7 @@ class Spatial(cr.Omics):
         except Exception:
             try:
                 ann = adata.table.copy()
-                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 sq.pl.centrality_scores(ann, cluster_key=cct, figsize=f_s)
                 fig = plt.gcf()
             except Exception:
@@ -512,11 +513,12 @@ class Spatial(cr.Omics):
                         library_key=library_key, vcenter=vcenter,
                         vmin=cbar_range[0], vmax=cbar_range[1],
                         img_res_key=key_image, cmap=cmap, ax=axs[0])
-            sq.pl.nhood_enrichment(adata, **pkws)  # matrix
+            sq.pl.nhood_enrichment(adata.table if isinstance(
+                adata, spatialdata.SpatialData) else adata, **pkws)  # matrix
         except Exception:
             try:
                 ann = adata.table.copy()
-                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 sq.pl.nhood_enrichment(ann, **pkws)  # matrix
             except Exception:
                 traceback.print_exc()
@@ -557,6 +559,9 @@ class Spatial(cr.Omics):
         than connectivity matrix).
         """
         _ = self.get_layer(layer=layer, inplace=True)
+        cct = col_cell_type if col_cell_type else self._columns[
+            "col_cell_type"]
+        self.rna.obs = self.rna.obs.astype({cct: "category"})
         adata = self.adata
         if isinstance(key_cell_type, str):
             key_cell_type = [key_cell_type]
@@ -570,8 +575,6 @@ class Spatial(cr.Omics):
         kws_plot = cr.tl.merge(dict(
             palette=palette, size=size, key_cell_type=key_cell_type,
             figsize=figsize), kws_plot)  # plot keywods
-        cct = col_cell_type if col_cell_type else self._columns[
-            "col_cell_type"]
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.co_occurrence(adata, cluster_key=cct, n_jobs=n_jobs,
@@ -591,11 +594,13 @@ class Spatial(cr.Omics):
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         try:
             fig["co_occurrence"] = cr.pl.plot_cooccurrence(
-                adata, col_cell_type=cct, **kws_plot)  # lines plot
+                adata.table if isinstance(
+                    adata, spatialdata.SpatialData) else adata,
+                col_cell_type=cct, **kws_plot)  # lines plot
         except Exception:
             try:
                 ann = adata.table.copy()
-                _ = ann.uns.pop("leiden_colors", None)  # Squidpy palette bug
+                _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 fig["co_occurrence"] = cr.pl.plot_cooccurrence(
                     ann, col_cell_type=cct, **kws_plot)  # lines plot
             except Exception:
