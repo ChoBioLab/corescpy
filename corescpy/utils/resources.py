@@ -41,7 +41,8 @@ def get_markers_database(resource="PanglaoDB", organism="human",
 #     return resp
 
 
-def get_topp_gene(genes, no_return=False, sources=None, name_pattern=None,
+def get_topp_gene(genes, no_return=False, verbose=True,
+                  sources=None, name_pattern=None,
                   symbols=True, categories="ToppCell", max_results=1000):
     """Get ToppGene results."""
     url = "https://toppgene.cchmc.org/API/enrich"
@@ -77,7 +78,7 @@ def get_topp_gene(genes, no_return=False, sources=None, name_pattern=None,
     dff.loc[:, "Genes"] = dff.Genes.apply(lambda x: [i["Symbol"] for i in x])
     if sources:
         dff = dff[dff.Source.isin(sources)]
-    if name_pattern:
+    if name_pattern and dff.shape[0] > 0:
         if not isinstance(name_pattern, dict):  # if no per-source pattern...
             name_pattern = dict(zip(name_pattern, [name_pattern] * len(
                 dff.Name.unique())))  # ...use same pattern for all
@@ -86,6 +87,7 @@ def get_topp_gene(genes, no_return=False, sources=None, name_pattern=None,
             dff.loc[dff.Source == x, "Keep"] = dff.loc[
                 dff.Source == x, "Name"].apply(lambda y: name_pattern[x] in y)
         dff = dff[dff.Keep].drop("Keep", axis=1)
-    print(dff.head())
+    if verbose is True:
+        print(dff.head())
     if no_return is False:
         return dff

@@ -624,7 +624,9 @@ class Omics(object):
         the second as annotations (i.e., mapping the markers
         to cell types).
         """
-        if isinstance(model, pd.DataFrame) or model not in list(
+        if model is None:
+            flavor = "ToppGene"
+        elif isinstance(model, pd.DataFrame) or model not in list(
                 celltypist.models.models_description().model):
             flavor = "annotations"
         else:
@@ -634,19 +636,34 @@ class Omics(object):
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
         m_c = kwargs.pop("method_cluster", "leiden" if (
             "leiden" in self.rna.uns.keys()) else "louvain")  # cluster method
+        c_t = kwargs.pop("col_cell_type", m_c)
         if re_ix is True:  # rename multi-modal index if <assay>:<gene>
             adata.var = adata.var.rename(dict(zip(adata.var.index, ["".join(
                 x.split(":")[1:]) for x in adata.var.index])))
         if flavor == "celltypist":  # annotate with CellTypist
-            c_t = kwargs.pop("col_cell_type", self._columns["col_cell_type"])
             adata, res, figs = cr.ax.perform_celltypist(
                 adata, model, majority_voting=True, p_threshold=p_threshold,
                 mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
                 min_proportion=min_proportion, **kwargs)  # annotate
             col_ann = ["majority_voting", "predicted_labels"]  # for writing
+        elif "top" in flavor.lower():  # ToppGene method
+            types = self.rna.obs[c_t].unique()
+            n_top_genes = kwargs.pop("n_top_genes", 10)  # number of top genes
+            nta = kwargs.pop("n_top_annotations", 20)  # number of top genes
+            sources = kwargs.pop("sources", None)  # to filter Atlas sources
+            mks = cr.ax.make_marker_genes_df(
+                self.rna, c_t, key_added=f"rank_genes_groups_{c_t}")  # DEGs
+            mks = mks[mks.pvals_adj <= p_threshold].groupby(c_t).apply(
+                lambda x: x.iloc[:min(x.shape[0], n_top_genes)]).reset_index(
+                    0, drop=True)  # filter by p_value & number of top genes
+            tgdf = pd.concat([cr.tl.get_topp_gene(
+                list(mks.loc[x].index.values), sources=sources, verbose=False,
+                **kwargs).drop("Source", axis=1).reset_index(
+                    0, drop=True).iloc[:nta]
+                for x in types], keys=types)  # ToppGene results
+            return tgdf
         else:  # annotate by marker dictionary
             figs = {}
-            c_t = kwargs.pop("col_cell_type", m_c)
             if col_annotation in adata.obs:
                 adata.obs = adata.obs.drop(col_annotation, axis=1)
             key_add = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")
