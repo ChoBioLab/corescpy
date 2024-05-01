@@ -4,10 +4,10 @@
 @author: E. N. Aslinger
 """
 
-import scanpy as sc
 import warnings
-import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sns
+import scanpy as sc
 import corescpy as cr
 from corescpy import Omics
 from corescpy.analysis.perturbations import layer_perturbation
@@ -28,8 +28,10 @@ class Crispr(Omics):
                  col_sample_id="standard_sample_id",
                  col_condition="perturbation", col_perturbed="perturbed",
                  col_guide_rna=None, col_num_umis="num_umis",
+                 col_target_genes=None,
                  key_control="NT", key_treatment="KO", key_nonperturbed="NP",
-                 kws_process_guide_rna=None, kws_multi=None, **kwargs):
+                 kws_process_guide_rna=None, file_perturbations=None,
+                 kws_multi=None, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -297,6 +299,20 @@ class Crispr(Omics):
                         Some functionality may be limited and/or
                         problems occur if set to False and if
                         multiply-transfected cells remain in data.
+            col_target_genes (str): If the target gene names differ
+                from "col_condition" (e.g., if you have different
+                instantiations of perturbations, targeting the same
+                gene, but by which you want to filter or use in
+                other situations instead of the target gene name),
+                provide the column name. Otherwise,
+                will be the same as "col_condition" (target genes).
+            file_perturbations (str | pd.DataFrame, optional): A path
+                to a file (or dataframe with gRNA ID as the index)
+                containing the gRNA ID-target gene-perturbation
+                condition mapping (if it can't be performed using the
+                `kws_process_guide_rna` "guide_split" argument).
+                The file should contain columns matching
+                "col_condition", "col_target_genes", & "col_guide_rna".
         """
         self._assay = assay
         self._assay_protein = assay_protein
@@ -308,7 +324,7 @@ class Crispr(Omics):
         if col_guide_rna == col_condition:
             warnings.warn(f"`col_condition` ({col_condition}) can't be same "
                           "as `col_guide_rna`! Now = {col_condition}_target.")
-            col_condition = col_condition + "_target"
+            col_condition = col_condition + "_guide"
 
         # Create Attributes to Store Results/Figures
         self.figures = {}
@@ -381,7 +397,8 @@ class Crispr(Omics):
             **self._columns,
             **dict(col_gene_symbols=col_gene_symbols,
                    col_condition=col_condition,
-                   col_target_genes=col_condition,
+                   col_target_genes=col_target_genes if (
+                       col_target_genes) else col_condition,
                    col_perturbed=col_perturbed,
                    col_cell_type=col_cell_type,
                    col_sample_id=col_sample_id,
@@ -500,11 +517,12 @@ class Crispr(Omics):
         if isinstance(target_gene_idents, str):
             target_gene_idents = [target_gene_idents]
         cols = list(pd.unique([self._columns["col_target_genes"]] + list(
-            [] if group_by is None else group_by))) # group + adata variables
+            [] if group_by is None else group_by)))  # group + adata variables
         dff = self.rna.uns["grna_feats_n"].reset_index(
             "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
-            dff = dff[dff[self._columns["col_target_genes"]].isin(target_gene_idents)]
+            dff = dff[dff[self._columns["col_target_genes"]].isin(
+                target_gene_idents)]
         kws_plot = dict(
             # share_x=True, share_y=False,
             # figsize=(30, 30),
@@ -867,7 +885,7 @@ class Crispr(Omics):
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""
     #     # TODO: FINISH
-    #     raise NotImplementedError("Saving output isn't yet fully implemented.")
+    #     raise NotImplementedError("Saving output isn't yet implemented.")
     #     if isinstance(run_keys, (str, float)):
     #         run_keys = [run_keys]
     #     elif run_keys == "all":

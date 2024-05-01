@@ -10,12 +10,14 @@ DIR = pathlib.Path(__file__).parent.resolve()
 DIR = os.path.join(DIR, "data")
 
 files_data = {
-    "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH06"),
+    "CRISPRi_scr": dict(directory=f"{DIR}/crispr-screening/HH03"),
     "CRISPRi_scr_multi": {
-        # "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
+        "HH03": dict(directory=f"{DIR}/crispr-screening/HH03"),
+        "HH04": dict(directory=f"{DIR}/crispr-screening/HH04"),
+        "HH05": dict(directory=f"{DIR}/crispr-screening/HH05"),
         "HH06": dict(directory=f"{DIR}/crispr-screening/HH06"),
-        "CR4": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4"),
-        "CR5": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR5")
+        "HH07": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR5"),
+        "HH09": dict(directory=f"{DIR}/crispr-screening/HH-Hu-CR4")
     },
     "CRISPRi_wgs": f"{DIR}/replogle_2022_k562_gwps.h5ad",  # perturb-seq (WGS)
     "CRISPRi_ess": f"{DIR}/replogle_2022_k562_esss.h5ad",  # perturb-seq

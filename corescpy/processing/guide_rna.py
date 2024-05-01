@@ -223,7 +223,7 @@ def detect_guide_targets(col_guide_rna_series, feature_split="|",
             warn("Dropping rows with NaNs in `col_guide_rna`.")
         targets = targets.dropna()
     if feature_split is not None or guide_split is not None:
-        targets, nums = [targets.apply(  # each entry -> list of target genes
+        targets, suffs = [targets.apply(  # each entry -> list of target genes
             lambda x: [re.sub(p, ["", r"\1"][j], str(i)) if re.search(
                 p, str(i)) else [i, ""][j] for i in list(
                     x.split(feature_split) if feature_split  # if multi
@@ -239,12 +239,12 @@ def detect_guide_targets(col_guide_rna_series, feature_split="|",
             lambda x: [i if i == key_control else key_control if any(
                     (k in i for k in key_control_patterns)) else i
                 for i in x])  # find control keys among targets
-    grnas = targets.to_frame("t").join(nums.to_frame("n")).apply(
+    grnas = targets.to_frame("t").join(suffs.to_frame("n")).apply(
         lambda x: [i + str(guide_split if guide_split else "") + "_".join(
             np.array(x["n"])[np.where(np.array(x["t"]) == i)[0]]
-            ) for i in pd.unique(x["t"])],  # sum gRNA counts per gene target
-        axis=1).apply(lambda x: (feature_split if feature_split else "").join(
-            x)).to_frame("ID")  # e.g., STAT1-1|STAT1-2|CTL => STAT1-1_2 count
+            ) for i in pd.unique(x["t"])], axis=1).apply(lambda x: (
+                feature_split if feature_split else "").join(x)).to_frame(
+                    "ID")  # e.g., STAT1-1|STAT1-2|CTL => STAT1-1_2 count
     # DO NOT change the name of grnas["ID"]
     return targets, grnas
 
@@ -284,6 +284,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     """
     # Extract Guide RNA Information
     ann = adata.copy()
+    tg_info = kwargs.pop("tg_info", None)
     if guide_split is None:
         guide_split = "$"
     if key_control_patterns is None:
@@ -312,18 +313,21 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                 str(x)) if any((i in str(x) for i in bad_symb)) else x)
 
     # Find Gene Targets & Counts of Guides
-    targets, grnas = detect_guide_targets(
-        guides, feature_split=feature_split, guide_split=guide_split,
-        key_control_patterns=key_control_patterns,
-        key_control=key_control, **kwargs)  # target genes
-    if grs is not None:  # if guide_split was in any gene name
-        targets = targets.apply(lambda x: [
-            re.sub(grs, guide_split, i) for i in x])  # replace grs in list
-        grnas.loc[:, "ID"] = grnas["ID"].apply(
-            lambda x: re.sub(grs, guide_split, str(x)))  # e.g., back to HLA-B
-    tg_info = grnas["ID"].to_frame(
-        col_guide_rna + "_flat_ix").join(
-            targets.to_frame(col_guide_rna + "_list"))
+    if tg_info is None:
+        targets, grnas = detect_guide_targets(
+            guides, feature_split=feature_split, guide_split=guide_split,
+            key_control_patterns=key_control_patterns,
+            key_control=key_control, **kwargs)  # target genes
+        if grs is not None:  # if guide_split was in any gene name
+            targets = targets.apply(lambda x: [
+                re.sub(grs, guide_split, i)
+                for i in x])  # replace grs in list
+            grnas.loc[:, "ID"] = grnas["ID"].apply(
+                lambda x: re.sub(grs, guide_split, str(
+                    x)))  # e.g., back to HLA-B
+        tg_info = grnas["ID"].to_frame(
+            col_guide_rna + "_flat_ix").join(
+                targets.to_frame(col_guide_rna + "_list"))
     if col_num_umis is not None:
         tg_info = tg_info.join(ann.obs[[col_num_umis]].apply(
             lambda x: [float(i) for i in list(

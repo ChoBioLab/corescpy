@@ -661,7 +661,7 @@ class Omics(object):
                 **kwargs).drop("Source", axis=1).reset_index(
                     0, drop=True).iloc[:nta]
                 for x in types], keys=types)  # ToppGene results
-            return tgdf
+            return tgdf, mks
         else:  # annotate by marker dictionary
             figs = {}
             if col_annotation in adata.obs:
