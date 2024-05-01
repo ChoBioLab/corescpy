@@ -72,8 +72,8 @@ def get_topp_gene(genes, no_return=False, verbose=True,
     dff = pd.DataFrame(results)
     dff = dff.Annotations.apply(lambda x: x if x[
         "Category"] in categories else np.nan).dropna().apply(pd.Series)[
-            ["Name", "Source", "Genes", "PValue", "GenesInTerm",
-             "GenesInQuery", "GenesInTermInQuery", "TotalGenes",
+            ["Name", "Source", "Genes", "GenesInTerm",
+             "GenesInQuery", "GenesInTermInQuery", "TotalGenes", "PValue",
              "QValueFDRBH", "QValueFDRBY", "QValueBonferroni"]]
     dff.loc[:, "Genes"] = dff.Genes.apply(lambda x: [i["Symbol"] for i in x])
     if sources:
