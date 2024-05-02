@@ -337,8 +337,9 @@ class Omics(object):
 
     def print_marker_frequency(self, key_cluster, assign, key_added=None,
                                col_cell_type=None, col_annotation=None,
-                               count_threshold=1, p_threshold=1,
-                               lfc_threshold=0, n_top_genes=20,
+                               layer="counts", count_threshold=1,
+                               p_threshold=1, lfc_threshold=None,
+                               n_top_genes=20, key_comparison=None,
                                show=False, **kwargs):
         """
         Print frequencies at which a cluster expresses at least
@@ -346,28 +347,55 @@ class Omics(object):
         sorted by cell type annotations linked to those genes,
         provided a dataframe (`assign`) with genes as the index and
         linked annotations in <col_annotation> (1st if unspecified).
+        If `n_top_genes` is a list of genes, will use those instead of
+        top markers. If `key_comparison` is specified, will return
+        in the 'Percent_Total' column of the 2nd element of the output
+        percentages of total cells in that comparison group
+        and `key_cluster` rather than of all total cells.
         """
         c_t = self._columns["col_cell_type"] if (
-            col_cell_type) else col_cell_type
+            col_cell_type is None) else col_cell_type
+        ann = (self.get_layer(layer=layer, inplace=False) if (
+            layer is not None) else self.rna).copy()
         if col_annotation is None:
             col_annotation = assign.columns[0]
         kmk = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")  # .uns key
-        mks = cr.ax.make_marker_genes_df(self.rna, c_t, key_added=kmk)  # DEGs
+        mks = cr.ax.make_marker_genes_df(ann, c_t, key_added=kmk)  # DEGs
         mks = mks[mks.pvals_adj <= p_threshold]  # filter by p-value
-        mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter by LFC
-        mks = mks.groupby(c_t).apply(lambda x: x.iloc[:min(x.shape[
-            0], n_top_genes)]).reset_index(0, drop=True)  # filter # top genes
+        if lfc_threshold is not None:
+            mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter by LFC
+        mks = mks.groupby(c_t).apply(lambda x: x.loc[x.name].loc[
+            n_top_genes] if isinstance(n_top_genes, list) else x.loc[
+                x.name].iloc[:min(x.shape[0], n_top_genes)]
+            )  # filter genes (# top or pre-specified)
         mks_grps = assign.loc[mks.loc[key_cluster].index.intersection(
             assign.index)].rename_axis("Gene")[[col_annotation]]  # only DEGs
         percs_exp = mks_grps.groupby("Gene").apply(
-            lambda x: 100 * np.mean(self.rna[self.rna.obs[
+            lambda x: 100 * np.mean(ann[ann.obs[
                 c_t] == key_cluster][:, x.name].X >= count_threshold))  # %s
-        percs_exp = mks_grps.str.get_dummies(',').groupby(
+        percs_exp = mks_grps[col_annotation].str.get_dummies(',').groupby(
             "Gene").max().groupby("Gene").apply(lambda g: g.replace(
-                1, percs_exp.loc[g.name])).replace(0, "")  # dataframe
+                1, percs_exp.loc[g.name])).replace(0, "").reset_index(
+                    0, drop=True)  # dataframe with 1s if expresses marker
+        if key_comparison is None or isinstance(key_comparison, str):
+            key_comparison = [key_comparison] if isinstance(
+                key_comparison, str) else list(ann.obs[c_t].unique())
+        key_comparison = list(set(key_comparison).difference([key_cluster]))
+        n_exp = [mks_grps.groupby("Gene").apply(lambda x: np.sum(ann[
+            subs][:, x.name].X >= count_threshold)) for subs in [ann.obs[
+                c_t] == key_cluster, ann.obs[c_t].isin(key_comparison)]]
+        n_exp = pd.concat(n_exp, keys=[key_cluster, "Other"]).unstack(0)
+        n_exp = n_exp.join(n_exp.T.sum().to_frame("Total"))
+        n_exp = n_exp.assign(Percent_Total=100 * n_exp[key_cluster] / n_exp[
+            "Total"])  # % of all cells with gene that are in cluster
+        genes = mks_grps.reset_index().groupby(col_annotation).apply(
+            lambda x: ", ".join(x.Gene.unique()))  # markers ~ annotation
+        print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
         if show is True:
+            print(genes)
             print(percs_exp.applymap(lambda x: x if x == "" else str(int(x))))
-        return percs_exp
+            print(n_exp.applymap(lambda x: x if x == "" else str(int(x))))
+        return percs_exp, n_exp, genes
 
     def map(self, gene=None, col_cell_type=True, **kwargs):
         """Plot GEX &/or cell type(s) on UMAP."""
