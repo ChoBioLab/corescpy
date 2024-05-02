@@ -335,6 +335,40 @@ class Omics(object):
         self.info["descriptives"].update(desc)
         return figs
 
+    def print_marker_frequency(self, key_cluster, assign, key_added=None,
+                               col_cell_type=None, col_annotation=None,
+                               count_threshold=1, p_threshold=1,
+                               lfc_threshold=0, n_top_genes=20,
+                               show=False, **kwargs):
+        """
+        Print frequencies at which a cluster expresses at least
+        <count_threshold> transcripts of genes in its top marker list,
+        sorted by cell type annotations linked to those genes,
+        provided a dataframe (`assign`) with genes as the index and
+        linked annotations in <col_annotation> (1st if unspecified).
+        """
+        c_t = self._columns["col_cell_type"] if (
+            col_cell_type) else col_cell_type
+        if col_annotation is None:
+            col_annotation = assign.columns[0]
+        kmk = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")  # .uns key
+        mks = cr.ax.make_marker_genes_df(self.rna, c_t, key_added=kmk)  # DEGs
+        mks = mks[mks.pvals_adj <= p_threshold]  # filter by p-value
+        mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter by LFC
+        mks = mks.groupby(c_t).apply(lambda x: x.iloc[:min(x.shape[
+            0], n_top_genes)]).reset_index(0, drop=True)  # filter # top genes
+        mks_grps = assign.loc[mks.loc[key_cluster].index.intersection(
+            assign.index)].rename_axis("Gene")[[col_annotation]]  # only DEGs
+        percs_exp = mks_grps.groupby("Gene").apply(
+            lambda x: 100 * np.mean(self.rna[self.rna.obs[
+                c_t] == key_cluster][:, x.name].X >= count_threshold))  # %s
+        percs_exp = mks_grps.str.get_dummies(',').groupby(
+            "Gene").max().groupby("Gene").apply(lambda g: g.replace(
+                1, percs_exp.loc[g.name])).replace(0, "")  # dataframe
+        if show is True:
+            print(percs_exp.applymap(lambda x: x if x == "" else str(int(x))))
+        return percs_exp
+
     def map(self, gene=None, col_cell_type=True, **kwargs):
         """Plot GEX &/or cell type(s) on UMAP."""
         if col_cell_type is True:
