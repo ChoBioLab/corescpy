@@ -656,7 +656,7 @@ class Omics(object):
     def annotate_clusters(self, model, mode="best match", layer="log1p",
                           p_threshold=0.5, over_clustering=None,
                           col_annotation="Annotation",  # not for CellTypist
-                          min_proportion=0, copy=False,
+                          min_proportion=0, copy=False, lfc_threshold=None,
                           plot_markers=False, out_file=None, **kwargs):
         """
         Use CellTypist or a marker dictionary file to annotate clusters.
@@ -695,9 +695,11 @@ class Omics(object):
             sources = kwargs.pop("sources", None)  # to filter Atlas sources
             mks = cr.ax.make_marker_genes_df(
                 self.rna, c_t, key_added=f"rank_genes_groups_{c_t}")  # DEGs
-            mks = mks[mks.pvals_adj <= p_threshold].groupby(c_t).apply(
-                lambda x: x.iloc[:min(x.shape[0], n_top_genes)]).reset_index(
-                    0, drop=True)  # filter by p_value & number of top genes
+            mks = mks[mks.pvals_adj <= p_threshold]  # filter ~ p value
+            if lfc_threshold:
+                mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter ~ LFC
+            mks = mks.groupby(c_t).apply(lambda x: x.iloc[:min(x.shape[
+                0], n_top_genes)]).reset_index(0, drop=True)  # only N top
             tgdf = pd.concat([cr.tl.get_topp_gene(
                 list(mks.loc[x].index.values), sources=sources, verbose=False,
                 **kwargs).drop("Source", axis=1).reset_index(
