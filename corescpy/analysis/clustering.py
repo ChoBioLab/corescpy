@@ -388,3 +388,97 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
             1:]) for x in leiden_to_cell_type.index.values]
         print(leiden_to_cell_type[col_new])
         return adata, leiden_to_cell_type
+
+
+def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
+                      key_added="rank_genes_groups", col_annotation=None,
+                      layer="counts", count_threshold=1, p_threshold=1,
+                      lfc_threshold=None, n_top_genes=20, key_compare=None,
+                      show=False, print_threshold=64, **kwargs):
+    """
+    Print frequencies at which a cluster expresses at least
+    <count_threshold> transcripts of genes in its top marker list,
+    sorted by cell type annotations linked to those genes,
+    provided a dataframe (`assign`) with genes as the index and
+    linked annotations in <col_annotation> (1st if unspecified).
+    If `n_top_genes` is a list of genes, will use those instead of
+    top markers. If `key_compare` is specified, will return
+    in the 'Percent_Total' column of the 2nd element of the output
+    percentages of total cells in that comparison group
+    and `key_cluster` rather than of all total cells.
+    """
+    c_t, kmk = col_cell_type, key_added  # for brevity
+    ann = adata.copy()
+    if layer is not None:
+        adata.X = adata.layers[layer]
+    if col_annotation is None:
+        col_annotation = assign.columns[0]
+    mks = kwargs.pop("marker_genes_df", cr.ax.make_marker_genes_df(
+        ann, c_t, key_added=kmk))  # DEGs
+    mks = mks[mks.pvals_adj <= p_threshold]  # filter by p-value
+    if lfc_threshold is not None:
+        mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter by LFC
+    mks = mks.groupby(c_t).apply(
+        lambda x: pd.Series([np.nan]) if x.name not in x.index else x.loc[
+            x.name].loc[n_top_genes] if isinstance(
+                n_top_genes, list) else x.loc[x.name].iloc[:min(x.shape[
+                    0], n_top_genes)])  # # top or pre-specified genes
+    mks_grps = assign.loc[mks.loc[key_cluster].index.intersection(
+        assign.index)].rename_axis("Gene")[[col_annotation]]  # only DEGs
+
+    # Percent of Cluster's Cells Reaching GEX Threshold (Specificity)
+    percs_exp = mks_grps.groupby("Gene").apply(
+        lambda x: 100 * np.mean(ann[ann.obs[c_t] == key_cluster][
+            :, x.name].X >= count_threshold))  # % cluster cell GEX>=threshold
+    percs_exp = mks_grps[col_annotation].str.get_dummies(',').groupby(
+        "Gene").max().groupby("Gene").apply(lambda g: g.replace(
+            1, percs_exp.loc[g.name])).replace(0, "").reset_index(
+                0, drop=True)  # rows=genes, columns=annotation 1s if present
+
+    # Calculate Percent of GEX-Threshold+ Cells that are in Cluster
+    # Using All Other Clusters' Cells, or Just Comparison Group (Sensitivity)
+    kcn = "|".join([key_compare] if isinstance(
+        key_compare, str) else key_compare) if key_compare else "Other"
+    if key_compare is None or isinstance(key_compare, str):
+        key_compare = [key_compare] if isinstance(
+            key_compare, str) else list(ann.obs[c_t].unique())
+    key_compare = list(set(key_compare).difference([key_cluster]))
+
+    # Number of Cells by Cluster >= GEX Threshold
+    n_exp = [mks_grps.groupby("Gene").apply(lambda x: np.sum(ann[
+        subs][:, x.name].X >= count_threshold)) for subs in [ann.obs[
+            c_t] == key_cluster, ann.obs[c_t].isin(key_compare)]]  # number
+    n_exp = pd.concat(n_exp, keys=[key_cluster, kcn]).unstack(0)
+    if n_exp.empty is False:
+        n_exp = n_exp.join(n_exp.T.sum().to_frame("Total"))  # total >=
+        n_exp = n_exp.assign(Percent_Total=100 * n_exp[
+            key_cluster] / n_exp[
+                "Total"])  # % of all cells with gene that are in cluster
+
+    # % of All (or Comparison Group) GEX-Threshold+ Cells in Reference Cluster
+    if n_exp.empty is False:
+        perc_rep = "Represents " + ", ".join(n_exp[
+            n_exp.Percent_Total >= 25].sort_values(
+                "Percent_Total", ascending=False).groupby("Gene").apply(
+                    lambda x: str(int(x["Percent_Total"])) + "%" + str(
+                        f" of all {x.name}+ cells")))  # string description
+    else:
+        perc_rep = ""
+
+    # Genes Reaching Threshold in Cluster, Sorted by Percent Positivity
+    percs = percs_exp.stack().replace("", np.nan).dropna().reset_index(
+        1, drop=True).drop_duplicates().sort_values(ascending=False)
+
+    # Descriptive Messages & Display
+    pos_rate = "; ".join(percs[percs >= print_threshold].reset_index(
+        ).apply(lambda x: f"{int(x.iloc[1])}% {x['Gene']}+", axis=1)
+                            ) + f" (>={count_threshold} counts)"
+    msg = ("" if perc_rep == "" else perc_rep + ". ") + pos_rate  # describe
+    genes = mks_grps.reset_index().groupby(col_annotation).apply(
+        lambda x: ", ".join(x.Gene.unique()))  # markers ~ annotation
+    print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
+    if show is True:  # print results?
+        print(genes)
+        print(percs_exp.applymap(lambda x: x if x == "" else str(int(x))))
+        print(n_exp.applymap(lambda x: x if x == "" else str(int(x))))
+    return percs_exp, percs, n_exp, genes, msg
