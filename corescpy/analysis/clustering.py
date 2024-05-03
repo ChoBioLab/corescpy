@@ -394,7 +394,7 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
                       key_added="rank_genes_groups", col_annotation=None,
                       layer="counts", count_threshold=1, p_threshold=1,
                       lfc_threshold=None, n_top_genes=20, key_compare=None,
-                      show=False, print_threshold=64, **kwargs):
+                      show=False, print_threshold=25, **kwargs):
     """
     Print frequencies at which a cluster expresses at least
     <count_threshold> transcripts of genes in its top marker list,
@@ -456,9 +456,10 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
                 "Total"])  # % of all cells with gene that are in cluster
 
     # % of All (or Comparison Group) GEX-Threshold+ Cells in Reference Cluster
-    if n_exp.empty is False:
+    if n_exp.empty is False and n_exp[
+            n_exp.Percent_Total >= print_threshold].empty is False:
         perc_rep = "Represents " + ", ".join(n_exp[
-            n_exp.Percent_Total >= 25].sort_values(
+            n_exp.Percent_Total >= print_threshold].sort_values(
                 "Percent_Total", ascending=False).groupby("Gene").apply(
                     lambda x: str(int(x["Percent_Total"])) + "%" + str(
                         f" of all {x.name}+ cells")))  # string description

@@ -367,7 +367,7 @@ class Omics(object):
             mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter by LFC
         if assign is not None:
             percs_exp, percs, n_exp, genes, msg = cr.ax.print_marker_info(
-                self, key_cluster, assign=assign, key_added=kmk,
+                ann, key_cluster, assign=assign, key_added=kmk,
                 col_cell_type=c_t, col_annotation=col_annotation,
                 layer=layer, count_threshold=count_threshold,
                 p_threshold=p_threshold, lfc_threshold=lfc_threshold,
