@@ -360,14 +360,16 @@ class Omics(object):
         if col_annotation is None:
             col_annotation = assign.columns[0]
         kmk = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")  # .uns key
-        mks = cr.ax.make_marker_genes_df(ann, c_t, key_added=kmk)  # DEGs
+        mks = kwargs.pop("marker_genes_df", cr.ax.make_marker_genes_df(
+            ann, c_t, key_added=kmk))  # DEGs
         mks = mks[mks.pvals_adj <= p_threshold]  # filter by p-value
         if lfc_threshold is not None:
             mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter by LFC
-        mks = mks.groupby(c_t).apply(lambda x: x.loc[x.name].loc[
-            n_top_genes] if isinstance(n_top_genes, list) else x.loc[
-                x.name].iloc[:min(x.shape[0], n_top_genes)]
-            )  # filter genes (# top or pre-specified)
+        mks = mks.groupby(c_t).apply(
+            lambda x: pd.Series([np.nan]) if x.name not in x.index else x.loc[
+                x.name].loc[n_top_genes] if isinstance(
+                    n_top_genes, list) else x.loc[x.name].iloc[:min(x.shape[
+                        0], n_top_genes)])  # # top or pre-specified genes
         mks_grps = assign.loc[mks.loc[key_cluster].index.intersection(
             assign.index)].rename_axis("Gene")[[col_annotation]]  # only DEGs
         percs_exp = mks_grps.groupby("Gene").apply(
@@ -385,9 +387,11 @@ class Omics(object):
             subs][:, x.name].X >= count_threshold)) for subs in [ann.obs[
                 c_t] == key_cluster, ann.obs[c_t].isin(key_comparison)]]
         n_exp = pd.concat(n_exp, keys=[key_cluster, "Other"]).unstack(0)
-        n_exp = n_exp.join(n_exp.T.sum().to_frame("Total"))
-        n_exp = n_exp.assign(Percent_Total=100 * n_exp[key_cluster] / n_exp[
-            "Total"])  # % of all cells with gene that are in cluster
+        if n_exp.empty is False:
+            n_exp = n_exp.join(n_exp.T.sum().to_frame("Total"))
+            n_exp = n_exp.assign(Percent_Total=100 * n_exp[
+                key_cluster] / n_exp[
+                    "Total"])  # % of all cells with gene that are in cluster
         genes = mks_grps.reset_index().groupby(col_annotation).apply(
             lambda x: ", ".join(x.Gene.unique()))  # markers ~ annotation
         print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
