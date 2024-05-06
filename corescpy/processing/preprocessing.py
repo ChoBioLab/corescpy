@@ -696,7 +696,7 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
         outs_obs, outs_var = outs_dfs  # unpack into .obs & .var outlier dfs
         print(f"\n<<< FILTERING OUTLIERS ({cols_obs + cols_var}) >>>")
         if outs_obs is not None:
-            nos = ann.n_vars
+            nos = ann.n_obs
             ann.obs = ann.obs.join(outs_obs[["outlier"]])  # + outlier column
             ann = ann[~ann.obs.outlier]  # drop cells not passing filter
             print(f"Cell Count (without/with Outliers): {ann.n_obs}/{nos}")
