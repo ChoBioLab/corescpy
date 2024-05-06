@@ -676,26 +676,43 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
               gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
-    if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
-        cell_filter_pmt = [0, cell_filter_pmt]  # ...assume it's for maximum %
-    if cell_filter_pmt is None:  # None = no MT filter but calculates metrics
-        cell_filter_pmt = [0, 100]
-    min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
     if outlier_mads is not None:  # automatic filtering by outlier statistics
-        outliers = ann.obs[outlier_mads]
-        print(f"\n<<< DETECTING OUTLIERS {outliers.columns} >>>")
-        for x in outlier_mads:
-            outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
-                ann.obs, x, outlier_mads[x])  # metric outlier column x
-        cols_outlier = list(set(
-            outliers.columns.difference(ann.obs.columns)))
-        outliers.loc[:, "outlier"] = outliers[cols_outlier].any()  # binary
-        print(f"\n<<< FILTERING OUTLIERS ({cols_outlier}) >>>")
-        ann.obs = ann.obs.join(outliers[["outlier"]])  # + outlier column
-        print(f"Total Cell Count: {ann.n_obs}")
-        ann = ann[(~ann.obs.outlier) & (~ann.obs.mt_outlier)]  # drop
-        print(f"Cell Count (Outliers Dropped): {ann.n_obs}")
-    else:  # manual filtering
+        cols_obs = [i for i in outlier_mads if i in ann.obs]  # if in .obs
+        cols_var = [i for i in outlier_mads if i in ann.var]  # if in .var
+        outs_dfs = []  # to hold .obs & .var outlier status variables
+        for i, a in enumerate([cols_obs, cols_var]):  # .obs, then .var
+            print(f"\n<<< DETECTING OUTLIERS ({a}) >>>")
+            if len(a) == 0:
+                outliers = None
+            else:
+                outliers = [ann.obs, ann.var][i][a].copy()
+                for x in a:  # iterate variables for which to detect outliers
+                    outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
+                        [ann.obs, ann.var][i], x, outlier_mads[x])  # metric
+                ccs = list(set(outliers.columns.difference([
+                    ann.obs, ann.var][i].columns)))  # columns made above
+                outliers.loc[:, "outlier"] = outliers[ccs].T.any()  # binary
+            outs_dfs += [outliers]
+        outs_obs, outs_var = outs_dfs  # unpack into .obs & .var outlier dfs
+        print(f"\n<<< FILTERING OUTLIERS ({cols_obs + cols_var}) >>>")
+        if outs_obs is not None:
+            nos = ann.n_vars
+            ann.obs = ann.obs.join(outs_obs[["outlier"]])  # + outlier column
+            ann = ann[~ann.obs.outlier]  # drop cells not passing filter
+            print(f"Cell Count (without/with Outliers): {ann.n_obs}/{nos}")
+        if outs_var is not None:
+            nvs = ann.n_vars
+            ann.var = ann.var.join(outs_var[["outlier"]])  # + outlier column
+            ann = ann[:, ~ann.var.outlier]  # drop genes not passing filter
+            print(f"Gene Count (without/with Outliers): {ann.n_vars}/{nvs}")
+    args = [cell_filter_pmt, cell_filter_ncounts, cell_filter_ngene,
+            gene_filter_ncell, gene_filter_ncounts]
+    if any((i is not None for i in args)):  # manual filtering
+        if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %
+            cell_filter_pmt = [0, cell_filter_pmt]  # ...assume for maximum %
+        if cell_filter_pmt is None:  # None = no MT filter (0-100% allowed)
+            cell_filter_pmt = [0, 101]
+        min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
         print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>")
         print(f"\nTotal Cell Count: {ann.n_obs}")
         print("\n\t*** Filtering cells by mitochondrial gene percentage...")
