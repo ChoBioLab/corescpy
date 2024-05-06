@@ -679,8 +679,7 @@ def filter_qc(adata, outlier_mads=None, nmads=2, cell_filter_pmt=None,
     if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
         cell_filter_pmt = [0, cell_filter_pmt]  # ...assume it's for maximum %
     if cell_filter_pmt is None:  # None = no MT filter but calculates metrics
-        cell_filter_pmt = [0,
-                           100]
+        cell_filter_pmt = [0, 100]
     min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
     if outlier_mads is not None:  # automatic filtering using outlier stats
         if isinstance(nmads, float):  # if same for all columns, make dict
@@ -696,7 +695,7 @@ def filter_qc(adata, outlier_mads=None, nmads=2, cell_filter_pmt=None,
         print(f"\n<<< FILTERING OUTLIERS ({cols_outlier}) >>>")
         ann.obs = ann.obs.join(outliers[["outlier"]])  # + outlier column
         print(f"Total Cell Count: {ann.n_obs}")
-        ann = ann[(~ann.obs.outlier) & (~ann.obs.mt_outlier)].copy()  # drop
+        ann = ann[(~ann.obs.outlier) & (~ann.obs.mt_outlier)]  # drop
         print(f"Cell Count (Outliers Dropped): {ann.n_obs}")
     else:  # manual filtering
         print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>")
