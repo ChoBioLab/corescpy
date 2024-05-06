@@ -616,7 +616,6 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
             aij = axs if not isinstance(axs, np.ndarray) else axs[
                 i, j] if len(axs.shape) > 1 else axs[j] if ccs > 1 else axs[i]
             try:  # % mt, etc. vs. counts
-                print(h, v)
                 sc.pl.scatter(adata, x="total_counts", y=v, ax=aij,
                               color=h, frameon=False, show=False)  # scatter
                 if aij.legend_ is not None and v != scatter_vars[-1]:
