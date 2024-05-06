@@ -123,6 +123,9 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
         print("\n")
     if "var" in dir(adata):
         print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")
-        des, stats = adata.var.reset_index().describe(), ["25%", "50%", "75%"]
-        print(des.loc[list(set(stats).intersection(des.index))].sort_index())
+        print(f"Genes: {adata.n_vars}")
+        if not adata.var.empty:
+            des = adata.var.reset_index().describe()
+            print(des.loc[list(set(["25%", "50%", "75%"]).intersection(
+                des.index))].sort_index())
     print("\n\n")
