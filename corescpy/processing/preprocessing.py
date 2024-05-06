@@ -353,11 +353,6 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     # Argument Processing
     if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
         col_gene_symbols = None  # ...so functions will refer to index name
-    if outlier_mads is not None:  # if filtering based on calculating outliers
-        if isinstance(outlier_mads, (int, float)):  # same MADs, all metrics
-            qc_mets = ["log1p_total_counts", "log1p_n_genes_by_counts",
-                       "pct_counts_in_top_20_genes"]
-            outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
     max_val, cen = [kws_scale.pop(x, None) for x in [
         "max_value", "zero_center"]] if isinstance(
             kws_scale, dict) else [0, True]  # extract scale keywords if need
@@ -683,8 +678,8 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
         cols_obs = [i for i in outlier_mads if i in ann.obs]  # if in .obs
         cols_var = [i for i in outlier_mads if i in ann.var]  # if in .var
         outs_dfs = []  # to hold .obs & .var outlier status variables
+        print("\n<<< DETECTING OUTLIERS >>>")
         for i, a in enumerate([cols_obs, cols_var]):  # .obs, then .var
-            print(f"\n<<< DETECTING OUTLIERS ({a}) >>>")
             if len(a) == 0:
                 outliers = None
             else:
@@ -695,7 +690,8 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
                     outliers.loc[:, f"outlier_{x}"] = out_yn
                     outliers.loc[:, f"outlier_{x}_threshold"] = str(
                         mad)  # threshold (nmads * median absolute deviation)
-                    print(f"\t\t{x} Threshold = {mad}")
+                    print(f"\t\t{x} Threshold = "
+                          f"{[round(i, 1) if i else None for i in mad]}")
                 ccs = [f"outlier_{x}" for x in a]  # binary outlier/no columns
                 outliers.loc[:, "outlier"] = outliers[ccs].T.any()  # binary
                 if drop_outliers is True:  # if will filter, drop b/c...
