@@ -258,12 +258,15 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             <target_sum> reads per cell, allowing between-cell
             comparability of counts. If None, total count-normalization
             will not be performed. Defaults to 1e4.
-        outlier_mads (float or int or dict): To calculate outliers
-            based on MADs (see SC Best Practices). If a dictionary,
-            key based on names of columns added by QC. Filtering
-            will be performed based on outlier status rather than
-            other arguments to this function if not None.
-            Defaults to None.
+        outlier_mads (dict, optional): To calculate/filter by outliers
+            based on MADs (see SC Best Practices). Dictionary
+            keyed by names of columns added by QC, with items as
+            lists [minimum # MAD, maximum # of MADs]. Specify None
+            for either element in those lists to not have a minimum
+            or maximum (e.g., filter only based on maximum MT %).
+            Filtering will be performed based on outlier status first,
+            then manual filtering will be performed if other
+            relevant arguments are specified. Defaults to None.
         cell_filter_pmt (list, optional): The range of percentage of
             mitochondrial genes per cell allowed. Will filter out cells
             that have outside the range [minimum % mt, maximum % mt].
@@ -693,9 +696,11 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
                     outliers.loc[:, f"outlier_{x}"] = out_yn
                     outliers.loc[:, f"outlier_{x}_threshold"] = str(
                         mad)  # threshold (nmads * median absolute deviation)
+                    print(f"\t\t{x} Threshold = {mad}")
                 ccs = [f"outlier_{x}" for x in a]  # binary outlier/no columns
                 outliers.loc[:, "outlier"] = outliers[ccs].T.any()  # binary
-                outliers = outliers.drop(ccs, axis=1)  # drop individual y/n
+                if drop_outliers is True:  # if will filter, drop b/c...
+                    outliers = outliers.drop(ccs, axis=1)  # all left will=F
             outs_dfs += [outliers]
         print(f"\n<<< FILTERING OUTLIERS ({cols_obs + cols_var}) >>>\n")
         if outs_dfs[0] is not None:
