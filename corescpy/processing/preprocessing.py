@@ -671,9 +671,9 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
     return figs
 
 
-def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
+def filter_qc(adata, outlier_mads=None, nmads=2, cell_filter_pmt=None,
               cell_filter_ncounts=None, cell_filter_ngene=None,
-              gene_filter_ncell=None, gene_filter_ncounts=None, nmads=2):
+              gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
     if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
@@ -683,11 +683,13 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
                            100]
     min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
     if outlier_mads is not None:  # automatic filtering using outlier stats
-        outliers = ann.obs[outlier_mads.keys()]
+        if isinstance(nmads, float):  # if same for all columns, make dict
+            nmads = dict(zip(outlier_mads, [nmads] * len(outlier_mads)))
+        outliers = ann.obs[outlier_mads]
         print(f"\n<<< DETECTING OUTLIERS {outliers.columns} >>>")
         for x in outlier_mads:
             outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
-                ann.obs, outlier_mads[x], nmads)  # metric outlier column x
+                ann.obs, x, nmads[x])  # metric outlier column x
         cols_outlier = list(set(
             outliers.columns.difference(ann.obs.columns)))
         outliers.loc[:, "outlier"] = outliers[cols_outlier].any()  # binary
