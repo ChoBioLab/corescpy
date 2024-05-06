@@ -449,32 +449,29 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
         subs][:, x.name].X >= count_threshold)) for subs in [ann.obs[
             c_t] == key_cluster, ann.obs[c_t].isin(key_compare)]]  # number
     n_exp = pd.concat(n_exp, keys=[key_cluster, kcn]).unstack(0)
-    if n_exp.empty is False:
+    if n_exp.empty is False:  # get % of all GEX+ cells that are in cluster
         n_exp = n_exp.join(n_exp.T.sum().to_frame("Total"))  # total >=
-        n_exp = n_exp.assign(Percent_Total=100 * n_exp[
-            key_cluster] / n_exp[
-                "Total"])  # % of all cells with gene that are in cluster
+        n_exp = n_exp.assign(Percent_Total=100 * n_exp[key_cluster] / n_exp[
+            "Total"]).sort_values("Percent_Total", ascending=False)
 
     # % of All (or Comparison Group) GEX-Threshold+ Cells in Reference Cluster
-    if n_exp.empty is False and n_exp[
-            n_exp.Percent_Total >= print_threshold].empty is False:
-        perc_rep = "Represents " + ", ".join(n_exp[
-            n_exp.Percent_Total >= print_threshold].sort_values(
-                "Percent_Total", ascending=False).groupby("Gene").apply(
-                    lambda x: str(int(x["Percent_Total"])) + "%" + str(
-                        f" of all {x.name}+ cells")))  # string description
-    else:
-        perc_rep = ""
 
     # Genes Reaching Threshold in Cluster, Sorted by Percent Positivity
     percs = percs_exp.stack().replace("", np.nan).dropna().reset_index(
         1, drop=True).drop_duplicates().sort_values(ascending=False)
 
     # Descriptive Messages & Display
+    if "Total" in n_exp and any(n_exp.Percent_Total >= print_threshold):
+        perc_rep = "Represents " + ", ".join(n_exp[
+            n_exp.Percent_Total >= print_threshold].reset_index().apply(
+                    lambda x: str(int(x["Percent_Total"])) + "%" + str(
+                        f" of all {x['Gene']}+ cells"), axis=1))
+    else:
+        perc_rep = ""
     pos_rate = "; ".join(percs[percs >= print_threshold].reset_index(
         ).apply(lambda x: f"{int(x.iloc[1])}% {x['Gene']}+", axis=1)
                             ) + f" (>={count_threshold} counts)"
-    msg = ("" if perc_rep == "" else perc_rep + ". ") + pos_rate  # describe
+    msg = str("" if perc_rep == "" else perc_rep + ". ") + pos_rate
     genes = mks_grps.reset_index().groupby(col_annotation).apply(
         lambda x: ", ".join(x.Gene.unique()))  # markers ~ annotation
     print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
