@@ -114,7 +114,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
         # sc.tl.pca(adata)  # PCA
         sc.external.pp.harmony_integrate(
             adata, col_id, basis="X_pca",
-            adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
+            adjusted_basis="X_pca_harmony", **kws_harmony)  # Harmony
         adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
         adata.uns["harmony"] = True
     return adata
