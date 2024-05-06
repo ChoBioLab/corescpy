@@ -749,6 +749,8 @@ class Omics(object):
         """Find gene markers for clusters/cell types."""
         if assay is None:
             assay = self._assay
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
         key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
         adata = self.rna.copy() if copy is True else self.rna  # copy?
         if col_cell_type is None:  # if cell type column not specified...

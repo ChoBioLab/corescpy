@@ -12,6 +12,7 @@ import corescpy as cr
 from corescpy import Omics
 from corescpy.analysis.perturbations import layer_perturbation
 import pandas as pd
+import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
@@ -542,6 +543,33 @@ class Crispr(Omics):
             f" by {', '.join(group_by)}" if group_by else ""))
         fig.fig.tight_layout()
         return fig
+
+    def calculate_targeting_efficiency(self, col_target_genes=None,
+                                       key_compare=None):
+        """
+        Calculate targeting efficiency for each perturbed gene.
+
+        Args:
+            col_target_genes (str, optional): Column for which to
+                calculate targeting efficiency.
+                Defaults to None (`self._columns['col_target_genes']`).
+            key_compare (list, optional): List of keys within
+                `col_perturbation` to use as the comparison (i.e.,
+                that/those groups' counts as the denominator).
+                For instance, you may want to use just control
+                conditions, not perturbations of other genes.
+                Defaults to None (will use all except those in the
+                KO/KD for a given gene).
+        """
+        ann = self.get_layer("counts", inplace=False)
+        sc.pp.normalize_total(ann, target_sum=1e4, copy=False)
+        cond = col_target_genes if col_target_genes else self._columns[
+            "col_target_genes"]
+        targs = set(ann.obs[cond].unique()).intersection(self.rna.var_names)
+        kde = pd.Series([1 - (np.mean(ann[ann.obs[cond] == x, x].X) / np.mean(
+            ann[ann.obs[cond].isin(key_compare) if key_compare else ann.obs[
+                cond] != x, x].X)) for x in targs], index=list(targs)) * 100
+        return kde
 
     def run_mixscape(self, assay=None, assay_protein=None,
                      layer="log1p", col_cell_type=None,
