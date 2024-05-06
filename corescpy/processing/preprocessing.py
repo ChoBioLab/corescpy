@@ -671,7 +671,8 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
     return figs
 
 
-def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
+def filter_qc(adata, outlier_mads=None, drop_outliers=True,
+              cell_filter_pmt=None,
               cell_filter_ncounts=None, cell_filter_ngene=None,
               gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
@@ -687,24 +688,30 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
             else:
                 outliers = [ann.obs, ann.var][i][a].copy()
                 for x in a:  # iterate variables for which to detect outliers
-                    outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
-                        [ann.obs, ann.var][i], x, outlier_mads[x])  # metric
-                ccs = list(set(outliers.columns.difference([
-                    ann.obs, ann.var][i].columns)))  # columns made above
+                    out_yn, mad = cr.tl.is_outlier([
+                        ann.obs, ann.var][i], x, outlier_mads[x])  # metric
+                    outliers.loc[:, f"outlier_{x}"] = out_yn
+                    outliers.loc[:, f"outlier_{x}_threshold"] = str(
+                        mad)  # threshold (nmads * median absolute deviation)
+                ccs = [f"outlier_{x}" for x in a]  # binary outlier/no columns
                 outliers.loc[:, "outlier"] = outliers[ccs].T.any()  # binary
+                outliers = outliers.drop(ccs, axis=1)  # drop individual y/n
             outs_dfs += [outliers]
-        outs_obs, outs_var = outs_dfs  # unpack into .obs & .var outlier dfs
-        print(f"\n<<< FILTERING OUTLIERS ({cols_obs + cols_var}) >>>")
-        if outs_obs is not None:
-            nos = ann.n_obs
-            ann.obs = ann.obs.join(outs_obs[["outlier"]])  # + outlier column
-            ann = ann[~ann.obs.outlier]  # drop cells not passing filter
-            print(f"Cell Count (without/with Outliers): {ann.n_obs}/{nos}")
-        if outs_var is not None:
-            nvs = ann.n_vars
-            ann.var = ann.var.join(outs_var[["outlier"]])  # + outlier column
-            ann = ann[:, ~ann.var.outlier]  # drop genes not passing filter
-            print(f"Gene Count (without/with Outliers): {ann.n_vars}/{nvs}")
+        print(f"\n<<< FILTERING OUTLIERS ({cols_obs + cols_var}) >>>\n")
+        if outs_dfs[0] is not None:
+            nos = ann.n_obs  # original # of cells
+            ann.obs = ann.obs[ann.obs.columns.difference(outs_dfs[0].columns)]
+            ann.obs = ann.obs.join(outs_dfs[0])  # outlier column
+            if drop_outliers is True:
+                ann = ann[~ann.obs.outlier]  # drop cells not passing filter
+                print(f"\tCell # (without/with Outliers): {ann.n_obs}/{nos}")
+        if outs_dfs[1] is not None:
+            nvs = ann.n_vars  # original # of genes
+            ann.var = ann.var[ann.var.columns.difference(outs_dfs[1].columns)]
+            ann.var = ann.var.join(outs_dfs[1])  # outlier column
+            if drop_outliers is True:
+                ann = ann[:, ~ann.var.outlier]  # filter genes
+                print(f"\tGene # (without/with Outliers): {ann.n_vars}/{nvs}")
     args = [cell_filter_pmt, cell_filter_ncounts, cell_filter_ngene,
             gene_filter_ncell, gene_filter_ncounts]
     if any((i is not None for i in args)):  # manual filtering
@@ -713,7 +720,7 @@ def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
         if cell_filter_pmt is None:  # None = no MT filter (0-100% allowed)
             cell_filter_pmt = [0, 101]
         min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
-        print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>")
+        print("\n<<< PERFORMING THRESHOLD-BASED FILTERING >>>")
         print(f"\nTotal Cell Count: {ann.n_obs}")
         print("\n\t*** Filtering cells by mitochondrial gene percentage...")
         print(f"\n\tMinimum={min_mt}\n\tMaximum={max_mt}")
