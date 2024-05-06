@@ -144,9 +144,7 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         tg_info = tg_info.loc[ann.obs.index]
     except Exception as err:
         warn(f"{err}\n\nCouldn't re-order tg_info to mirror adata index!")
-    tg_info_all = None  # fill later if needed
     if remove_multi_transfected is True:  # remove multi-transfected
-        tg_info_all = tg_info.copy() if conserve_memory is False else None
         tg_info = tg_info.dropna(subset=[f"{col_guide_rna}_list_filtered"])
         tg_info = tg_info.join(tg_info[
             f"{col_guide_rna}_list_filtered"].apply(
@@ -196,8 +194,9 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
         k_i += list(pd.Series([
             x if kws_pga["feature_split"] in x else np.nan
             for x in ann.obs[col_guide_rna].unique()]).dropna())
-    ann.uns["grna_keywords"], ann.uns["grna_feats_n"] = kws_pga, feats_n
-    ann.uns["grna_info"], ann.uns["grna_info_all"] = tg_info, tg_info_all
+    ann.uns["grna_keywords"] = str(kws_pga)  # store keyword arguments
+    ann.uns["grna_feats_n"] = feats_n.reset_index(1)  # avoid h5ad write issue
+    # ann.uns["grna_tg_info"] = tg_info
     ann.obs = ann.obs.assign(guide_split=kws_pga["guide_split"])
     return ann
 
@@ -336,7 +335,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             axis=1).to_frame(col_num_umis + "_list"))
         tg_info = tg_info.join(tg_info[col_num_umis + "_list"].dropna().apply(
             sum).to_frame(col_num_umis + "_total"))  # total UMIs/cell
-    tg_info = ann.obs[col_guide_rna].to_frame(col_guide_rna).join(tg_info)
+    tg_info = ann.obs[[col_guide_rna]].join(tg_info)
     if tg_info[col_guide_rna].isnull().any() and (~any(
             [pd.isnull(x) for x in key_control_patterns])):
         ndrop = tg_info[col_guide_rna].isnull().sum()  # number dropped
