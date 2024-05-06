@@ -112,6 +112,8 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
     if kws_harmony is not None:
         print("\n<<< INTEGRATING WITH HARMONY >>>")
         # sc.tl.pca(adata)  # PCA
+        if kws_harmony is True:
+            kws_harmony = {}
         sc.external.pp.harmony_integrate(
             adata, col_id, basis="X_pca",
             adjusted_basis="X_pca_harmony", **kws_harmony)  # Harmony
