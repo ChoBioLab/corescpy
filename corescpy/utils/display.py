@@ -110,8 +110,8 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
         pass
     adata = (adata.table if isinstance(adata, spatialdata.SpatialData
                                        ) else adata).copy()
-    print(f"\n\n{'=' * 80}\nCell Counts: {title}\n{'=' * 80}\n")
-    print(f"\nObservations: {adata.n_obs}\n")
+    print(f"\n\n{'=' * 80}\nCounts: {title}\n{'=' * 80}\n")
+    print(f"\n\tObservations: {adata.n_obs}\n")
     if group_by is not None and group_by in adata.obs:
         print(f"{'-' * 40}\nLAYER DIMENSIONS:\n{'-' * 40}")
         for x in adata.layers:
@@ -121,11 +121,10 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
             print("\n", adata.obs[group_by].value_counts().round(2))
         print("\n")
     if "var" in dir(adata):
-        print(f"\n\n{'=' * 80}\nGene Counts: {title}\n{'=' * 80}\n")
         print(f"Genes: {adata.n_vars}\n")
         des = adata.var.reset_index().describe()
         des = des.loc[list(set(["25%", "50%", "75%"]).intersection(
             des.index))].sort_index()
         if des.empty is False:
             print(des)
-    print("\n\n")
+    print(f"\n\n{'=' * 80}\n")
