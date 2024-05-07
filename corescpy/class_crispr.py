@@ -326,6 +326,8 @@ class Crispr(Omics):
             warnings.warn(f"`col_condition` ({col_condition}) can't be same "
                           "as `col_guide_rna`! Now = {col_condition}_target.")
             col_condition = col_condition + "_guide"
+        if col_target_genes is None:
+            col_target_genes = col_condition
 
         # Create Attributes to Store Results/Figures
         self.figures = {}
@@ -378,8 +380,6 @@ class Crispr(Omics):
                               " in `.obs`. Assuming perturbation is binary "
                               "(i.e., only has two conditions, including "
                               "control); col_condition will be equivalent.")
-                self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_perturbed].copy()  # col_condition = col_perturbed
         else:
             raise ValueError(f"{' or '.join(conds)} must be in `.obs` ")
         print(self.adata.obs, "\n\n") if assay else None
@@ -387,7 +387,7 @@ class Crispr(Omics):
         # Create Binary Perturbation Column (if not yet existent)
         if col_perturbed not in self.rna.obs:
             self.rna.obs = self.rna.obs.join(
-                self.rna.obs[col_condition].apply(
+                self.rna.obs[col_target_genes].apply(
                     lambda x: x if pd.isnull(x) else key_control if (
                         x == key_control) else key_treatment
                     ).to_frame(col_perturbed), lsuffix="_original"
@@ -398,8 +398,7 @@ class Crispr(Omics):
             **self._columns,
             **dict(col_gene_symbols=col_gene_symbols,
                    col_condition=col_condition,
-                   col_target_genes=col_target_genes if (
-                       col_target_genes) else col_condition,
+                   col_target_genes=col_target_genes,
                    col_perturbed=col_perturbed,
                    col_cell_type=col_cell_type,
                    col_sample_id=col_sample_id,
