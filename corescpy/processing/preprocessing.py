@@ -231,7 +231,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         else:
             adata.layers[layers["counts"]] = adata.X.copy()
     # cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
-    print("\n\n", adata)
+    # print("\n\n", adata)
     return adata
 
 

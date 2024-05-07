@@ -382,16 +382,14 @@ class Crispr(Omics):
                               "control); col_condition will be equivalent.")
         else:
             raise ValueError(f"{' or '.join(conds)} must be in `.obs` ")
-        print(self.adata.obs, "\n\n") if assay else None
 
         # Create Binary Perturbation Column (if not yet existent)
-        if col_perturbed not in self.rna.obs:
+        if col_perturbed not in self.rna.obs:  # binary form of col_condition
             self.rna.obs = self.rna.obs.join(
                 self.rna.obs[col_target_genes].apply(
                     lambda x: x if pd.isnull(x) else key_control if (
-                        x == key_control) else key_treatment
-                    ).to_frame(col_perturbed), lsuffix="_original"
-                )  # create binary form of col_condition
+                        x == key_control) else key_treatment).to_frame(
+                            col_perturbed), lsuffix="_original")
 
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = {
