@@ -559,11 +559,12 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     return adata
 
 
-def perform_qc(adata, log1p=True, hue=None, patterns=None, layer=None):
+def perform_qc(adata, log1p=True, hue=None, patterns=None, layer="counts"):
     """Calculate & plot quality control metrics."""
     figs = {}
     if layer is not None:
-        adata.X = adata.layers[layer].copy()
+        adata.X = adata.layers[layer if (
+            layer in adata.layers) else cr.pp.get_layer_dict()[layer]].copy()
     if patterns is None:
         patterns = [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
             "^HB[^(P)]", "^hb[^(p)]")]  # pattern matching for gene symbols
