@@ -41,7 +41,7 @@ class Omics(object):
                  raw=False, col_gene_symbols="gene_symbols", spatial=False,
                  col_cell_type="leiden", col_sample_id=None, col_subject=None,
                  col_condition=None, key_control=None, key_treatment=None,
-                 kws_multi=None, **kwargs):
+                 kws_multi=None, verbose=True, **kwargs):
         """
         Initialize Omics class object.
 
@@ -110,7 +110,8 @@ class Omics(object):
                 containing a dictionary of keyword arguments to pass to
                 `AnnData.concatenate()` or None (to use defaults).
         """
-        print("\n\n<<< INITIALIZING OMICS CLASS OBJECT >>>\n")
+        if verbose is True:
+            print("\n\n<<< INITIALIZING OMICS CLASS OBJECT >>>\n")
         if "kws_process_guide_rna" in kwargs and kwargs[
                 "kws_process_guide_rna"] in [False, None]:
             _ = kwargs.pop("kws_process_guide_rna")
@@ -142,8 +143,9 @@ class Omics(object):
             col_condition=col_condition, col_num_umis=col_num_umis)
         self._keys = dict(key_control=key_control,
                           key_treatment=key_treatment)
-        for q in [self._columns, self._keys]:
-            cr.tl.print_pretty_dictionary(q)
+        if verbose is True:
+            for q in [self._columns, self._keys]:
+                cr.tl.print_pretty_dictionary(q)
 
         # Create Object & Store Raw Counts
         if kws_multi not in [False, None]:
@@ -162,7 +164,7 @@ class Omics(object):
                 self._file_path, prefix=prefix, col_sample_id=col_sample_id,
                 col_gene_symbols=col_gene_symbols, kws_process_guide_rna=kpg,
                 spatial=spatial, assay=assay, raw=raw, **kwargs)  # object
-        print(f"{self.adata.obs}\n\n" if assay else None)
+        print(f"{self.adata.obs}\n\n" if assay and verbose is True else "")
 
         # Let Property Setters Run
         self.rna = self.adata.table if isinstance(
@@ -173,7 +175,7 @@ class Omics(object):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
                 self._columns["col_cell_type"]].astype("category")  # category
         print("\n\n", self.rna, "\n\n", self.rna.var.head(),
-              "\n\n", self.rna.obs.head())
+              "\n\n", self.rna.obs.head() if verbose is True else "")
 
     @property
     def rna(self):

@@ -290,6 +290,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         guide_split = "$"
     if key_control_patterns is None:
         key_control_patterns = [np.nan]
+    if isinstance(key_control_patterns, str):
+        key_control_patterns = [key_control_patterns]  # ensure iterable
     guides = ann.obs[col_guide_rna].copy()  # guide names
 
     # If `guide_split` in Any Gene Names, Temporarily Substitute
@@ -315,6 +317,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
 
     # Find Gene Targets & Counts of Guides
     if tg_info is None:
+        premade_tg_info = False
         targets, grnas = detect_guide_targets(
             guides, feature_split=feature_split, guide_split=guide_split,
             key_control_patterns=key_control_patterns,
@@ -329,6 +332,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         tg_info = grnas["ID"].to_frame(
             col_guide_rna + "_flat_ix").join(
                 targets.to_frame(col_guide_rna + "_list"))
+    else:
+        premade_tg_info = True
     if col_num_umis is not None:
         tg_info = tg_info.join(ann.obs[[col_num_umis]].apply(
             lambda x: [float(i) for i in list(
@@ -427,14 +432,26 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     filt = filt[~filt.low_umi_multi]  # drop low guides, multi-NC-transfected
 
     # Filtering Phase III (Remove Control from Multi-Transfected)
-    filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
-        lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
-            "transfection"))  # after filtering, single or multi-guide?
+    if premade_tg_info is True:  # controls may still be separate categories
+        filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
+            lambda x: "multi" if len([
+                i if i == key_control else key_control if any((
+                    k in i for k in key_control_patterns)) else i
+                for i in x]) > 1 else "single").to_frame(
+                    "transfection"))  # after filtering, single or multi?
+    else:  # if tg_info not pre-made, assume controls already in same category
+        filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
+            lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
+                "transfection"))  # after filtering, single or multi-guide?
     if drop_multi_control is True:  # drop control (multi-transfected cells)
         filt = filt.assign(multi=filt.transfection == "multi")
         filt = filt.assign(multi_control=filt.control & filt.multi)
         filt = filt[~filt.multi_control]  # drop
         filt = filt.drop(["multi", "multi_control"], axis=1)
+    else:
+        filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
+            lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
+                "transfection"))  # after filtering, single or multi-guide?
     filt = filt.drop("transfection", axis=1)
     filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
         lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(

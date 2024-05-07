@@ -81,7 +81,8 @@ class Spatial(cr.Omics):
         print("\n\n<<< INITIALIZING SPATIAL CLASS OBJECT >>>\n")
         _ = kwargs.pop("file_path_spatial", None)
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
-                         library_id=library_id, visium=visium, **kwargs)
+                         library_id=library_id, visium=visium,
+                         verbose=False, **kwargs)
         self._spatial_key = cr.pp.SPATIAL_KEY
         self._kind = "xenium" if visium is False else "visium"
         if library_id is None and visium is True:
