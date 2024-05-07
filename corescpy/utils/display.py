@@ -121,7 +121,7 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
             print("\n", adata.obs[group_by].value_counts().round(2))
         print("\n")
     if "var" in dir(adata):
-        print(f"Genes: {adata.n_vars}\n")
+        print(f"\tGenes: {adata.n_vars}\n")
         des = adata.var.reset_index().describe()
         des = des.loc[list(set(["25%", "50%", "75%"]).intersection(
             des.index))].sort_index()
