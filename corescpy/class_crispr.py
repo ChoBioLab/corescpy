@@ -343,7 +343,7 @@ class Crispr(Omics):
         else:
             kws_pga, kws_process_guide_rna = None, None
         super().__init__(
-            self._file_path, assay=assay, assay_gdo=assay_gdo,
+            self._file_path, assay=assay, assay_gdo=assay_gdo, verbose=False,
             col_gene_symbols=col_gene_symbols, col_sample_id=col_sample_id,
             col_condition=col_condition, key_control=key_control,
             key_treatment=key_treatment, kws_process_guide_rna=kws_pga,
