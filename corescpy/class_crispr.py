@@ -315,6 +315,7 @@ class Crispr(Omics):
                 The file should contain columns matching
                 "col_condition", "col_target_genes", & "col_guide_rna".
         """
+        print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
