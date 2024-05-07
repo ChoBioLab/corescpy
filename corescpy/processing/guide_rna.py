@@ -546,7 +546,8 @@ def process_guide_rna_custom(adata, file_perturbations,
     ann_unfilt.obs = ann_unfilt.obs.join(grnas, lsuffix="_original")
     kws_pga = cr.tl.merge({
         "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
-        "key_control": key_control, "col_guide_rna_new": col_condition},
+        "key_control": key_control, "col_guide_rna_new": col_condition,
+        "feature_split": feature_split, "guide_split": guide_split},
                           kws_process_guide_rna)   # processing rguments
     grnas = grnas.join(grnas[col_guide_rna].apply(lambda x: x.split(
         feature_split)).to_frame(col_guide_rna + "_list"))
