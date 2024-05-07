@@ -448,10 +448,6 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         filt = filt.assign(multi_control=filt.control & filt.multi)
         filt = filt[~filt.multi_control]  # drop
         filt = filt.drop(["multi", "multi_control"], axis=1)
-    else:
-        filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
-            lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
-                "transfection"))  # after filtering, single or multi-guide?
     filt = filt.drop("transfection", axis=1)
     filt = filt.join(filt.reset_index("g").g.groupby("bc").apply(
         lambda x: "multi" if len(x.unique()) > 1 else "single").to_frame(
