@@ -12,6 +12,7 @@ import traceback
 import os
 from warnings import warn
 import functools
+import itertools
 from copy import deepcopy
 import scanpy as sc
 import seaborn as sns
@@ -522,6 +523,35 @@ class Omics(object):
         if copy is False:
             self.rna = adata
         return fig
+
+    def score_coex(self, genes, layer="counts", n_combos=None,
+                   threshold=None, inplace=False):
+        """
+        Score coexpression.
+
+        Score will be binary (GEX for both genes >= `threshold`) if
+        `threshold` is not None; otherwise, score = sum of the GEX.
+
+        Will calculate for subsets
+        """
+        print(f"\n***Calculating Coexpression (Layer={layer})\n\n")
+        ann = self.get_layer(layer, inplace=False)
+        if n_combos is None:  # if didn't specify size of subsets
+            n_combos = len(genes)  # only do combination of all genes
+        n_combos = [int(n_combos)] if isinstance(n_combos, (
+            int, float)) else [int(x) for x in n_combos]  # ensure format
+        for g in genes:
+            ann.obs.loc[:, g] = ann[:, genes].X  # expression data to .obs
+            if threshold is not None:  # convert to binary?
+                ann.obs.loc[:, g] = ann.obs[g] >= threshold  # >= threshold?
+        for n in n_combos:  # loop subset sizes(e.g., double-+, triple-+)
+            for p in itertools.combinations(genes, n):  # loop combinations
+                ann.obs.loc[:, "_".join(p)] = ann.obs[p].sum()
+                if threshold is True:  # would've coded as 1/0 so + if sum=n
+                    ann.obs.loc[:, "_".join(p)] = ann.obs["_".join(p)] >= n
+        if inplace is True:
+            self.rna = ann
+        return ann
 
     def preprocess(self, assay_protein=None, layer_in="counts", copy=False,
                    kws_scale=True, **kwargs):
