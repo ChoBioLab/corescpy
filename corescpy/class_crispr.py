@@ -559,7 +559,9 @@ class Crispr(Omics):
                 Defaults to None (will use all except those in the
                 KO/KD for a given gene).
         """
-        ann = self.get_layer("counts", inplace=False)
+        if isinstance(key_compare, str):
+            key_compare = [key_compare]
+        ann = self.get_layer("counts", inplace=False).copy()
         sc.pp.normalize_total(ann, target_sum=1e4, copy=False)
         cond = col_target_genes if col_target_genes else self._columns[
             "col_target_genes"]
@@ -567,7 +569,9 @@ class Crispr(Omics):
         kde = pd.Series([1 - (np.mean(ann[ann.obs[cond] == x, x].X) / np.mean(
             ann[ann.obs[cond].isin(key_compare) if key_compare else ann.obs[
                 cond] != x, x].X)) for x in targs], index=list(targs)) * 100
-        return kde
+        sns.barplot(kde, orient="h")
+        plt.show()
+        return kde.sort_values(ascending=False)
 
     def run_mixscape(self, assay=None, assay_protein=None,
                      layer="log1p", col_cell_type=None,

@@ -81,7 +81,7 @@ def write_ome_tif(file_path, file_out=None,
                   subresolutions=7, pixelsize=0.2125):
     """Write .tif file to .ome.tif (modified from 10x functions)."""
     image = tf.imread(file_path)
-    if image.shape[2] > image.shape[0]:
+    if len(image.shape) > 2 and image.shape[2] > image.shape[0]:
         image = np.transpose(image, (1, 2, 0))
     if file_out is None:
         file_out = f"{os.path.splitext(file_path)[0]}.ome.tif"
