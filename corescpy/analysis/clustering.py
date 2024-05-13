@@ -135,6 +135,8 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
         adata = adata[assay]
     if layer:
         adata.X = adata.layers[layer].copy()  # change anndata layer if need
+    adata.obs.loc[:, col_cell_type] = adata.obs[
+        col_cell_type].astype("category")
     sc.tl.rank_genes_groups(
         adata, col_cell_type, method=method, reference=key_reference,
         key_added=key_added, use_raw=use_raw, **kwargs)  # rank

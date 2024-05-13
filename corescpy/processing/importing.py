@@ -238,9 +238,12 @@ def construct_file(run="CHO-001", panel_id="TUQ97N", directory=None):
     if "outputs" not in directory and os.path.exists(
             os.path.join(directory, "outputs")):
         directory = os.path.join(directory, "outputs")
-    run = [run] if isinstance(run, str) else run
-    panel_id = [panel_id] * len(run) if isinstance(
-        panel_id, str) else panel_id
+    run = None if run is None else [run] if isinstance(run, str) else run
+    if isinstance(panel_id, str):
+        if run is None:
+            run = [j for j in os.listdir(os.path.join(
+                directory, panel_id)) if os.path.isdir(j)]
+        panel_id = [panel_id] * len(run)
     fff = []
     for i, x in enumerate(run):
         d_x = os.path.join(directory, panel_id[i], x)
