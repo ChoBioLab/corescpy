@@ -526,7 +526,7 @@ class Omics(object):
         return fig
 
     def score_coex(self, genes, layer="counts", n_combos=None,
-                   threshold=None, inplace=False):
+                   threshold=None, inplace=False, suffix=""):
         """
         Score coexpression.
 
@@ -547,19 +547,92 @@ class Omics(object):
         n_combos = [int(n_combos)] if isinstance(n_combos, (
             int, float)) else [int(x) for x in n_combos]  # ensure format
         for g in genes:  # loop genes: expression data to .obs
-            ann.obs.loc[:, g] = [i[0] for i in ann[:, g].X.toarray()] if (
-                isinstance(ann[:, g].X, scipy.sparse._csr.csr_matrix)
-                ) else ann[:, g].X  # GEX for 1 gene (to array if sparse)
-            if threshold is not None:  # convert to binary?
-                ann.obs.loc[:, g] = ann.obs[g] >= threshold  # >= threshold?
+            ann.obs.loc[:, g + suffix] = [i[0] for i in ann[:, g].X.toarray(
+                )] if (isinstance(ann[:, g].X, scipy.sparse._csr.csr_matrix)
+                       ) else ann[:, g].X  # GEX for gene (to array if sparse)
+            if threshold is not None:  # convert to binary >= threshold?
+                ann.obs.loc[:, g + suffix] = ann.obs[g + suffix] >= threshold
         for n in n_combos:  # loop subset sizes(e.g., double-+, triple-+)
             for p in itertools.combinations(genes, n):  # loop combinations
-                ann.obs.loc[:, "_".join(p)] = ann.obs[list(p)].T.sum()
+                ann.obs.loc[:, "_".join(p) + suffix] = ann.obs[list([
+                    i + suffix for i in p])].T.sum()
                 if threshold:  # would've coded as 1/0 so + if sum=n
-                    ann.obs.loc[:, "_".join(p)] = ann.obs["_".join(p)] >= n
+                    ann.obs.loc[:, "_".join(p) + suffix] = ann.obs[
+                        "_".join(p) + suffix] >= n
         if inplace is True:
             self.rna = ann
         return ann
+
+    def quantify_transcripts(self, genes, col_cell_type=None, layer="counts"):
+        """
+        Return transcript counts for genes, optionally, by cell type
+        (or any categorical column specified in `col_cell_type`).
+        """
+        genes = [genes] if isinstance(genes, str) else genes  # ensure list
+        adata = self.get_layer(layer, inplace=False)  # get specified layer
+        tx_cts = pd.Series([self.rna[:, g].X.sum() for g in genes],
+                           index=pd.Index(genes, name="Gene"))  # overall #s
+        grps = adata.obs[col_cell_type].unique() if col_cell_type else None
+        tx_cts_cl = pd.concat([pd.Series([
+            adata[adata.obs == x][:, g].X.sum() for g in genes
+            ], index=pd.Index(genes, name="Gene")) for x in grps], keys=grps,
+                              names=[col_cell_type, "Gene"]) if grps else None
+        return tx_cts, tx_cts_cl
+
+    def quantify_cells(self, genes, threshold=1, n_combos="all", subset=None,
+                       col_cell_type=None, layer="counts", inplace=True):
+        """
+        Return cells counts positive (above the specified threshold)
+        for (combinations of) genes, optionally, broken down by cluster
+        (or any categorical column specified in `col_cell_type`).
+        """
+        adata = self.get_layer("counts", inplace=False)
+        genes = [genes] if isinstance(genes, str) else genes  # make iterable
+        if subset is not None and inplace is True:
+            warn("Can't specify subset & inplace=True. Inplace set to False.")
+            inplace = False
+        if n_combos == "all":  # to calculate for all subsets
+            n_combos = list(np.arange(2, len(genes) + 1))  # all subset sizes
+        thresh = [threshold] if isinstance(threshold, (
+            int, float)) else threshold  # ensure threshold iterable
+        cts = pd.DataFrame(dict(Gene=genes * len(thresh), Threshold=[
+            t for t in thresh for g in genes], Count=np.nan, Total=[
+                adata.n_obs] * len(genes) * len(thresh))).set_index([
+                    "Threshold", "Gene"])  # empty dataframe to hold counts
+        keys = functools.reduce(lambda i, j: i + j, [list(
+            itertools.combinations(
+                genes, n)) for n in n_combos])  # cell labels: e.g., IL4/IL6+
+        cts_cl = {} if col_cell_type is not None else None
+        for t in thresh:  # iterate GEX thresholds
+            cts.loc[t, "Count"] = [np.sum(adata[:, g].X >= t)
+                                   for g in cts.loc[t].index]  # sum GEX
+            if col_cell_type is not None:
+                suff = f"_threshold{t}"  # column, e.g., IL4/IL6_threshold1
+                cts_cl[t] = {}  # to hold individual gene combinations
+                adata = self.score_coex(genes, n_combos=n_combos, suffix=suff,
+                                        inplace=False, threshold=t)  # co-GEX
+                for k in keys:  # loop gene combinations
+                    key = "/".join(k) + "+"  # gene(s) + label for combination
+                    adata.obs.loc[:, "_".join(k) + suff] = adata.obs[
+                        "_".join(k) + suff].replace(True, key).replace(
+                            False, "Other")  # binary -> e.g., GeneA/B/C+
+                    cts_cl[t][key] = adata.obs.groupby(
+                        col_cell_type).apply(lambda x: x["_".join(
+                            k) + suff].value_counts()).unstack(0).replace(
+                                np.nan, 0).loc[key]  # + cell #s ~ group
+                cts_cl[t] = pd.concat(cts_cl[t]).unstack(0)  # concatenate
+        if col_cell_type is not None:  # if also grouped by cell type
+            cts_cl = pd.concat([cts_cl[t] for t in cts_cl], keys=cts_cl,
+                               names=["Threshold"])  # concatenate thresholds
+            cts_cl = cts_cl.join(adata.obs[col_cell_type].value_counts(
+                ).to_frame("Cells (N)"))  # join total cluster N
+            cts_cl = pd.concat([cts_cl, cts_cl[
+                ["/".join(k) + "+" for k in keys]].apply(
+                    lambda x: 100 * x / cts_cl["Cells (N)"])], keys=[
+                        "N", "Percent"], names=["Metric"], axis=1)  # N & %
+        if inplace is True:
+            self.rna = adata
+        return cts, cts_cl, adata
 
     def preprocess(self, assay_protein=None, layer_in="counts", copy=False,
                    kws_scale=True, **kwargs):
@@ -734,10 +807,8 @@ class Omics(object):
             nta = kwargs.pop("n_top_annotations", 20)  # number of top genes
             sources = kwargs.pop("sources", None)  # to filter Atlas sources
             mks = cr.ax.make_marker_genes_df(
-                self.rna, c_t, key_added=f"rank_genes_groups_{c_t}")  # DEGs
-            mks = mks[mks.pvals_adj <= p_threshold]  # filter ~ p value
-            if lfc_threshold:
-                mks = mks[mks.logfoldchanges >= lfc_threshold]  # filter ~ LFC
+                self.rna, c_t, key_added=f"rank_genes_groups_{c_t}",
+                p_threshold=p_threshold, lfc_threshold=lfc_threshold)  # DEGs
             mks = mks.groupby(c_t).apply(lambda x: x.iloc[:min(x.shape[
                 0], n_top_genes)]).reset_index(0, drop=True)  # only N top
             tgdf = pd.concat([cr.tl.get_topp_gene(
