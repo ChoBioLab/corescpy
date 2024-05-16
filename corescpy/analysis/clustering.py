@@ -459,7 +459,7 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
         n_exp = n_exp.assign(Percent_Total=100 * n_exp[key_cluster] / n_exp[
             "Total"]).sort_values("Percent_Total", ascending=False)
         n_exp = n_exp.join(n_exp.groupby("Gene").apply(lambda x: assign.loc[
-            x.name].iloc[0] if len(
+            x.name].group.iloc[0] if len(
                 assign.loc[x.name].group.unique()) == 1 else ", ".join(
                     list(assign.loc[x.name].group.unique()))).to_frame(
                         "Cell Types"))  # add annotations to n_exp
