@@ -811,9 +811,7 @@ class Omics(object):
                 p_threshold=p_threshold, lfc_threshold=lfc_threshold)  # DEGs
             mks = mks.groupby(c_t).apply(lambda x: x.iloc[:min(x.shape[
                 0], n_top_genes)]).reset_index(0, drop=True)  # only N top
-            print([mks.loc[x].shape[0] for x in types])
             markers = [list(mks.loc[x].index.values) for x in types]
-            print(markers)
             tgdf = [cr.tl.get_topp_gene(
                 g, sources=sources, verbose=False, **kwargs).drop(
                     "Source", axis=1).reset_index(0, drop=True)
