@@ -811,11 +811,15 @@ class Omics(object):
                 p_threshold=p_threshold, lfc_threshold=lfc_threshold)  # DEGs
             mks = mks.groupby(c_t).apply(lambda x: x.iloc[:min(x.shape[
                 0], n_top_genes)]).reset_index(0, drop=True)  # only N top
-            tgdf = pd.concat([cr.tl.get_topp_gene(
-                list(mks.loc[x].index.values), sources=sources, verbose=False,
-                **kwargs).drop("Source", axis=1).reset_index(
-                    0, drop=True).iloc[:nta]
-                for x in types], keys=types)  # ToppGene results
+            print([mks.loc[x].shape[0] for x in types])
+            markers = [list(mks.loc[x].index.values) for x in types]
+            print(markers)
+            tgdf = [cr.tl.get_topp_gene(
+                g, sources=sources, verbose=False, **kwargs).drop(
+                    "Source", axis=1).reset_index(0, drop=True)
+                for g in markers]  # get ToppGene results for each cluster
+            tgdf = pd.concat([tgdf.iloc[:np.min(tgdf.shape, nta)]
+                              for x in tgdf], keys=types)  # concatenate
             return tgdf, mks
         else:  # annotate by marker dictionary
             figs = {}
