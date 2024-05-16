@@ -151,12 +151,16 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
 
 
 def make_marker_genes_df(adata, col_cell_type, key_added="leiden",
-                         p_threshold=None, **kwargs):
+                         p_threshold=None, lfc_threshold=None, **kwargs):
     """Make marker gene dictionary in `.uns` into a dataframe."""
     ranks = sc.get.rank_genes_groups_df(adata, None, key=key_added,
                                         pval_cutoff=p_threshold, **kwargs)
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
+    if lfc_threshold:
+        ranks = ranks[ranks.logfoldchanges >= lfc_threshold]  # filter ~ LFC
+    if p_threshold:
+        ranks = ranks[ranks.pvals_adj <= p_threshold]  # filter ~ LFC
     return ranks
 
 
@@ -477,7 +481,7 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
     pos_rate = "; ".join(percs[percs >= print_threshold].reset_index(
         ).apply(lambda x: f"{int(x.iloc[1])}% {x['Gene']}+", axis=1)
                             ) + f" (>={count_threshold} counts)"
-    msg = str("" if perc_rep == "" else perc_rep + ". ") + pos_rate
+    msg = str("" if perc_rep == "" else perc_rep + "\n\n") + pos_rate
     genes = mks_grps.reset_index().groupby(col_annotation).apply(
         lambda x: ", ".join(x.Gene.unique()))  # markers ~ annotation
     print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
