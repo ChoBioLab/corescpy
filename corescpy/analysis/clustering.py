@@ -153,8 +153,7 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
 def make_marker_genes_df(adata, col_cell_type, key_added="leiden",
                          p_threshold=None, lfc_threshold=None, **kwargs):
     """Make marker gene dictionary in `.uns` into a dataframe."""
-    ranks = sc.get.rank_genes_groups_df(adata, None, key=key_added,
-                                        pval_cutoff=p_threshold, **kwargs)
+    ranks = sc.get.rank_genes_groups_df(adata, None, key=key_added, **kwargs)
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
     if lfc_threshold:
