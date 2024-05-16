@@ -460,8 +460,9 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
             "Total"]).sort_values("Percent_Total", ascending=False)
         n_exp = n_exp.join(n_exp.groupby("Gene").apply(lambda x: assign.loc[
             x.name].iloc[0] if len(
-                assign.group.loc[x.name].group) == 1 else ", ".join(
-                    list(assign.loc[x.name].group))).to_frame("Cell Types"))
+                assign.group.loc[x.name].group.unique()) == 1 else ", ".join(
+                    list(assign.loc[x.name].group.unique()))).to_frame(
+                        "Cell Types"))  # add annotations to n_exp
 
     # % of All (or Comparison Group) GEX-Threshold+ Cells in Reference Cluster
 
