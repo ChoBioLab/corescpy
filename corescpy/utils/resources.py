@@ -62,13 +62,14 @@ def get_topp_gene(genes, no_return=False, verbose=True,
     # params = {"Genes": genes, "categories": "ToppCell", "correction": "FDR"}
     # params = {"Genes": genes, "categories": "ToppCell"}
     params = {"Genes": genes, "MaxResults": max_results}
+    print(f"response = requests.post('{url}', json={params}, headers={head})")
     response = requests.post(url, json=params, headers=head)
     try:
         results = response.json()
     except Exception as e:
         print(e)
         print(response.text)
-        return response
+        # return response
     dff = pd.DataFrame(results)
     dff = dff.Annotations.apply(lambda x: x if x[
         "Category"] in categories else np.nan).dropna().apply(pd.Series)[
