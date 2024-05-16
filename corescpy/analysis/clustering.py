@@ -483,7 +483,7 @@ def print_marker_info(adata, key_cluster, assign, col_cell_type=None,
     msg = str("" if perc_rep == "" else perc_rep + "\n\n") + pos_rate
     genes = mks_grps.reset_index().groupby(col_annotation).apply(
         lambda x: ", ".join(x.Gene.unique()))  # markers ~ annotation
-    print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
+    # print(f"\n{'=' * 80}\nCount Threshold: {count_threshold}\n{'=' * 80}")
     if show is True:  # print results?
         print(genes)
         print(percs_exp.applymap(lambda x: x if x == "" else str(int(x))))
