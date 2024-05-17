@@ -816,7 +816,7 @@ class Omics(object):
                 g, sources=sources, verbose=False, **kwargs).drop(
                     "Source", axis=1).reset_index(0, drop=True)
                 for g in markers]  # get ToppGene results for each cluster
-            tgdf = pd.concat([x.iloc[:np.min(x.shape, nta)]
+            tgdf = pd.concat([x.iloc[:np.min(x.shape[0], nta)]
                               for x in tgdf], keys=types)  # concatenate
             return tgdf, mks
         else:  # annotate by marker dictionary
