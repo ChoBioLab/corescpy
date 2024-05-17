@@ -62,7 +62,7 @@ def get_topp_gene(genes, no_return=False, verbose=True,
     # params = {"Genes": genes, "categories": "ToppCell", "correction": "FDR"}
     # params = {"Genes": genes, "categories": "ToppCell"}
     params = {"Genes": genes, "MaxResults": max_results}
-    print(f"response = requests.post('{url}', json={params}, headers={head})")
+    # print(f"requests.post('{url}', json={params}, headers={head})")
     response = requests.post(url, json=params, headers=head)
     try:
         results = response.json()
