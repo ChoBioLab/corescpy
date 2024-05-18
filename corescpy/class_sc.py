@@ -570,7 +570,7 @@ class Omics(object):
         """
         genes = [genes] if isinstance(genes, str) else genes  # ensure list
         adata = self.get_layer(layer, inplace=False)  # get specified layer
-        tx_cts = pd.Series([self.rna[:, g].X.sum() for g in genes],
+        tx_cts = pd.Series([adata[:, g].X.sum() for g in genes],
                            index=pd.Index(genes, name="Gene"))  # overall #s
         grps = adata.obs[col_cell_type].unique() if col_cell_type else None
         tx_cts_cl = pd.concat([pd.Series([np.sum(
