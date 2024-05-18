@@ -573,10 +573,11 @@ class Omics(object):
         tx_cts = pd.Series([self.rna[:, g].X.sum() for g in genes],
                            index=pd.Index(genes, name="Gene"))  # overall #s
         grps = adata.obs[col_cell_type].unique() if col_cell_type else None
-        tx_cts_cl = pd.concat([pd.Series([
-            adata[adata.obs == x][:, g].X.sum() for g in genes
-            ], index=pd.Index(genes, name="Gene")) for x in grps], keys=grps,
-                              names=[col_cell_type, "Gene"]) if grps else None
+        tx_cts_cl = pd.concat([pd.Series([np.sum(
+            adata[adata.obs[col_cell_type] == x][:, g].X) for g in genes],
+                                         index=pd.Index(genes, name="Gene"))
+                               for x in grps], keys=grps, names=[
+                                   col_cell_type, "Gene"]) if grps else None
         return tx_cts, tx_cts_cl
 
     def quantify_cells(self, genes, threshold=1, n_combos="all", subset=None,

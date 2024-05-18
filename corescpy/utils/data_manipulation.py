@@ -77,7 +77,7 @@ def merge_pca_subset(adata, adata_subset,
     return ann
 
 
-def write_ome_tif(file_path, file_out=None, bf_cmd="bfconvert",
+def write_ome_tif(file_path, file_out=None, bf_cmd="./bftools/bfconvert",
                   subresolutions=7, pixelsize=0.2125):
     """Write .tif file to .ome.tif (modified from 10x functions)."""
     if os.path.splitext(file_path)[1] == ".ndpi":  # NDPI -> TIFF if needed
