@@ -208,10 +208,13 @@ class Omics(object):
 
     def __repr__(self) -> str:
         """Represent object."""
-        for q in [self._columns, self._keys]:
-            cr.tl.print_pretty_dictionary(q)
-        print("\n\n\n")
-        return self.adata.__repr__
+        repped = "\n\n\n"
+        if "_library_id" in dir(self):
+            repped += self._library_id + "\n\n"
+        repped += "\n\n".join(["\n".join([
+            f"{k} = None" if x[k] is None else f"{k} = \"{x[k]}\""
+            for k in x]) for x in [self._columns, self._keys]])
+        return repped
 
     def write(self, out_file, **kwargs):
         """Write object."""
