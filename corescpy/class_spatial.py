@@ -225,8 +225,7 @@ class Spatial(cr.Omics):
             if plot is True:
                 cr.pl.plot_tiff(fff)  # plot
 
-    def add_image(self, file, name=None, file_align=None,
-                  dim="2d", **kwargs):
+    def add_image(self, file, name=None, file_align=None, dim="2d"):
         """Add image (optionally, align from Xenium alignment file).
 
         Args:
@@ -244,8 +243,6 @@ class Spatial(cr.Omics):
                 `spatialdata_io.xenium_aligned_image()` function.
                 Defaults to None.
             dim (str, optional): "2d" or "3d" image. nDefaults to "2d".
-            kwargs (dict, optional): Keyword arguments to pass to
-                `spatialdata.SpatialData.add_image()`.
 
         Raises:
             NotImplementedError: Image alignment for Visium data.
@@ -267,7 +264,7 @@ class Spatial(cr.Omics):
                 np.ndarray, pd.DataFrame)) else imread(file)  # image -> array
             img = spatialdata.models.Image3DModel.parse(data) if (
                 dim == "3d") else spatialdata.models.Image2DModel.parse(data)
-        self.adata.add_image(name, img, **kwargs)
+        self.adata.images[name] = img
 
     def show(self, kinds="all", elements="all", color=None, layer=None,
              palette=None, figsize=None, library_id=None, **kwargs):
