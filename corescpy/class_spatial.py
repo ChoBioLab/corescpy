@@ -225,6 +225,25 @@ class Spatial(cr.Omics):
             if plot is True:
                 cr.pl.plot_tiff(fff)  # plot
 
+    def crop(self, min_xyz, max_xyz, **kwargs):
+        """
+        Get a copy of the data cropped to specified coordinates.
+
+        Notes
+        -----
+        Specify as a list with the minimum x, y, & (optionally) z
+        coordinates (`min_xyz`) and the maximum x, y, & (optionally) z
+        coordinates (`max_xyz`). For instance, specify `min_xyz=[2, 4]`
+        and `max_xyz=[2000, 1000]` to get the region defined by 2-2000
+        on the x-axis and 4-1000 on the y-axis.
+        """
+        kws_def = dict(axes=("x", "y", "z") if len(min_xyz) > 2 else (
+            "x", "y"), target_coordinate_system="global")
+        sdata_cropped = spatialdata.bounding_box_query(
+            self.adata, min_coordinate=min_xyz,
+            max_coordinate=max_xyz, **{**kws_def, **kwargs})
+        return sdata_cropped
+
     def add_image(self, file, name=None, file_align=None, dim="2d"):
         """Add image (optionally, align from Xenium alignment file).
 
