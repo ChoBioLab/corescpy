@@ -226,35 +226,36 @@ class Spatial(cr.Omics):
             if plot is True:
                 cr.pl.plot_tiff(fff)  # plot
 
-    def crop(self, min_xyz=None, max_xyz=None, **kwargs):
+    def crop(self, bounds_x, bounds_y=None, bounds_z=None, **kwargs):
         """
         Get a copy of the data cropped to specified coordinates.
 
         Notes
         -----
-        Specify as a list with the minimum x, y, & (optionally) z
-        coordinates (`min_xyz`) and the maximum x, y, & (optionally) z
-        coordinates (`max_xyz`). For instance, specify `min_xyz=[2, 4]`
-        and `max_xyz=[2000, 1000]` to get the region defined by 2-2000
-        on the x-axis and 4-1000 on the y-axis.
+        Specify as a list with the minimum & maximum x, y, &
+        (optionally) z coordinates (`bounds_z`). For instance,
+        `bounds_x=[2, 400]` and `bounds_y=[50, 200]` will yield the
+        region defined by 2-400 on the x-axis and 50-200 on the y-axis.
 
-        Alternatively, specify only `min_xyz` as a path to a file
+        Alternatively, specify only `bounds_x` as a path to a file
         created using the Xenium Explorer selection tool to extract
         the coordinates from there.
         """
-        if isinstance(min_xyz, str):  # Xenium Explorer selection
-            coords = sdio.xenium_explorer_selection(min_xyz, **max_xyz)
+        if isinstance(bounds_x, str):  # Xenium Explorer selection
+            coords = sdio.xenium_explorer_selection(bounds_x)
             if isinstance(coords, list):  # if multiple selections...
                 coords = shapely.MultiPolygon(coords)  # ...union of areas
             sdata_cropped = spatialdata.polygon_query(self.adata, coords, **{
                 "target_coordinate_system": "global",
                 "filter_table": True, **kwargs})
         else:  # specified coordinates
-            kws_def = dict(axes=("x", "y", "z") if len(min_xyz) > 2 else (
-                "x", "y"), target_coordinate_system="global")
+            minc, maxc = [[x[i] for x in [bounds_x, bounds_y, bounds_z] if (
+                x is not None)] for i in [0, 1]]
+            kws_def = dict(axes=("x", "y", "z") if bounds_z else ("x", "y"),
+                           target_coordinate_system="global")
             sdata_cropped = spatialdata.bounding_box_query(
-                self.adata, min_coordinate=min_xyz,
-                max_coordinate=max_xyz, **{**kws_def, **kwargs})
+                self.adata, min_coordinate=minc,
+                max_coordinate=maxc, **{**kws_def, **kwargs})
         return sdata_cropped
 
     def add_image(self, file, name=None, file_align=None, dim="2d"):
@@ -424,6 +425,29 @@ class Spatial(cr.Omics):
         plt.subplots_adjust(wspace=wspace)
         fig.show()
         return fig, axs
+
+    def plot_segmentation(self, key_image="morphology_focus", figsize=30,
+                          kws_crop=None, kws_show=None, channels=None,
+                          titles=None, xenium_multimodal=False, **kwargs):
+        """Plot spatial segmentation."""
+        sdata = self.crop(**kws_crop) if kws_crop else self.adata
+        kws_show = {} if kws_show is None else {**kws_show}
+        channels = [channels] if channels is None or isinstance(channels, (
+            str, float, int)) else list(channels)  # ensure channels iterable
+        figsize = (figsize, figsize) if isinstance(figsize, (
+            int, float)) else figsize  # 1 size given=square figsize -> tuple
+        if titles is None:
+            titles = [
+                "Nuclear (DAPI)", "Interior Protein (AlphaSMA/Vimentin)",
+                "Boundary (ATP1A1/CD45/E-Cadherin)", "Interior RNA (18S)"
+                ] if xenium_multimodal is True else channels
+        if isinstance(titles, str):  # if only one title given...
+            titles = [titles] * len(channels)  # ...same for all channels
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        for i, x in enumerate(channels):  # iterate channels
+            sdata.pl.render_images(key_image, channel=x, **kwargs).pl.show(
+                title=titles[i], **kws_show, ax=axes.flatten()[i])  # plot
+        return fig, axes
 
     def impute(self, adata_sc, col_cell_type=None, mode="cells",
                layer="log1p", device="cpu", inplace=True,

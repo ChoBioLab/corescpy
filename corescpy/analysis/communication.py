@@ -76,7 +76,8 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
             figs["lr"] = plot_receptor_ligand(
                 adata=adata, lr_dea_res=res["lr_dea_res"], **kws)  # plots
         except Exception as err:
-            print(traceback.format_exc(), "\n\nLigand-receptor plotting failed!")
+            print(traceback.format_exc(),
+                  "\n\nLigand-receptor plotting failed!")
             figs["lr"] = err
     return res, adata, figs
 
