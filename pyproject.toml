@@ -68,10 +68,10 @@ dependencies = [
     "jax==0.4.20",
     "jaxlib==0.4.20",
     "optax==0.1.7",
-    # "chex==0.1.7",
+    "chex==0.1.86",
     "seaborn>=0.13.0",
     "typing-extensions>=4.8.0",
-    "scipy",
+    "scipy==1.11.4",
     "rich",
     "requests",
     "ipywidgets",
@@ -87,7 +87,8 @@ dependencies = [
     "sparsecca",
     "numba",
     "remotezip",
-    "openpyxl"
+    "openpyxl",
+    "pyarrow>=16.0.0"
 ]
 
 [project.optional-dependencies]

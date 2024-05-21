@@ -572,12 +572,18 @@ class Omics(object):
         adata = self.get_layer(layer, inplace=False)  # get specified layer
         tx_cts = pd.Series([adata[:, g].X.sum() for g in genes],
                            index=pd.Index(genes, name="Gene"))  # overall #s
+        tx_cts = tx_cts.to_frame("n_transcripts").assign(
+            total_counts=adata.X.sum())
         grps = adata.obs[col_cell_type].unique() if col_cell_type else None
         tx_cts_cl = pd.concat([pd.Series([np.sum(
             adata[adata.obs[col_cell_type] == x][:, g].X) for g in genes],
                                          index=pd.Index(genes, name="Gene"))
                                for x in grps], keys=grps, names=[
                                    col_cell_type, "Gene"]) if grps else None
+        tx_cts_cl = tx_cts_cl.unstack("Gene").join(pd.Series([
+            np.sum(adata[adata.obs[col_cell_type] == x].X) for x in grps
+            ], index=pd.Index(grps, name=col_cell_type)).to_frame(
+                "total_counts"), on=col_cell_type) if grps else None
         return tx_cts, tx_cts_cl
 
     def quantify_cells(self, genes, threshold=1, n_combos="all", subset=None,
