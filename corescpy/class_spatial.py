@@ -225,7 +225,7 @@ class Spatial(cr.Omics):
             if plot is True:
                 cr.pl.plot_tiff(fff)  # plot
 
-    def crop(self, min_xyz, max_xyz, **kwargs):
+    def crop(self, min_xyz=None, max_xyz=None, **kwargs):
         """
         Get a copy of the data cropped to specified coordinates.
 
@@ -236,12 +236,24 @@ class Spatial(cr.Omics):
         coordinates (`max_xyz`). For instance, specify `min_xyz=[2, 4]`
         and `max_xyz=[2000, 1000]` to get the region defined by 2-2000
         on the x-axis and 4-1000 on the y-axis.
+
+        Alternatively, specify only `min_xyz` as a path to a file
+        created using the Xenium Explorer selection tool to extract
+        the coordinates from there. Specify any keyword arguments to
+        pass to `spatialdata_io.xenium_explorer_selection()` in
+        `max_xyz`, or just leave as None to use defaults.
         """
-        kws_def = dict(axes=("x", "y", "z") if len(min_xyz) > 2 else (
-            "x", "y"), target_coordinate_system="global")
-        sdata_cropped = spatialdata.bounding_box_query(
-            self.adata, min_coordinate=min_xyz,
-            max_coordinate=max_xyz, **{**kws_def, **kwargs})
+        if isinstance(min_xyz, str):  # Xenium Explorer selection
+            max_xyz = {} if max_xyz is None else {**max_xyz}
+            coords = sdio.xenium_explorer_selection(min_xyz, **max_xyz)
+            sdata_cropped = spatialdata.polygon_query(self.adata, coords, **{
+                "target_coordinate_system": "global", **kwargs})
+        else:  # specified coordinates
+            kws_def = dict(axes=("x", "y", "z") if len(min_xyz) > 2 else (
+                "x", "y"), target_coordinate_system="global")
+            sdata_cropped = spatialdata.bounding_box_query(
+                self.adata, min_coordinate=min_xyz,
+                max_coordinate=max_xyz, **{**kws_def, **kwargs})
         return sdata_cropped
 
     def add_image(self, file, name=None, file_align=None, dim="2d"):
