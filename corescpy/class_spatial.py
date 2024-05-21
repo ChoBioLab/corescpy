@@ -13,6 +13,7 @@ from copy import deepcopy
 from dask_image.imread import imread
 import matplotlib
 import matplotlib.pyplot as plt
+import shapely
 import squidpy as sq
 import spatialdata
 import spatialdata_plot as sdp
@@ -239,15 +240,15 @@ class Spatial(cr.Omics):
 
         Alternatively, specify only `min_xyz` as a path to a file
         created using the Xenium Explorer selection tool to extract
-        the coordinates from there. Specify any keyword arguments to
-        pass to `spatialdata_io.xenium_explorer_selection()` in
-        `max_xyz`, or just leave as None to use defaults.
+        the coordinates from there.
         """
         if isinstance(min_xyz, str):  # Xenium Explorer selection
-            max_xyz = {} if max_xyz is None else {**max_xyz}
             coords = sdio.xenium_explorer_selection(min_xyz, **max_xyz)
+            if isinstance(coords, list):  # if multiple selections...
+                coords = shapely.MultiPolygon(coords)  # ...union of areas
             sdata_cropped = spatialdata.polygon_query(self.adata, coords, **{
-                "target_coordinate_system": "global", **kwargs})
+                "target_coordinate_system": "global",
+                "filter_table": True, **kwargs})
         else:  # specified coordinates
             kws_def = dict(axes=("x", "y", "z") if len(min_xyz) > 2 else (
                 "x", "y"), target_coordinate_system="global")
