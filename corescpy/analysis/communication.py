@@ -102,7 +102,7 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
 #     # Make Compatible with Hard-Coded Column in stlearn Code
 #     # max_coor = np.max(adata.obsm["spatial"])
 #     # scale = 2000 / max_coor
-#     scale = kwargs.pop("scale")
+#     scale = kwargs.pop("scale", 1)
 #     quality = kwargs.pop("key_image", "hires")
 #     spot_diameter_fullres = kwargs.pop("spot_diameter_fullres", 15)
 #     if "spatial" in adata.obsm:
