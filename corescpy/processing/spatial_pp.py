@@ -110,20 +110,21 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
 def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
     """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
     imgs = {}
-    for x in adata.images:
-        scales = [int(i.split("scale")[1]) for i in adata.images[x] if (
-            "scale") in i] if "focus" in x else []
-        for i in adata.images[x]:
-            key = f"{library_id}{SPATIAL_IMAGE_KEY_SEP}{x}_{i}"
-            imgs[key] = sq.im.ImageContainer(
-                adata.images[x][i].image, library_id=library_id)
-            if len(scales) > 0 and "scale" in i and str(i.split(
-                    "scale")[1]) == str(min(scales)):
-                imgs["hires"] = imgs[key]  # Squidpy/Visium-Xenium compatible
+    if "images" in dir(adata):
+        for x in adata.images:
+            scales = [int(i.split("scale")[1]) for i in adata.images[x] if (
+                "scale") in i] if "focus" in x else []
+            for i in adata.images[x]:
+                key = f"{library_id}{SPATIAL_IMAGE_KEY_SEP}{x}_{i}"
+                imgs[key] = sq.im.ImageContainer(
+                    adata.images[x][i].image, library_id=library_id)
+                if len(scales) > 0 and "scale" in i and str(i.split(
+                        "scale")[1]) == str(min(scales)):
+                    imgs["hires"] = imgs[key]  # Squidpy-compatible
     if rna_only is True:
         # if col_sample_id in adata.table.obs:
         #     rna = adata.table[adata.table.obs[col_sample_id] == library_id]
-        rna = adata.table
+        rna = adata.table if "table" in dir(adata) else adata
         rna.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
         # rna.uns[SPATIAL_KEY]["library_id"] = library_id
         return rna
