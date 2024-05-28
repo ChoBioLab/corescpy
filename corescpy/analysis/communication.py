@@ -82,6 +82,122 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
     return res, adata, figs
 
 
+# def analyze_cci_spatial(adata, col_cell_type=None, n_spots=125,
+#                         organism="human", resource="connectomeDB2020_lit",
+#                         distance=None, min_spots=20,
+#                         n_pairs=10000, n_top=50,
+#                         n_jobs=8, stats="all", layer="counts",
+#                         plot_lr=None,
+#                         pval_adj_cutoff=None, adj_method=None, **kwargs):
+#     """
+#     Perform spatial cell-cell communication & ligand-receptor analysis.
+#     """
+#     # Process Arguments
+#     if isinstance(stats, str) and stats.lower().strip() == "all":
+#         stats = ["lr_scores", "p_vals", "p_adjs", "-log10(p_adjs)"]
+#     library_id = kwargs.pop("library_id", list(
+#         adata.uns["spatial"].keys())[0])
+#     scale = kwargs.pop
+
+#     # Make Compatible with Hard-Coded Column in stlearn Code
+#     # max_coor = np.max(adata.obsm["spatial"])
+#     # scale = 2000 / max_coor
+#     scale = kwargs.pop("scale")
+#     quality = kwargs.pop("key_image", "hires")
+#     spot_diameter_fullres = kwargs.pop("spot_diameter_fullres", 15)
+#     if "spatial" in adata.obsm:
+#         adata.obs.loc[:, "imagerow"] = adata.obsm["spatial"][:, 0] * scale
+#         adata.obs.loc[:, "imagecol"] = adata.obsm["spatial"][:, 1] * scale
+#     if "scalefactors" not in adata.uns["spatial"]:
+#         adata.uns["spatial"][library_id]["scalefactors"] = {}
+#         adata.uns["spatial"][library_id]["scalefactors"][
+#             "tissue_" + quality + "_scalef"] = scale
+#         adata.uns["spatial"][library_id]["scalefactors"][
+#             "spot_diameter_fullres"] = spot_diameter_fullres
+#         adata.uns["spatial"][library_id]["use_quality"] = quality
+
+#     # Process Data
+#     adata.X = adata.layers[layer].copy()
+#     st.pp.normalize_total(adata)
+
+#     # Create Spot Grid
+#     grid = st.tl.cci.grid(adata, n_row=n_spots, n_col=n_spots,
+#                           use_label=col_cell_type)
+
+#     # Plot: Compare Clusters to Created Spots
+#     fig, axes = plt.subplots(ncols=2, figsize=(20, 8))
+#     st.pl.cluster_plot(grid, use_label=col_cell_type, size=10, ax=axes[0],
+#                        show_plot=False)
+#     st.pl.cluster_plot(adata, use_label=col_cell_type,
+#                        ax=axes[1], show_plot=False)
+#     axes[0].set_title(f"Grid: Dominant Spots")
+#     axes[1].set_title(f"Cell {col_cell_type} Labels")
+#     plt.show()
+
+#     # Plot Cell Type Locations & Spot Maxima/Proportions by Cell Type
+#     for g in list(grid.obs[col_cell_type].cat.categories):
+#         fig, axes = plt.subplots(ncols=3, figsize=(20,8))
+#         group_props = grid.uns[col_cell_type][g].values
+#         grid.obs["Group"] = group_props
+#         st.pl.feat_plot(grid, feature="Group", ax=axes[0], show_plot=False,
+#                         vmax=1, show_color_bar=False)
+#         st.pl.cluster_plot(grid, use_label=col_cell_type,
+#                            list_clusters=[g], ax=axes[1], show_plot=False)
+#         st.pl.cluster_plot(adata, use_label=col_cell_type,
+#                            list_clusters=[g], ax=axes[2], show_plot=False)
+#         axes[0].set_title(f"Grid {g} Proportions (Maximum = 1)")
+#         axes[1].set_title(f"Grid {g} Maximum Spots")
+#         axes[2].set_title(f"Individual Cell {g}")
+#         plt.show()
+
+#     # Run Analysis
+#     lrs = st.tl.cci.load_lrs([resource], species=organism)
+#     st.tl.cci.run(
+#         grid, lrs, min_spots=min_spots, distance=distance,
+#         n_pairs=n_pairs, n_cpus=n_jobs)
+#     if pval_adj_cutoff is not None or adj_method is not None:  # adjust p?
+#         st.tl.cci.adj_pvals(
+#             grid, correct_axis="spot", pval_adj_cutoff=pval_adj_cutoff,
+#             adj_method=adj_method)  # optionally, adjust p-values
+#     print(grid.uns["lr_summary"])
+
+#     # QC Plots
+#     fig, axes = st.pl.cci_check(grid, col_cell_type, figsize=(16, 5))
+#     fig.suptitle("CCI Check: Interactions Shouldn't Correlate Much "
+#                  "with Cell Type Frequency if Well-Controlled for")
+#     st.pl.lr_diagnostics(grid, figsize=(10, 2.5))
+
+#     # Results Plots
+#     st.pl.lr_summary(grid, n_top=n_top, figsize=(10, 3))  # summary plot
+#     if plot_lr is True or isinstance(
+#             plot_lr, (int, float)):  # if pairs unspecified, or want top N
+#         plot_lr = 3 if plot_lr is None else int(plot_lr)  # top 3 = default
+#         plot_lr = grid.uns["lr_summary"].index.values[:plot_lr]  # best L-Rs
+#     if plot_lr not in [None, False]:  # if wanted these plots...
+#         fig, axes = plt.subplots(ncols=len(stats), nrows=len(plot_lr),
+#                                  figsize=(12, 6))
+#         for r, x in enumerate(plot_lr):  # iterate ligand-receptors
+#             for c, stat in enumerate(stats):  # iterate statistics
+#                 st.pl.lr_result_plot(grid, use_result=stat, use_lr=x,
+#                                      show_color_bar=False, ax=axes[r, c])
+#                 axes[r, c].set_title(f"{x} {stat}")
+
+#     # Gene Expression Plots
+#     if plot_lr is not None:
+#         genes = functools.reduce(lambda i, j: list(i) + list(j),
+#                                 [i.split("_") for i in plot_lr])
+#         for g in genes:
+#             fig, axes = plt.subplots(ncols=2, figsize=(20, 5))
+#             st.pl.gene_plot(grid, gene_symbols=g, ax=axes[0],
+#                             show_color_bar=False, show_plot=False)
+#             st.pl.gene_plot(adata, gene_symbols=g, ax=axes[1],
+#                             show_color_bar=False, show_plot=False, vmax=80)
+#             axes[0].set_title(f"Grid {g} Expression")
+#             axes[1].set_title(f"Cell {g} Expression")
+#             plt.show()
+#     return grid, grid.uns["lr_summary"]
+
+
 def analyze_causal_network(adata, col_condition, key_control, key_treatment,
                            col_cell_type, key_source, key_target, dea_df=None,
                            col_gene_symbols=None, col_sample_id=None,
