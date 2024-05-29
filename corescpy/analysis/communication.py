@@ -181,6 +181,7 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
 #                 st.pl.lr_result_plot(grid, use_result=stat, use_lr=x,
 #                                      show_color_bar=False, ax=axes[r, c])
 #                 axes[r, c].set_title(f"{x} {stat}")
+#     st.pl.cci_map(grid, col_cell_type)
 
 #     # Gene Expression Plots
 #     if plot_lr is not None:
