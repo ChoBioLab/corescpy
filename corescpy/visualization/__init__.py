@@ -10,7 +10,7 @@ from .gene_expression_plots import (
     plot_markers)
 from .communication_plots import plot_receptor_ligand, plot_cooccurrence
 from .scanpy_plots import plot_hvgs
-from .spatial_plots import (plot_tiff, plot_spatial,
+from .spatial_plots import (plot_tiff, plot_spatial, plot_space,
                             plot_integration_spatial)
 
 __all__ = [
@@ -19,5 +19,6 @@ __all__ = [
     "plot_gsea_results", "plot_pathway_interference_results", "plot_gex",
     "plot_umap_multi", "plot_umap_split", "plot_cat_split", "plot_markers",
     "plot_receptor_ligand", "plot_cooccurrence", "plot_distance",
-    "plot_hvgs", "plot_tiff", "plot_spatial", "plot_integration_spatial"
+    "plot_hvgs", "plot_tiff",
+    "plot_spatial", "plot_space", "plot_integration_spatial"
 ]

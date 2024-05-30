@@ -6,7 +6,8 @@ Processing spatial data.
 
 Functions adapted from
 'https://www.10xgenomics.com/analysis-guides/performing-3d-nucleus-
-segmentation-with-cellpose-and-generating-a-feature-cell-matrix'.
+segmentation-with-cellpose-and-generating-a-feature-cell-matrix'
+and `stlearn` tutorials.
 
 @author: E. N. Aslinger
 """
@@ -14,13 +15,12 @@ segmentation-with-cellpose-and-generating-a-feature-cell-matrix'.
 import tifffile
 import csv
 import os
-# import sys
 import re
 import traceback
-# import corescpy as cr
+import matplotlib.pyplot as plt
 import scanpy as sc
 import squidpy as sq
-# import scanpy as sc
+import stlearn as st
 import spatialdata_io as sdio
 import scipy.sparse as sparse
 import scipy.io as sio
@@ -29,6 +29,7 @@ import tangram as tg
 import pandas as pd
 import numpy as np
 import corescpy as cr
+from corescpy.visualization import plot_space
 
 # Define constant.
 # z-slices are 3 microns apart
@@ -134,6 +135,29 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         if col_sample_id not in adata.table.obs:
             adata.table.obs.loc[:, col_sample_id] = library_id
         return adata
+
+
+def create_spot_grid(adata, col_cell_type, n_spots, layer="counts", n_jobs=1,
+                     title="Grid Label Transfer", cmap=None, kws_plot=True):
+    """Create Visium-like data from Xenium data."""
+    print(f"\n\n{n_spots} by {n_spots} has {n_spots * n_spots} spots\n\n")
+    if kws_plot is True:  # if no keywords to pass but still want plotting
+        kws_plot = {}
+    if layer is not None:
+        adata.X = adata.layers[layer].copy()
+    st.pp.normalize_total(adata)  # total count-normalize
+    grid = st.tl.cci.grid(adata, n_row=n_spots, n_col=n_spots,
+                          use_label=col_cell_type, n_cpus=n_jobs)
+    if kws_plot is not None:  # plot label transfer; adata vs. grid
+        f_s = kws_plot.pop("figsize", None)
+        fig, axes = plt.subplots(ncols=2, figsize=f_s if f_s else (20, 8))
+        for i, a in enumerate([grid, adata]):
+            plot_space(a, col_cell_type, cmap=cmap, fig=fig, axes=axes[i],
+                       title=[col_cell_type, "Grid (Dominant Spots)"][i],
+                       show=False, **kws_plot)  # plot adata or grid
+        fig.suptitle(title)
+        plt.show()
+    return grid, (fig, axes)
 
 
 def impute_spatial(adata_sp, adata_sc, col_cell_type,

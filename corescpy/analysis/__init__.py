@@ -10,7 +10,8 @@ from .clustering import (cluster, find_marker_genes, make_marker_genes_df,
                          perform_celltypist, annotate_by_markers,
                          print_marker_info)
 from .composition import analyze_composition
-from .communication import analyze_receptor_ligand, analyze_causal_network
+from .communication import (analyze_receptor_ligand, analyze_causal_network,
+                            create_spot_grid)
 
 __all__ = [
     "perform_mixscape", "perform_augur",
