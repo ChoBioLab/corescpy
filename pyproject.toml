@@ -20,7 +20,7 @@ urls.Source = "https://github.com/easlinger/corescpy"
 urls.Home-page = "https://github.com/easlinger/corescpy"
 dependencies = [
     # Base
-    "anndata",
+    "anndata>=0.7.4",
     "scanpy[leiden]",
     "muon",
     "celltypist",
@@ -85,7 +85,7 @@ dependencies = [
     "statannotations",
     "ott-jax",
     "sparsecca",
-    "numba",
+    "numba<=0.57.1",  # stlearn compatibility
     "remotezip",
     "openpyxl",
     "pyarrow>=16.0.0"
