@@ -21,11 +21,11 @@ urls.Home-page = "https://github.com/easlinger/corescpy"
 dependencies = [
     # Base
     "anndata>=0.7.4",
-    "scanpy[leiden]",
+    "scanpy[leiden]>=1.9.8",
     "muon",
     "celltypist",
     "requests",
-    "setuptools<60.0.0",
+    # "setuptools<60.0.0",  # stlearn/numba compatibility?
 
     # GSEA
     "blitzgsea",
@@ -58,6 +58,7 @@ dependencies = [
     # "napari-spatialdata[extra]",
     "napari-spatialdata",
     "tangram-sc",
+    # "stlearn",
 
     # Other
     "dask==2023.11.0",

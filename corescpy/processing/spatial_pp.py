@@ -20,7 +20,7 @@ import traceback
 import matplotlib.pyplot as plt
 import scanpy as sc
 import squidpy as sq
-import stlearn as st
+# import stlearn as st
 import spatialdata_io as sdio
 import scipy.sparse as sparse
 import scipy.io as sio
@@ -28,8 +28,9 @@ import subprocess
 import tangram as tg
 import pandas as pd
 import numpy as np
-from corescpy.visualization import plot_space, plot_integration_spatial
+# from corescpy.visualization import plot_integration_spatial
 # from corescpy.utils import merge
+import corescpy as cr
 
 # Define constant.
 # z-slices are 3 microns apart
@@ -140,24 +141,68 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
 def create_spot_grid(adata, col_cell_type, n_spots, layer="counts", n_jobs=1,
                      title="Grid Label Transfer", cmap=None, kws_plot=True):
     """Create Visium-like data from Xenium data."""
-    print(f"\n\n{n_spots} by {n_spots} has {n_spots * n_spots} spots\n\n")
-    if kws_plot is True:  # if no keywords to pass but still want plotting
-        kws_plot = {}
-    if layer is not None:
-        adata.X = adata.layers[layer].copy()
-    st.pp.normalize_total(adata)  # total count-normalize
-    grid = st.tl.cci.grid(adata, n_row=n_spots, n_col=n_spots,
-                          use_label=col_cell_type, n_cpus=n_jobs)
-    if kws_plot is not None:  # plot label transfer; adata vs. grid
-        f_s = kws_plot.pop("figsize", None)
-        fig, axes = plt.subplots(ncols=2, figsize=f_s if f_s else (20, 8))
-        for i, a in enumerate([grid, adata]):
-            plot_space(a, col_cell_type, cmap=cmap, fig=fig, axes=axes[i],
-                       title=[col_cell_type, "Grid (Dominant Spots)"][i],
-                       show=False, **kws_plot)  # plot adata or grid
-        fig.suptitle(title)
-        plt.show()
-    return grid, (fig, axes)
+    pass
+    # print(f"\n\n{n_spots} by {n_spots} has {n_spots * n_spots} spots\n\n")
+    # if kws_plot is True:  # if no keywords to pass but still want plotting
+    #     kws_plot = {}
+    # if layer is not None:
+    #     adata.X = adata.layers[layer].copy()
+    # st.pp.normalize_total(adata)  # total count-normalize
+    # grid = st.tl.cci.grid(adata, n_row=n_spots, n_col=n_spots,
+    #                       use_label=col_cell_type, n_cpus=n_jobs)
+    # if kws_plot is not None:  # plot label transfer; adata vs. grid
+    #     f_s = kws_plot.pop("figsize", None)
+    #     fig, axes = plt.subplots(ncols=2, figsize=f_s if f_s else (20, 8))
+    #     for i, a in enumerate([grid, adata]):
+    #         plot_space(a, col_cell_type, cmap=cmap, fig=fig, axes=axes[i],
+    #                    titles=[col_cell_type, "Grid (Dominant Spots)"][i],
+    #                    show=False, **kws_plot)  # plot adata or grid
+    #     fig.suptitle(title)
+    #     plt.show()
+    # return grid, (fig, axes)
+
+
+def plot_space(grid, color, groups=None,
+               cmap=None, size=10, figsize=None, show=True,
+               fig=None, axes=None, titles=None, suptitle=None, **kwargs):
+    """
+    Plot data in spatial coordinates (alternative, stlearn way).
+
+    Notes
+    -----
+    For additional options for plotting keyword arguments to pass,
+    https://stlearn.readthedocs.io/en/latest/\
+        stlearn.pl.cluster_plot.html
+    """
+    pass
+    # color = [color] if isinstance(color, str) else list(color)  # color by
+    # titles = [titles] * len(color) if isinstance(
+    #     titles, str) else color if titles is None else list(titles)  # title
+    # if groups is not None:
+    #     kwargs.update({"list_clusters": groups})  # only plot certain groups
+    # if axes is None:  # determine rows & columns
+    #     nrows = kwargs.pop("nrows", 1 if len(color) == 1 else int(
+    #         np.sqrt(len(color))))
+    #     ncols = kwargs.pop("ncols", 2 if len(color) == 2 else math.ceil(
+    #         len(color) / nrows) if nrows * 2 != len(color) else nrows)
+    #     fig, axes = plt.subplots(nrows, ncols, squeeze=False,
+    #                              figsize=figsize if figsize else (20, 8))
+    #     axes = axes.flatten()
+    # if not isinstance(axes, (list, np.ndarray)):
+    #     axes = [axes]
+    # for i, c in enumerate(color):
+    #     c_m = cmap if cmap else "default_102" if len(
+    #         grid.obs[c].unique()) > 40 else "jana_40" if len(
+    #             grid.obs[c].unique()) > 28 else 28 if len(
+    #                 grid.obs[c].unique()) > 20 else "default"  # cmap
+    #     st.pl.cluster_plot(grid, use_label=c, cmap=c_m, size=size, fig=fig,
+    #                        ax=axes[i], show_plot=False, **kwargs)
+    #     axes[i].set_title(titles[i])
+    # if suptitle is not None:
+    #     fig.suptitle(suptitle)
+    # if show is True:
+    #     plt.show()
+    # return fig, axes
 
 
 def impute_spatial(adata_sp, adata_sc, col_cell_type,
@@ -289,7 +334,7 @@ def impute_spatial(adata_sp, adata_sc, col_cell_type,
     # Plot
     if plot is True:  # plotting
         try:
-            figs = plot_integration_spatial(
+            figs = cr.pp.plot_integration_spatial(
                 adata_sp, adata_sp_new, adata_sc=None,
                 col_cell_type=[col_cell_type, col_cell_type_sp],
                 col_annotation=col_annotation, plot_density=plot_density,

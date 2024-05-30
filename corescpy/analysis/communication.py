@@ -5,7 +5,7 @@ from liana.method import cellphonedb
 import decoupler as dc
 import omnipath
 # import corneto
-import stlearn as st
+# import stlearn as st
 import pandas as pd
 from corescpy.visualization import plot_receptor_ligand
 from corescpy.utils import merge
@@ -90,23 +90,24 @@ def analyze_lr_spatial(grid, col_cell_type, distance, min_spots, n_pairs,
                        pval_adj_cutoff=None, adj_method=None, adj_axis="spot",
                        n_jobs=1, kws_spot_grid=None, **kwargs):
     """Analyze ligand-receptor & cell-cell interaction with Xenium."""
-    if kws_spot_grid not in [None, False]:  # convert Xenium to spots if need
-        grid = grid.copy()
-        kws_spot_grid = {} if kws_spot_grid is True else {**kws_spot_grid}
-        grid = create_spot_grid(grid, col_cell_type, **kws_spot_grid)
-    lrs = st.tl.cci.load_lrs([resource], species=organism)  # L-R database
-    st.tl.cci.run(grid, lrs, min_spots=min_spots, distance=distance,
-                  n_pairs=n_pairs, n_cpus=n_jobs)  # ligand-receptor analysis
-    if pval_adj_cutoff is not None or adj_method is not None:  # adjust p?
-        grid.uns["lr_summary_preadjust"] = grid.uns["lr_summary"].copy()
-        st.tl.cci.adj_pvals(
-            grid, correct_axis=adj_axis, pval_adj_cutoff=pval_adj_cutoff,
-            adj_method=adj_method)  # optionally, adjust p-values
-    print(grid.uns["lr_summary"])
-    st.tl.cci.run_cci(grid, col_cell_type, min_spots=min_spots,
-                      cell_prop_cutoff=cell_prop_cutoff, n_cpus=n_jobs,
-                      n_perms=n_perms, **kwargs)  # cell-cell interaction
-    return grid
+    pass
+    # if kws_spot_grid not in [None, False]:  # convert Xenium->spots if need
+    #     grid = grid.copy()
+    #     kws_spot_grid = {} if kws_spot_grid is True else {**kws_spot_grid}
+    #     grid = create_spot_grid(grid, col_cell_type, **kws_spot_grid)
+    # lrs = st.tl.cci.load_lrs([resource], species=organism)  # L-R database
+    # st.tl.cci.run(grid, lrs, min_spots=min_spots, distance=distance,
+    #               n_pairs=n_pairs, n_cpus=n_jobs)  # analyze ligand-receptor
+    # if pval_adj_cutoff is not None or adj_method is not None:  # adjust p?
+    #     grid.uns["lr_summary_preadjust"] = grid.uns["lr_summary"].copy()
+    #     st.tl.cci.adj_pvals(
+    #         grid, correct_axis=adj_axis, pval_adj_cutoff=pval_adj_cutoff,
+    #         adj_method=adj_method)  # optionally, adjust p-values
+    # print(grid.uns["lr_summary"])
+    # st.tl.cci.run_cci(grid, col_cell_type, min_spots=min_spots,
+    #                   cell_prop_cutoff=cell_prop_cutoff, n_cpus=n_jobs,
+    #                   n_perms=n_perms, **kwargs)  # cell-cell interaction
+    # return grid
 
 
 def analyze_causal_network(adata, col_condition, key_control, key_treatment,

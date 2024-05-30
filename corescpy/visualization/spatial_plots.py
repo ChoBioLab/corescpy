@@ -7,7 +7,6 @@ Plotting and other image display and manipulation for spatial data.
 """
 
 from warnings import warn
-import math
 from matplotlib import pyplot as plt
 import tifffile
 import traceback as tb
@@ -15,11 +14,10 @@ import scanpy as sc
 import squidpy as sq
 import spatialdata
 import tangram as tg
-import stlearn as st
 import pandas as pd
 import numpy as np
 from corescpy.processing import (SPATIAL_KEY,
-                                 construct_obs_spatial_integration)
+                                 construct_obs_spatial_imputation)
 from corescpy.utils import merge
 from corescpy.visualization import plot_gex
 
@@ -47,7 +45,13 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
                  library_id=None, col_sample_id=None,
                  wspace=0.1, shape=None, cmap=None,
                  title=None, title_offset=0, **kwargs):
-    """Plot spatial by clusters, transcripts, batches, etc."""
+    """
+    Plot spatial by clusters, transcripts, batches, etc.
+
+    See corescpy.processing.spatial_pp for an alternative function
+    (`plot_space`).
+
+    """
     ann = adata.copy()
     if isinstance(figsize, (int, float)):
         figsize = (figsize, figsize)
@@ -92,48 +96,6 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     return fig
 
 
-def plot_space(grid, color, groups=None,
-               cmap=None, size=10, figsize=None, show=True,
-               fig=None, axes=None, titles=None, suptitle=None, **kwargs):
-    """
-    Plot data in spatial coordinates (alternative, stlearn way).
-
-    Notes
-    -----
-    For additional options for plotting keyword arguments to pass,
-    https://stlearn.readthedocs.io/en/latest/\
-        stlearn.pl.cluster_plot.html
-    """
-    color = [color] if isinstance(color, str) else list(color)  # color by
-    titles = [titles] * len(color) if isinstance(
-        titles, str) else color if titles is None else list(titles)  # titles
-    if groups is not None:
-        kwargs.update({"list_clusters": groups})  # only plot certain groups
-    if axes is None:  # determine rows & columns
-        nrows = kwargs.pop("nrows", 1 if len(color) == 1 else int(
-            np.sqrt(len(color))))
-        ncols = kwargs.pop("ncols", 2 if len(color) == 2 else math.ceil(
-            len(color) / nrows) if nrows * 2 != len(color) else nrows)
-        fig, axes = plt.subplots(nrows, ncols, squeeze=False,
-                                 figsize=figsize if figsize else (20, 8))
-        axes = axes.flatten()
-    if not isinstance(axes, (list, np.ndarray)):
-        axes = [axes]
-    for i, c in enumerate(color):
-        c_m = cmap if cmap else "default_102" if len(
-            grid.obs[c].unique()) > 40 else "jana_40" if len(
-                grid.obs[c].unique()) > 28 else 28 if len(
-                    grid.obs[c].unique()) > 20 else "default"  # cmap
-        st.pl.cluster_plot(grid, use_label=c, cmap=c_m, size=size, fig=fig,
-                           ax=axes[i], show_plot=False, **kwargs)
-        axes[i].set_title(titles[i])
-    if suptitle is not None:
-        fig.suptitle(suptitle)
-    if show is True:
-        plt.show()
-    return fig, axes
-
-
 def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
                              col_cell_type=None, ad_map=None, cmap="magma",
                              df_compare=None, plot_genes=None, perc=0.01,
@@ -167,7 +129,7 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
         if plot_density is True:
             print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
             try:  # plot integration-inferred spatial cell types
-                tmp, dfp, _ = construct_obs_spatial_integration(
+                tmp, dfp, _ = construct_obs_spatial_imputation(
                     adata_sp.copy(), adata_sc.copy(), col_cell_type,
                     perc=perc)  # spatial AnnData + cell type density
                 figs["spatial_density"] = plot_spatial(
