@@ -25,6 +25,7 @@ dependencies = [
     "muon",
     "celltypist",
     "requests",
+    "setuptools<60.0.0",
 
     # GSEA
     "blitzgsea",
@@ -41,7 +42,7 @@ dependencies = [
     "graphviz",
     "cvxpy",
     "cylp",
-    "arviz",
+    "arviz==0.12.1",  # later versions need setuptools>60; breaks stlearn/np
 
     # Spatial
     "squidpy>=1.4.0",
