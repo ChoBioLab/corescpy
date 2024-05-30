@@ -14,7 +14,7 @@ from .importing import (combine_matrix_protospacer, construct_file,
 from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
                          read_spatial, update_spatial_uns,
                          _get_control_probe_names, impute_spatial,
-                         construct_obs_spatial_imputation,
+                         construct_obs_spatial_imputation, create_spot_grid,
                          SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
 
 __all__ = [
@@ -24,7 +24,7 @@ __all__ = [
     "combine_matrix_protospacer", "process_multimodal_crispr",
     "describe_tiff", "extract_tiff",
     "command_cellpose", "read_spatial", "update_spatial_uns",
-    "impute_spatial", "_get_control_probe_names",
+    "create_spot_grid", "impute_spatial", "_get_control_probe_names",
     "construct_file", "construct_obs_spatial_imputation",
     "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP",
 ]

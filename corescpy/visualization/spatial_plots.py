@@ -7,6 +7,7 @@ Plotting and other image display and manipulation for spatial data.
 """
 
 from warnings import warn
+import math
 from matplotlib import pyplot as plt
 import tifffile
 import traceback as tb
@@ -14,6 +15,7 @@ import scanpy as sc
 import squidpy as sq
 import spatialdata
 import tangram as tg
+import stlearn as st
 import pandas as pd
 import numpy as np
 import corescpy as cr
@@ -85,6 +87,48 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     except Exception:
         pass
     return fig
+
+
+def plot_space(grid, color, groups=None,
+               cmap=None, size=10, figsize=None, show=True,
+               fig=None, axes=None, titles=None, suptitle=None, **kwargs):
+    """
+    Plot data in spatial coordinates (alternative, stlearn way).
+
+    Notes
+    -----
+    For additional options for plotting keyword arguments to pass,
+    https://stlearn.readthedocs.io/en/latest/\
+        stlearn.pl.cluster_plot.html
+    """
+    color = [color] if isinstance(color, str) else list(color)  # color by
+    titles = [titles] * len(color) if isinstance(
+        titles, str) else color if titles is None else list(titles)  # titles
+    if groups is not None:
+        kwargs.update({"list_clusters": groups})  # only plot certain groups
+    if axes is None:  # determine rows & columns
+        nrows = kwargs.pop("nrows", 1 if len(color) == 1 else int(
+            np.sqrt(len(color))))
+        ncols = kwargs.pop("ncols", 2 if len(color) == 2 else math.ceil(
+            len(color) / nrows) if nrows * 2 != len(color) else nrows)
+        fig, axes = plt.subplots(nrows, ncols, squeeze=False,
+                                 figsize=figsize if figsize else (20, 8))
+        axes = axes.flatten()
+    if not isinstance(axes, (list, np.ndarray)):
+        axes = [axes]
+    for i, c in enumerate(color):
+        c_m = cmap if cmap else "default_102" if len(
+            grid.obs[c].unique()) > 40 else "jana_40" if len(
+                grid.obs[c].unique()) > 28 else 28 if len(
+                    grid.obs[c].unique()) > 20 else "default"  # cmap
+        st.pl.cluster_plot(grid, use_label=c, cmap=c_m, size=size, fig=fig,
+                           ax=axes[i], show_plot=False, **kwargs)
+        axes[i].set_title(titles[i])
+    if suptitle is not None:
+        fig.suptitle(suptitle)
+    if show is True:
+        plt.show()
+    return fig, axes
 
 
 def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
