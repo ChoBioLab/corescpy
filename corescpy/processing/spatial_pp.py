@@ -28,8 +28,8 @@ import subprocess
 import tangram as tg
 import pandas as pd
 import numpy as np
-import corescpy as cr
-from corescpy.visualization import plot_space
+from corescpy.visualization import plot_space, plot_integration_spatial
+# from corescpy.utils import merge
 
 # Define constant.
 # z-slices are 3 microns apart
@@ -82,10 +82,10 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
     #                                       ].copy().to_numpy()  # coordinates
     # if spatial_key not in adata.uns:
     #     if uns_spatial is not None and "scalefactors" in uns_spatial:
-    #         uns_spatial["scalefactors"] = cr.tl.merge({
+    #         uns_spatial["scalefactors"] = merge({
     #             "tissue_hires_scalef": 1, "spot_diameter_fullres": 0.5
     #             }, uns_spatial["scalefactors"])
-    #     adata.uns[spatial_key] = {library_id: cr.tl.merge(
+    #     adata.uns[spatial_key] = {library_id: merge(
     #         {"images": {}, "metadata": {
     #             "file_path": file_path, "source_image_path": file_path_image
     #             }},  uns_spatial)}  # default .uns merge w/ specified
@@ -289,7 +289,7 @@ def impute_spatial(adata_sp, adata_sc, col_cell_type,
     # Plot
     if plot is True:  # plotting
         try:
-            figs = cr.pl.plot_integration_spatial(
+            figs = plot_integration_spatial(
                 adata_sp, adata_sp_new, adata_sc=None,
                 col_cell_type=[col_cell_type, col_cell_type_sp],
                 col_annotation=col_annotation, plot_density=plot_density,
