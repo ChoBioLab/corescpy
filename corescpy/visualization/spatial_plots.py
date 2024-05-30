@@ -18,7 +18,10 @@ import tangram as tg
 import stlearn as st
 import pandas as pd
 import numpy as np
-import corescpy as cr
+from corescpy.processing import (SPATIAL_KEY,
+                                 construct_obs_spatial_integration)
+from corescpy.utils import merge
+from corescpy.visualization import plot_gex
 
 
 def plot_tiff(file_tiff, levels=None, size=16, kind=None):
@@ -40,7 +43,7 @@ def plot_tiff(file_tiff, levels=None, size=16, kind=None):
 
 
 def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
-                 spatial_key=cr.pp.SPATIAL_KEY, key_image=None,
+                 spatial_key=SPATIAL_KEY, key_image=None,
                  library_id=None, col_sample_id=None,
                  wspace=0.1, shape=None, cmap=None,
                  title=None, title_offset=0, **kwargs):
@@ -57,10 +60,10 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
         warn("Can't currently use `shape` parameter with SpatialData.")
         shape = None
     cgs = kwargs.pop("col_gene_symbols", None)
-    kws = cr.tl.merge(dict(figsize=figsize, shape=shape, cmap=cmap,
-                           return_ax=True, library_key=col_sample_id,
-                           library_id=libid, color=color, alt_var=cgs,
-                           wspace=wspace), kwargs)  # keyword arguments
+    kws = merge(dict(figsize=figsize, shape=shape, cmap=cmap,
+                     return_ax=True, library_key=col_sample_id,
+                     library_id=libid, color=color, alt_var=cgs,
+                     wspace=wspace), kwargs)  # keyword arguments
     img_names = list(ann.uns[spatial_key][libid if isinstance(
         libid, str) else libid[0]]["images"].keys())
     kws["img_res_key"] = key_image if key_image else "hires" if (
@@ -164,7 +167,7 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
         if plot_density is True:
             print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
             try:  # plot integration-inferred spatial cell types
-                tmp, dfp, _ = cr.pp.construct_obs_spatial_integration(
+                tmp, dfp, _ = construct_obs_spatial_integration(
                     adata_sp.copy(), adata_sc.copy(), col_cell_type,
                     perc=perc)  # spatial AnnData + cell type density
                 figs["spatial_density"] = plot_spatial(
@@ -184,7 +187,7 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
         tg.plot_genes_sc(plot_genes, adata_measured=adata_sp,
                          adata_predicted=adata_sp_new, perc=0.02)
         figs["genes"] = plt.gcf()
-        figs["gex"] = cr.pl.plot_gex(
+        figs["gex"] = plot_gex(
             adata_sp_new, col_annotation, marker_genes_dict=marker_genes_dict,
             genes=plot_genes, kind=["dot", "matrix"])  # plot GEX matrix & dot
     if col_annotation is not None:  # predicted cell types spatial plot
