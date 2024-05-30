@@ -54,7 +54,7 @@ dependencies = [
     "cellpose",
     "napari[pyqt5]; platform_system != 'Windows'",
     "napari[pyside2]; platform_system == 'Windows'",
-    "napari-spatialdata[extra]",
+    "napari-spatialdata",
     "tangram-sc",
 
     # Other
