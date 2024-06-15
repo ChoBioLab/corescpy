@@ -10,7 +10,7 @@ import pandas as pd
 from corescpy.visualization import plot_receptor_ligand
 from corescpy.utils import merge
 from corescpy.analysis import calculate_dea_deseq2
-from corescpy.processing import create_spot_grid
+# from corescpy.processing import create_spot_grid
 
 
 def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,

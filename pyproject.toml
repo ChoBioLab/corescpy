@@ -21,7 +21,10 @@ urls.Home-page = "https://github.com/easlinger/corescpy"
 dependencies = [
     # Base
     "anndata>=0.7.4",
-    "scanpy[leiden]>=1.9.8",
+    # "anndata==0.10.7",  # just to have newest
+    # "scanpy[leiden]>=1.9.8",
+    # "scanpy[leiden]>=1.10.1",  # so sc.tl.leiden parameters -> key_added
+    "scanpy>=1.10.1",  # so sc.tl.leiden parameters -> key_added
     "muon",
     "celltypist",
     "requests",
@@ -31,7 +34,8 @@ dependencies = [
     "blitzgsea",
 
     # Perturbations/Conditions
-    "pertpy>=0.6.0",
+    "pertpy>=0.7.0",  # just to have most recent
+    # "pertpy>=0.6.0",
     "ete3",
     "PyQt5",
     "harmonypy",
@@ -42,14 +46,15 @@ dependencies = [
     "graphviz",
     "cvxpy",
     "cylp",
-    "arviz==0.12.1",  # later versions need setuptools>60; breaks stlearn/np
+    # "arviz==0.12.1",  # later versions need setuptools>60; breaks stlearn/np
+    "arviz",
 
     # Spatial
     "squidpy>=1.4.0",
     # "spatialdata[extra]>=0.0.15",
     # "spatialdata_io>=0.0.9",
-    "spatialdata[extra]>=0.1.3",
-    "spatialdata_io>=0.1.3",
+    "spatialdata>=0.1.2",
+    "spatialdata_io>=0.1.2",
     "spatialdata-plot",
     "tifffile",
     "cellpose",
@@ -58,7 +63,7 @@ dependencies = [
     # "napari-spatialdata[extra]",
     "napari-spatialdata",
     "tangram-sc",
-    "bento-tools",
+    # "bento-tools",
     # "stlearn",
 
     # Other
@@ -81,7 +86,7 @@ dependencies = [
     "ipywidgets",
     "switchlang",
     "scikit-misc",
-    "plotnine",
+    # "plotnine",
     "scvi-tools",
     "adjusttext",
     "toytree",

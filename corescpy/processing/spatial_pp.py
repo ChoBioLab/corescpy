@@ -17,7 +17,7 @@ import csv
 import os
 import re
 import traceback
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import scanpy as sc
 import squidpy as sq
 # import stlearn as st
