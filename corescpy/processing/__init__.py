@@ -15,7 +15,7 @@ from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
                          read_spatial, update_spatial_uns,
                          _get_control_probe_names, impute_spatial,
                          construct_obs_spatial_imputation, create_spot_grid,
-                         SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
+                         subset_spatial, SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
 
 __all__ = [
     "create_object", "create_object_multi", "get_layer_dict", "process_data",
@@ -25,6 +25,6 @@ __all__ = [
     "describe_tiff", "extract_tiff",
     "command_cellpose", "read_spatial", "update_spatial_uns",
     "create_spot_grid", "impute_spatial", "_get_control_probe_names",
-    "construct_file", "construct_obs_spatial_imputation",
+    "construct_file", "construct_obs_spatial_imputation", "subset_spatial",
     "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP",
 ]

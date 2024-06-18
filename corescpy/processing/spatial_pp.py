@@ -26,6 +26,10 @@ import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
 import tangram as tg
+from anndata import AnnData
+from spatialdata import SpatialData
+from spatialdata.models import TableModel
+from spatialdata_plot.pp import PreprocessingAccessor
 import pandas as pd
 import numpy as np
 # from corescpy.visualization import plot_integration_spatial
@@ -136,6 +140,54 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         if col_sample_id not in adata.table.obs:
             adata.table.obs.loc[:, col_sample_id] = library_id
         return adata
+
+
+def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
+                   col_region=None, key_region=None, var_names=None):
+    """
+    Filter a SpatialData object to contain only specified cells.
+    (Modified from https://github.com/scverse/spatialdata/issues/556.)
+
+    Args:
+        sdata (SpatialData): A SpatialData object
+        key_cell_id (list): Cells to include. Defaults to all.
+        col_cell_id (str): Name of column in `sdata.table.obs` that has
+            cell IDs. The `regions` argument elements should exist
+            in this column.
+        key_region (list): Regions/samples/subjects to include.
+            Defaults to all.
+        col_region (str): Name of column in `sdata.table.obs` that has
+            region/sample/subject IDs. The `key_regions` argument
+            elements should exist in this column.
+        var_names (list): Names of variables (X columns/genes)
+            to include. Defaults to all.
+
+    Returns:
+        A new SpatialData instance
+    """
+    sdata.pp: PreprocessingAccessor  # noqa: F401
+    sdata_subset = SpatialData()
+    # Ensure the returned SpatialData is not backed to the original
+    # reference dataset, so that it can be safely modified.
+    assert not sdata_subset.is_backed()
+    # Genes
+    var_names = sdata.table.var_names if var_names is None else var_names
+    # Preserve order by checking "isin" instead of slicing.
+    # Also guarantees no duplicates.
+    subs = sdata.table.copy()
+    if key_cell_id:  # optionally, subset by cells
+        subs = subs[subs.obs[col_cell_id].isin(key_cell_id)]  # ...keep all
+    if key_region:  # optionally, subset by region/sample/subject
+        subs = subs[subs.obs[col_region].isin(key_region)]
+    if var_names:  # optionally, subset by genes
+        subs = subs[:, subs.var_names.isin(var_names)]
+    subs = TableModel.parse(
+        AnnData(X=subs.X, obs=subs.obs, var=subs.var, layers=subs.layers),
+        region_key=col_region, instance_key=col_cell_id,
+        region=np.unique(subs.obs[col_region]).tolist())
+    del sdata_subset.tables["table"]
+    sdata_subset.tables["table"] = subs
+    return sdata_subset
 
 
 def create_spot_grid(adata, col_cell_type, n_spots, layer="counts", n_jobs=1,

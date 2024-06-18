@@ -245,18 +245,20 @@ class Spatial(cr.Omics):
             coords = sdio.xenium_explorer_selection(bounds_x)
             if isinstance(coords, list):  # if multiple selections...
                 coords = shapely.MultiPolygon(coords)  # ...union of areas
-            sdata_cropped = spatialdata.polygon_query(self.adata, coords, **{
-                "target_coordinate_system": "global",
-                "filter_table": True, **kwargs})
+            kws = {"target_coordinate_system": "global",
+                   "filter_table": True, **kwargs}
+            # sdata_crop = spatialdata.polygon_query(
+            #     self.adata, coords, **kws)
+            sdata_crop = self.adata.query.polygon(coords, **kws)
         else:  # specified coordinates
             minc, maxc = [[x[i] for x in [bounds_x, bounds_y, bounds_z] if (
                 x is not None)] for i in [0, 1]]
             kws_def = dict(axes=("x", "y", "z") if bounds_z else ("x", "y"),
                            target_coordinate_system="global")
-            sdata_cropped = spatialdata.bounding_box_query(
+            sdata_crop = spatialdata.bounding_box_query(
                 self.adata, min_coordinate=minc,
                 max_coordinate=maxc, **{**kws_def, **kwargs})
-        return sdata_cropped
+        return sdata_crop
 
     def add_image(self, file, name=None, file_align=None, dim="2d"):
         """Add image (optionally, align from Xenium alignment file).
