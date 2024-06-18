@@ -16,6 +16,7 @@ import tifffile
 import csv
 import os
 import re
+import copy
 import traceback
 # import matplotlib.pyplot as plt
 import scanpy as sc
@@ -27,7 +28,7 @@ import scipy.io as sio
 import subprocess
 import tangram as tg
 from anndata import AnnData
-from spatialdata import SpatialData
+# from spatialdata import SpatialData
 from spatialdata.models import TableModel
 from spatialdata_plot.pp import PreprocessingAccessor
 import pandas as pd
@@ -158,7 +159,8 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
             Defaults to all.
         col_region (str): Name of column in `sdata.table.obs` that has
             region/sample/subject IDs. The `key_regions` argument
-            elements should exist in this column.
+            elements should exist in this column. PROVIDE EVEN IF NOT
+            SUBSETTING BY REGION.
         var_names (list): Names of variables (X columns/genes)
             to include. Defaults to all.
 
@@ -166,26 +168,28 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
         A new SpatialData instance
     """
     sdata.pp: PreprocessingAccessor  # noqa: F401
-    sdata_subset = SpatialData()
+    # sdata_subset = copy.deepcopy(sdata)
+    sdata_subset = sdata.subset(element_names=[
+        x[1] for x in sdata.gen_elements()], filter_tables=True)
     # Ensure the returned SpatialData is not backed to the original
     # reference dataset, so that it can be safely modified.
     assert not sdata_subset.is_backed()
     # Genes
     var_names = sdata.table.var_names if var_names is None else var_names
+    subs = sdata.table.copy()
     # Preserve order by checking "isin" instead of slicing.
     # Also guarantees no duplicates.
-    subs = sdata.table.copy()
-    if key_cell_id:  # optionally, subset by cells
+    if key_cell_id is not None:  # optionally, subset by cells
         subs = subs[subs.obs[col_cell_id].isin(key_cell_id)]  # ...keep all
-    if key_region:  # optionally, subset by region/sample/subject
+    if key_region is not None:  # optionally, subset by region/sample/subject
         subs = subs[subs.obs[col_region].isin(key_region)]
-    if var_names:  # optionally, subset by genes
+    else:
+        key_region = np.unique(subs.obs[col_region]).tolist()
+    if var_names is not None:  # optionally, subset by genes
         subs = subs[:, subs.var_names.isin(var_names)]
     subs = TableModel.parse(
         AnnData(X=subs.X, obs=subs.obs, var=subs.var, layers=subs.layers),
-        region_key=col_region, instance_key=col_cell_id,
-        region=np.unique(subs.obs[col_region]).tolist())
-    del sdata_subset.tables["table"]
+        region_key=col_region, instance_key=col_cell_id, region=key_region)
     sdata_subset.tables["table"] = subs
     return sdata_subset
 
