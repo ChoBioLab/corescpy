@@ -14,6 +14,8 @@ from dask_image.imread import imread
 import matplotlib
 import matplotlib.pyplot as plt
 import shapely
+from shapely.geometry.multipolygon import MultiPolygon
+from shapely.geometry.polygon import Polygon
 import squidpy as sq
 import spatialdata
 import spatialdata_plot as sdp
@@ -240,16 +242,25 @@ class Spatial(cr.Omics):
         Alternatively, specify only `bounds_x` as a path to a file
         created using the Xenium Explorer selection tool to extract
         the coordinates from there.
+
+        You can also pass a `shapely` polygon or multipolygon object.
+        For instance, if you have multiple selection files, pass
+        the object `coords` created below (where `files` is the list
+        of Xenium selection files) for the `bounds_x` argument.
+        >>> coords = shapely.MultiPolygon([
+        >>>     sdio.xenium_explorer_selection(i) for i in files])
         """
-        if isinstance(bounds_x, str):  # Xenium Explorer selection
-            coords = sdio.xenium_explorer_selection(bounds_x)
+        if isinstance(bounds_x, (
+                str, Polygon, MultiPolygon)):  # Xenium Explorer selection
+            if isinstance(bounds_x, str):  # if file (vs. shapely object)
+                coords = sdio.xenium_explorer_selection(bounds_x)
+            else:  # if shapely object
+                coords = bounds_x
             if isinstance(coords, list):  # if multiple selections...
                 coords = shapely.MultiPolygon(coords)  # ...union of areas
             kws = {"target_coordinate_system": "global",
                    "filter_table": True, **kwargs}
-            # sdata_crop = spatialdata.polygon_query(
-            #     self.adata, coords, **kws)
-            sdata_crop = self.adata.query.polygon(coords, **kws)
+            sdata_crop = self.adata.query.polygon(coords, **kws)  # crop
         else:  # specified coordinates
             minc, maxc = [[x[i] for x in [bounds_x, bounds_y, bounds_z] if (
                 x is not None)] for i in [0, 1]]
