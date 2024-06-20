@@ -16,7 +16,7 @@ import tifffile
 import csv
 import os
 import re
-import copy
+# import copy
 import traceback
 # import matplotlib.pyplot as plt
 import scanpy as sc

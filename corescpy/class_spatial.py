@@ -243,18 +243,15 @@ class Spatial(cr.Omics):
         (or list of paths) to a file(s) created using the Xenium
         Explorer selection tool to extract the coordinates from there.
 
-        You can also pass a `shapely` polygon or multipolygon object.
-        For instance, if you have multiple selection files, pass
-        the object `coords` created below (where `files` is the list
-        of Xenium selection files) for the `bounds_x` argument.
-        >>> coords = shapely.MultiPolygon([
-        >>>     sdio.xenium_explorer_selection(i) for i in files])
+        You can also pass a `shapely` polygon or multipolygon object
+        to `bounds_x`.
         """
         if isinstance(bounds_x, (str, Polygon, MultiPolygon)) or isinstance(
                 bounds_x[0], str):  # Xenium Explorer selection(s)
-            bounds_x = [bounds_x] if isinstance(bounds_x, str) else bounds_x
-            if isinstance(bounds_x, list):  # if file(s)
-                coords = [sdio.xenium_explorer_selection(i) for i in bounds_x]
+            if isinstance(bounds_x, (list, str)):  # if file(s)
+                coords = [sdio.xenium_explorer_selection(
+                    i) for i in bounds_x] if isinstance(bounds_x, list) else \
+                        sdio.xenium_explorer_selection(bounds_x)
             else:  # if shapely object
                 coords = bounds_x
             if isinstance(coords, list):  # if multiple selections...
