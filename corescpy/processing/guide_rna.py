@@ -7,10 +7,13 @@ import numpy as np
 import corescpy as cr
 
 
-def process_guide_rna(adata, col_guide_rna="guide_id",
-                      col_guide_rna_new="perturbation", key_control="NT",
-                      remove_multi_transfected=False,  conserve_memory=False,
-                      col_num_umis="UMI count", **kws_process_guide_rna):
+def process_guide_rna(adata, col_guide_rna="feature_call",
+                      col_guide_rna_new="perturbation",
+                      col_num_umis="num_umis",
+                      feature_split=None, guide_split=None,
+                      file_perturbations=None,
+                      key_control_patterns=None, key_control="NT",
+                      remove_multi_transfected=False, filter_kws=None):
     """
     Process and filter guide RNAs, (optionally) remove cells considered
     multiply-transfected (after filtering criteria applied), and remove
@@ -131,21 +134,33 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     """
     ann, kws_pga = adata.copy(), copy.deepcopy(kws_process_guide_rna)
     print(f"\n\n<<< PERFORMING gRNA PROCESSING & FILTERING >>>\n\n{kws_pga}")
+    if guide_split is None:
+        guide_split = "$"
+    if key_control_patterns is None:
+        key_control_patterns = [key_control]
+    if isinstance(key_control_patterns, str):
+        key_control_patterns = [key_control_patterns]  # ensure iterable
+    if col_guide_rna_new is None:
+        col_guide_rna_new = f"{col_guide_rna}_new"
 
     # Filter by Guide Counts
-    tg_info, feats_n = filter_by_guide_counts(
-        ann, col_guide_rna, col_num_umis=col_num_umis,
-        key_control=key_control, **kws_pga
-        )  # process (e.g., multi-probe names) & filter by # gRNA
 
-    # Add Results to AnnData
-    for x in ["feature_split", "guide_split"]:
-        if x not in kws_pga:
-            kws_pga[x] = None
-    try:
-        tg_info = tg_info.loc[ann.obs.index]
-    except Exception as err:
-        warn(f"{err}\n\nCouldn't re-order tg_info to mirror adata index!")
+    if filter_kws is not None:  # process & filter
+        tg_info, feats_n, filt = filter_by_guide_counts(
+            ann, col_guide_rna, col_num_umis, col_condition=col_guide_rna_new,
+            file_perturbations=file_perturbations, guide_split=guide_split,
+            feature_split=feature_split, key_control=key_control,
+            key_control_patterns=key_control_patterns, **filter_kws)
+    else:  # just process
+        tg_info, feats_n = get_guide_info(
+            ann, col_guide_rna, col_num_umis=col_num_umis,
+            col_condition=col_guide_rna_new, key_control=key_control,
+            key_control_patterns=key_control_patterns,
+            file_perturbations=file_perturbations,
+            guide_split=guide_split, feature_split=feature_split
+            )  # process (e.g., multi-probe names, sum & average UMIs)
+
+
     if remove_multi_transfected is True:  # remove multi-transfected
         tg_info = tg_info.dropna(subset=[f"{col_guide_rna}_list_filtered"])
         tg_info = tg_info.join(tg_info[
@@ -203,55 +218,85 @@ def process_guide_rna(adata, col_guide_rna="guide_id",
     return ann
 
 
-def detect_guide_targets(col_guide_rna_series, feature_split="|",
-                         guide_split="-", key_control_patterns=None,
-                         key_control="Control", **kwargs):
-    """Detect guide gene targets (see `filter_by_guide_counts`)."""
-    if kwargs:
-        print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
-    if key_control_patterns is None:
-        key_control_patterns = [
-            key_control]  # if already converted, pattern=key itself
-    if isinstance(key_control_patterns, str):
-        key_control_patterns = [key_control_patterns]
-    targets = col_guide_rna_series.str.strip(" ").replace("", np.nan)
-    if key_control_patterns and pd.Series(
-            key_control_patterns).isnull().any():  # if NAs = control sgRNAs
-        targets = targets.replace(np.nan, key_control)  # NaNs -> control key
-        key_control_patterns = list(pd.Series(key_control_patterns).dropna())
-    else:  # if NaNs mean unperturbed cells
-        if any(pd.isnull(targets)):
-            warn("Dropping rows with NaNs in `col_guide_rna`.")
-        targets = targets.dropna()
-    if feature_split is not None or guide_split is not None:
-        targets, suffs = [targets.apply(  # each entry -> list of target genes
-            lambda x: [re.sub(p, ["", r"\1"][j], str(i)) if re.search(
-                p, str(i)) else [i, ""][j] for i in list(
-                    x.split(feature_split) if feature_split  # if multi
-                    else [x])]  # if single gRNA
-            if p not in ["", None] else  # ^ if need to remove guide suffixes
-            list(x.split(feature_split) if feature_split else [x] if p else p)
-            # ^ no suffixes: split x or [x] (j=0), "" for suffix (j=1)
-            ) for j, p in enumerate(list(
-                [f"{guide_split}.*", rf'^.*?{re.escape(guide_split)}(.*)$'
-                 ] if guide_split else [None, ""]))]
-    if key_control_patterns:  # if need to search for control key patterns
-        targets = targets.apply(
-            lambda x: [i if i == key_control else key_control if any(
-                    (k in i for k in key_control_patterns)) else i
-                for i in x])  # find control keys among targets
-    grnas = targets.to_frame("t").join(suffs.to_frame("n")).apply(
-        lambda x: [i + str(guide_split if guide_split else "") + "_".join(
-            np.array(x["n"])[np.where(np.array(x["t"]) == i)[0]]
-            ) for i in pd.unique(x["t"])], axis=1).apply(lambda x: (
-                feature_split if feature_split else "").join(x)).to_frame(
-                    "ID")  # e.g., STAT1-1|STAT1-2|CTL => STAT1-1_2 count
-    # DO NOT change the name of grnas["ID"]
-    return targets, grnas
+def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
+                   file_perturbations=None,
+                   feature_split="|", guide_split="-",
+                   key_control_patterns=None, key_control="Control"):
+    """
+    Map guide IDs to perturbation conditions & sum UMIs.
+
+    Returns:
+        pandas.DataFrame: A dataframe (a) with sgRNA names replaced
+            under their target gene categories (or control) and
+            (b) with `col_guide_rna` and `col_num_umis` column entries
+            (strings) grouped into lists (new columns with suffix
+             "list_all"). Note that the UMI counts are summed across
+            sgRNAs targeting the same gene within a cell. Also versions
+            of the columns (and the corresponding string versions)
+            filtered by the specified criteria (with suffixes
+            "_filtered" and "_list_filtered" for list versions).
+
+    Notes:
+        FUTURE DEVELOPERS: The Crispr class object initialization
+        depends on names of the columns created in this function.
+        If they are changed (which should be avoided), be sure to
+        change throughout the package.
+
+    Examples:
+    >>> kws = dict(max_pct_control_drop=75, min_pct_avg_n=40,
+    ...            min_n_target_control_drop=100,
+    ...            min_pct_dominant=80, drop_multi_control=False,
+    ...            feature_split="|", guide_split="-")
+    """
+    # Find Gene Targets & Counts of Guides - Long Data by Cell & Perturbation
+    tg_info = adata.obs[[col_guide_rna, col_num_umis]].apply(
+        lambda y: y.apply(lambda x: x if feature_split is None or pd.isnull(
+            x) else x.split(feature_split)).explode())  # guide list -> rows
+    if file_perturbations is None:  # find perturbation name given guide_split
+        tg_info.loc[:, col_condition] = tg_info[col_guide_rna].apply(
+            lambda x: x if guide_split is None or pd.isnull(x) else
+            key_control if any((i in x) for i in key_control_patterns) else
+            guide_split.join(x.split(guide_split)[:-1]))
+        # condition = target genes with all control guides = key_control
+        # give custom mapping if want different
+        # (e.g., if isoforms s.t. condition is more specific than target gene)
+        # only drop string after last separator (e.g., keep -B in HLA-B-1
+        # if guide_split = "-"; so you shouldn't put "-" w/i guide ID suffix)
+    else:  # custom mapping: ID -> condition if in df else use guide_split
+        read = None if isinstance(file_perturbations, pd.DataFrame) else \
+            pd.read_csv if os.path.splitext(file_perturbations)[
+                1] == ".csv" else pd.read_excel  # to read/use mapping data
+        perts = (read(file_perturbations) if read else file_perturbations
+                 ).drop_duplicates().set_index(col_guide_rna)
+        tg_info = tg_info.join(tg_info.groupby(col_guide_rna).apply(
+            lambda x: perts[col_condition].loc[x.name] if (
+                x.name in perts.index) else x.name if pd.isnull(x.name) or (
+                    guide_split is None) else guide_split.join(x.name.split(
+                        guide_split)[:-1])).to_frame(col_condition),
+                               on=col_guide_rna)  # mapping
+    tg_info.loc[:, col_num_umis] = tg_info[col_num_umis].astype(float)
+
+    # Drop NaN Guides
+    ndrop = tg_info[col_guide_rna].isnull().sum()  # number dropped
+    warn(f"NaNs present in guide RNA column ({col_guide_rna}). "
+         f"Dropping {ndrop} out of {tg_info.shape[0]} rows.")
+    tg_info = tg_info[~tg_info[col_guide_rna].isnull()]  # drop NaNs
+
+    # Sum Up gRNA UMIs & Calculate Percentages
+    feats_n = tg_info.rename_axis("bc").set_index(col_condition, append=True)[
+        col_num_umis].groupby(["bc", col_condition]).sum().rename_axis([
+            "bc", "g"])  # n = sum w/i-cell of UMIs by perturbation condition
+    feats_n = feats_n.to_frame("n").join(feats_n.groupby(
+        "bc").sum().to_frame("t"))  # t = sum all of gRNAs in cell
+    feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
+    feats_n = feats_n.join(feats_n.groupby("bc").apply(
+        lambda x: x.shape[0]).to_frame("num_transfections"))
+    feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame("avg"))
+    return tg_info, feats_n
 
 
 def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
-                           col_condition=None,
+                           col_condition=None, file_perturbations=None,
                            key_control_patterns=None, key_control="Control",
                            feature_split="|", guide_split="-",
                            min_pct_control_keep=100,
@@ -286,188 +331,119 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     ...            feature_split="|", guide_split="-")
     """
     # Extract Guide RNA Information
-    ann = adata.copy()
-    tg_info = kwargs.pop("tg_info", None)
-    if guide_split is None:
-        guide_split = "$"
-    if key_control_patterns is None:
-        key_control_patterns = [np.nan]
-    if isinstance(key_control_patterns, str):
-        key_control_patterns = [key_control_patterns]  # ensure iterable
-    if col_condition is None:
-        col_condition = col_guide_rna
-    guides = ann.obs[col_guide_rna].copy()  # guide names
-
-    # If `guide_split` in Any Gene Names, Temporarily Substitute
-    grs = None
-    if guide_split is not None:
-        split_char = [guide_split in g for g in ann.var_names]
-        if any(split_char):
-            grs = "==="
-            bad_symb = np.array(ann.var_names)[np.where(split_char)[0]]
-            if grs in guide_split:
-                raise ValueError(
-                    f"`guide_split` can't contain reserved name {grs}.")
-            warn(
-                f"`guide_split` ({guide_split}) found in at least one gene "
-                f"name ({', '.join(bad_symb)}). Using {grs}. as temporary "
-                "substitute. Will try to replace later, but note risks of "
-                "`guide_split` being a character also found in gene names.")
-            guides = guides.apply(lambda x: re.sub(bad_symb[np.where(
-                [i in str(x) for i in bad_symb])[0][0]], re.sub(
-                guide_split, grs, bad_symb[np.where(
-                    [i in str(x) for i in bad_symb])[0][0]]),
-                str(x)) if any((i in str(x) for i in bad_symb)) else x)
-
-    # Find Gene Targets & Counts of Guides
-    if tg_info is None:
-        premade_tg_info = False
-        targets, grnas = detect_guide_targets(
-            guides, feature_split=feature_split, guide_split=guide_split,
-            key_control_patterns=key_control_patterns,
-            key_control=key_control, **kwargs)  # target genes
-        if grs is not None:  # if guide_split was in any gene name
-            targets = targets.apply(lambda x: [
-                re.sub(grs, guide_split, i)
-                for i in x])  # replace grs in list
-            grnas.loc[:, "ID"] = grnas["ID"].apply(
-                lambda x: re.sub(grs, guide_split, str(
-                    x)))  # e.g., back to HLA-B
-        tg_info = grnas["ID"].to_frame(
-            col_guide_rna + "_flat_ix").join(
-                targets.to_frame(col_guide_rna + "_list"))
-    else:
-        premade_tg_info = True
-    if tg_info[col_guide_rna].isnull().any() and (~any(
-            [pd.isnull(x) for x in key_control_patterns])):
-        ndrop = tg_info[col_guide_rna].isnull().sum()  # number dropped
-        warn(
-            f"NaNs present in guide RNA column ({col_guide_rna}). "
-            f"Dropping {ndrop} out of {tg_info.shape[0]} rows.")
-        tg_info = tg_info[~tg_info[col_guide_rna].isnull()]  # drop NaNs
-
-    # Sum Up gRNA UMIs & Calculate Percentages
-    feats_n = tg_info.join(tg_info[col_num_umis].apply(
-        lambda x: [float(i) for i in x.split(feature_split)]).to_frame(
-            col_num_umis + "_list") if feature_split is not None else tg_info[
-                col_num_umis])  # list of floats (UMI counts)
-    feats_n = feats_n.apply(lambda x: pd.Series(
-        x[col_num_umis + "_list"], index=pd.Index(x[col_condition].split(
-            feature_split), name=col_condition)).groupby(
-                col_condition).sum(), axis=1).stack().rename_axis(["bc", "g"])
-    feats_n = feats_n.to_frame("n").join(feats_n.groupby(
-        "bc").sum().to_frame("t"))  # sum w/i-cell # gRNAs w/ same target gene
-    feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
-    feats_n = feats_n.join(feats_n.groupby("bc").apply(
-        lambda x: x.shape[0]).to_frame("num_transfections"))
-    feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame("avg"))
+    tg_info, feats_n = get_guide_info(
+        adata, col_guide_rna, col_num_umis, col_condition=col_condition,
+        file_perturbations=file_perturbations,
+        feature_split=feature_split, guide_split=guide_split,
+        key_control_patterns=key_control_patterns, key_control=key_control)
+    feats_n = feats_n.join(feats_n.groupby("bc").apply(lambda x: len(
+        x.reset_index().g.unique())).to_frame("num_transfections"),
+                           lsuffix="_o")  # number of transfections
+    filt = feats_n.assign(
+        num_transfections_original=feats_n.num_transfections).copy()
 
     # 1. If there are two gene targets and one of the targets is a control
-    #   A) If control is < 75% of total gRNA UMI, the control can be dropped.
+    #   (A) If control is < 75% of total gRNA UMI, the control can be dropped.
     #          Cell is single transfected for the gene.
-    #   B) If the control >= 75% of total gRNA UMI, the cell is multiply
-    #          transfected. Cell should be removed.
-    filt = feats_n.copy()
+    #   (B) If the control >= 75% of total gRNA UMI, but less than
+    #          100% (or whatever `min_pct_control_keep` is) if you want to
+    #          allow slightly contaminated control-dominant cells, the cell is
+    #          multiply transfected. Cell should be removed.
     if max_pct_control_drop not in [None, False]:
-        ctrl_cell_drop = filt[(filt.num_transfections == 2) & (
-            filt.p >= max_pct_control_drop) & (
-                filt.p < min_pct_control_keep)].loc[
-                    :, key_control, :].index.values  # contaminated; drop cell
-        filt.drop(ctrl_cell_drop)
-    if max_pct_control_drop not in [None, False]:
+        old_ix = filt.index
         ctrl_gene_drop = filt[(filt.num_transfections == 2) & (
             filt.p < max_pct_control_drop)].loc[
                 :, [key_control], :].index.values  # pseudo-singly-transfected
         filt = filt.drop(ctrl_gene_drop)
-    filt = filt.join(filt.groupby("bc").apply(lambda x: x.shape[0]).to_frame(
-        "num_transfections"), lsuffix="_original")  # new # of transfections
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "1A"
+    if max_pct_control_drop not in [None, False]:
+        old_ix = filt.index
+        ctrl_cell_drop = filt[(filt.num_transfections == 2) & (
+            filt.p >= max_pct_control_drop) & (
+                filt.p < min_pct_control_keep)].reset_index(
+                    "g").index.values  # drop "contaminated" control-dominated
+        filt = filt.drop(ctrl_cell_drop)
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "1B"
+    filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
+        ).g.unique())).to_frame("num_transfections"),
+                     lsuffix="_pre_ctrl_drop")  # new # transfections
 
     # 2. If there are two gene target perturbations and there is no control
-    #     A) If the one gene UMI >= 80% of total gRNA UMI, that gene is
+    #     (A) If the one gene UMI >= 80% of total gRNA UMI, that gene is
     #            considered dominant. The cell should be labeled as
     #            singly-transfected for the dominant gene.
-    #     B) If no gene UMI >= 80%, the cell is multiple transfected.
+    #     (B) If no gene UMI >= 80%, the cell is multiple transfected.
     #            Cell should be removed.
     if min_pct_dominant not in [None, False]:
+        old_ix = filt.index
         filt = filt.groupby("bc").apply(
             lambda x: x if key_control in list(x.reset_index()["g"]) or (
                 x.shape[0] != 2) else x[x.n >= min_pct_dominant]
             ).reset_index(0, drop=True)
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "2"
 
     # 3. If there are > 2 gene targets (may or may not include control)
-    #     First perform an initial filter to remove low gRNA UMI:
-    #         Ai) Calculate the average per-condition gRNA UMI.
-    #         Bi) For genes whose gRNA UMI <40% of average sgRNA UMI,
-    #                these genes can be dropped.
-    #   After initial filter:
-    #       Aii) If only control remains, the cell is multiply-transfected.
-    #            Cell should be removed.
-    #       Bii) If only one gene remains, cell = (pseudo-)singly-transfected.
-    #       Cii) If more than one gene target (>=2) remains, the control can
-    #              be dropped if present.
-    #       Dii) After, if one gene remains, the
-    #                cell should = singly-transfected for the remaining gene.
-    #                If >= 3 genes remain, and the one gene UMI >= 80% of the
-    #                remaining total gRNA UMI (recalculate total gRNA UMI
-    #                after all preceding steps, including removal of control
-    #                if present), that gene is considered dominant. The cell
-    #                should be labeled as single transfected for the
-    #                dominant gene, otherwise it is multiple transfected.
-    #       Eii) For all other cases, the cell is multiple transfected.
-    #              Cell should be removed.
+    #     First perform an initial filter to remove low gRNA UMI.
+    #     Calculate the average per-condition gRNA UMI. For genes whose gRNA
+    #     UMI <40% of average sgRNA UMI, these genes can be dropped.
     if min_pct_avg_n not in [None, False] and any(
             filt.num_transfections_original > 2):
+        old_ix = filt.index
         filt = filt.join(feats_n.n.groupby("bc").mean().to_frame(
             "avg_post"))  # 3Ai
         filt = filt[(filt.n >= (min_pct_avg_n / 100) * filt.avg_post) | (
             filt.num_transfections_original < 3)]  # 3Bi
-    filt = filt.join(filt.groupby("bc").apply(
-        lambda x: x.shape[0]).to_frame("num_transfections"),
-                        lsuffix="_pre_min_pct_avg")  # new # of transfections
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "3"
+
+    # Re-Calculate Remaining Number of Transfections
+    filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
+        ).g.unique())).to_frame("num_transfections"),
+                     lsuffix="_pre_min_pct_avg")  # new # transfections
+
+    # 4: After initial filter:
+    #       (A) If only control remains, the cell is multiply-transfected.
+    #            Cell should be removed.
+    #    If more than one gene target (>=2) remains:
+    #       (B) The control can be dropped if present.
+    #       (C) If >= 3 genes remain, and the one gene UMI >= 80% of the
+    #              remaining total gRNA UMI (recalculate total gRNA UMI
+    #              after all preceding steps, including removal of control
+    #              if present), that gene is considered dominant. The cell
+    #              should be labeled as single transfected for the
+    #              dominant gene, otherwise it is multiple transfected.
+    #       (D) For all other cases (including gene # = 2),
+    #              the cell is multiple transfected and should be removed.
+
     if remove_contaminated_control:
         ctrl = filt.loc[:, key_control, :]
+        old_ix = filt.index
         filt = filt.drop(ctrl[(ctrl.num_transfections == 1) & (
-            ctrl.num_transfections_pre_min_pct_avg >= 3)].index)  # 3Aii
-    filt = filt.drop(filt.loc[:, key_control, :][filt.loc[
-        :, key_control, :].num_transfections >= 2].index)  # 3Cii
+            ctrl.num_transfections_original >= 2)].index)  # 3Aii
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4A"
+        old_ix = filt.index
+        filt = filt.drop(filt.loc[:, key_control, :][filt.loc[
+            :, key_control, :].num_transfections >= 2].index)  # 3Cii
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4B"
     filt = filt.join(filt.groupby("bc").apply(
         lambda x: x.shape[0]).to_frame("num_transfections"),
                         lsuffix="_pre_dominant_3")  # new # of transfections
     if min_pct_dominant not in [None, False] and any(
             filt.num_transfections > 2):
+        old_ix = filt.index
         filt = filt.join(filt.n.groupby("bc").sum().to_frame("t_remaining"))
         filt.loc[:, "p_remaining"] = filt.n / filt.t_remaining
         filt = filt[(filt.num_transfections <= 2) | (
             filt.p_remaining >= min_pct_dominant)]
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4C"
+
+    # Finally, Drop Unless Singly- or Pseudo-Singly-Tranfected
+    old_ix = filt.index
     filt = filt.join(filt.groupby("bc").apply(
-        lambda x: x.shape[0]).to_frame("num_transfections"),
-                        lsuffix="_pre_final")  # new # of transfections
+        lambda x: len(x.reset_index().g.unique())).to_frame(
+            "num_transfections"), lsuffix="_pre_final")  # new # transfections
     filt = filt[filt.num_transfections == 1]
-
-    # Join Counts/%s/Filtering Categories w/ AnnData-Indexed Guide Information
-    cols = [col_guide_rna + "_list", col_num_umis + "_list"]
-    filt = filt.n.to_frame("u").groupby("bc").apply(
-        lambda x: pd.Series({cols[0]: list(x.reset_index("g")["g"]),
-                             cols[1]: list(x.reset_index("g")["u"])}))
-    tg_info = tg_info.join(filt, lsuffix="_all", rsuffix="_filtered")  # join
-    tg_info = tg_info.dropna().loc[ann.obs.index.intersection(
-        tg_info.dropna().index)]  # re-order according to adata index
-
-    # Re-Make String Versions of New Columns with List Entries
-    for q in [col_guide_rna, col_num_umis]:  # string versions of list entries
-        tg_info.loc[:, q + "_filtered"] = tg_info[q + "_list_filtered"].apply(
-            lambda x: x if not isinstance(x, list) else (
-                feature_split if feature_split else "").join(
-                str(i) for i in x))  # join processed names by `feature_split`
-
-    # DON'T CHANGE THESE!
-    rnd = dict(
-        g="Gene", t="Total Guides in Cell", p="Percent of Cell Guides",
-        n="Number in Cell")  # get_guide_counts() depends on `rnd` keys
-    feats_n = feats_n.reset_index().rename(rnd, axis=1).set_index(
-        [feats_n.index.names[0], rnd["g"]])
-    tg_info = tg_info.assign(feature_split=feature_split)
-    return tg_info, feats_n
+    feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4D"
+    return tg_info, feats_n, filt
 
 
 def process_guide_rna_custom(adata, file_perturbations,
