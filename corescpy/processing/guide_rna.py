@@ -1,10 +1,7 @@
-import re
 import os
 from warnings import warn
 import copy
 import pandas as pd
-import numpy as np
-import corescpy as cr
 
 
 def process_guide_rna(adata, col_guide_rna="feature_call",
@@ -253,8 +250,8 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
     feats_n = feats_n.to_frame("n").join(feats_n.groupby(
         "bc").sum().to_frame("t"))  # t = sum all of gRNAs in cell
     feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
-    feats_n = feats_n.join(feats_n.groupby("bc").apply(
-        lambda x: x.shape[0]).to_frame("num_transfections"))
+    feats_n = feats_n.join(feats_n.groupby("bc").apply(lambda x: len(
+        x.reset_index().g.unique())).to_frame("num_transfections"))
     feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame("avg"))
     return tg_info, feats_n
 
@@ -264,10 +261,10 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                            key_control_patterns=None, key_control="Control",
                            feature_split="|", guide_split="-",
                            min_pct_control_keep=100,
-                           max_pct_control_drop=0, min_pct_avg_n=None,
+                           max_pct_control_drop=None, min_pct_avg_n=None,
                            min_n_target_control_drop=None,
                            remove_contaminated_control=False,
-                           min_pct_dominant="highest", min_n=5, **kwargs):
+                           min_pct_dominant=None, min_n=0, **kwargs):
     """
     Filter processed guide RNA names (wraps `detect_guide_targets`).
 
@@ -358,8 +355,6 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         filt = filt[(filt.n >= (min_pct_avg_n / 100) * filt.avg_post) | (
             filt.num_transfections_original < 3)]  # 3B
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "3B"
-
-    # Re-Calculate Remaining Number of Transfections
     filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
         ).g.unique())).to_frame("num_transfections"),
                      lsuffix="_pre_min_pct_avg")  # new # transfections
@@ -377,7 +372,6 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     #              dominant gene, otherwise it is multiple transfected.
     #       (D) For all other cases (including gene # = 2),
     #              the cell is multiple transfected and should be removed.
-
     if remove_contaminated_control:
         ctrl = filt.loc[:, key_control, :]
         old_ix = filt.index
@@ -392,19 +386,20 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         lambda x: x.shape[0]).to_frame("num_transfections"),
                         lsuffix="_pre_dominant_3")  # new # of transfections
     if min_pct_dominant not in [None, False] and any(
-            filt.num_transfections > 2):
+            filt.num_transfections >= 3):
         old_ix = filt.index
         filt = filt.join(filt.n.groupby("bc").sum().to_frame("t_remaining"))
-        filt.loc[:, "p_remaining"] = filt.n / filt.t_remaining
+        filt.loc[:, "p_remaining"] = 100 * filt.n / filt.t_remaining
         filt = filt[(filt.num_transfections <= 2) | (
             filt.p_remaining >= min_pct_dominant)]
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4C"
 
-    # Finally, Drop Unless Singly- or Pseudo-Singly-Tranfected
+    # Finally, Keep Singly-/Pseudo-Singly-Tranfected; Enforce Minimum UMI
     old_ix = filt.index
     filt = filt.join(filt.groupby("bc").apply(
         lambda x: len(x.reset_index().g.unique())).to_frame(
             "num_transfections"), lsuffix="_pre_final")  # new # transfections
     filt = filt[filt.num_transfections == 1]
+    filt = filt[filt[col_num_umis] >= min_n]
     feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4D"
     return tg_info, feats_n, filt
