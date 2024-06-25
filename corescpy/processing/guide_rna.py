@@ -5,13 +5,14 @@ import pandas as pd
 
 
 def process_guide_rna(adata, col_guide_rna="feature_call",
-                      col_guide_rna_new="perturbation",
+                      col_condition="perturbation",
                       col_target_genes=None,
                       col_num_umis="num_umis",
                       feature_split=None, guide_split=None,
                       file_perturbations=None,
                       key_control_patterns=None, key_control="NT",
-                      remove_multi_transfected=None, kws_filter=None):
+                      remove_multi_transfected=None,
+                      kws_filter=None, **kwargs):
     """
     Process and filter guide RNAs, (optionally) remove cells considered
     multiply-transfected (after filtering criteria applied), and remove
@@ -21,13 +22,11 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         adata (AnnData): AnnData object (RNA assay,
             so if multi-modal, subset before passing to this argument).
         col_guide_rna (str): Name of the column containing guide IDs.
-        col_guide_rna_new (str): Desired name for the column in which
+        col_condition (str): Desired name for the column in which
             to store the processed/assigned guide ID-perturbation
             condition mapping (or, if `file_perturbations` is
             specified, the column in the dataframe/file containing
-            this information). This argument translates to
-            `col_condition` and/or `col_target_genes` in other
-            areas (e.g., functions arguments, class attributes).
+            this information).
         col_num_umis (str): Column with the UMI counts (string entries
             with (for designs with possible multiple-transfection)
             within-cell probes separated by `feature_split` and
@@ -82,13 +81,13 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             cells determined as multi-transfected according to
             criteria specified in `kws_filter`. If False,
             multi-transfected cells with have NaNs in the
-            `col_guide_rna_new` column. If None, True if `kws_filter`
+            `col_condition` column. If None, True if `kws_filter`
             is not None; otherwise, False (if unspecified).
             Defaults to None (will infer from `kws_filter`).
 
     Returns:
         AnnData: An AnnData object with final, processed guide
-        names converted to target genes in `.obs[<col_guide_rna_new>]`
+        names converted to target genes in `.obs[<col_condition>]`
         and the corresponding UMI counts (summed across guides
         targeting the same gene within-cell) in `.obs[<col_num_umis>]`
         (with the "_original" suffix appended to original version(s) if
@@ -126,49 +125,48 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     print(f"\n\n<<< PERFORMING gRNA PROCESSING/FILTERING >>>\n\n{kws_filter}")
     ann = adata.copy()
     ann.raw = adata.copy()
-    if guide_split is None:
-        guide_split = "$"
-    if key_control_patterns is None:
-        key_control_patterns = [key_control]
-    if isinstance(key_control_patterns, str):
-        key_control_patterns = [key_control_patterns]  # ensure iterable
-    if col_guide_rna_new is None:
-        col_guide_rna_new = f"{col_guide_rna}_condition"
-    if col_target_genes == col_guide_rna_new:
+    if isinstance(key_control_patterns, str) or key_control_patterns is None:
+        key_control_patterns = [key_control_patterns if key_control_patterns
+                                else key_control]  # ensure iterable
+    if col_condition is None:
+        col_condition = kwargs.pop("col_condition", f"{col_guide_rna}_new")
+    if col_target_genes == col_condition:
         col_target_genes = None  # don't consider separately if same
     if remove_multi_transfected is None:
         remove_multi_transfected = kws_filter is not None
+    if kwargs:
+        print(f"Unused keyword arguments: {kwargs}.\n")
 
     # Filter by Guide Counts
     if kws_filter is not None:  # process & filter
         tg_info, feats_n, filt, perts = filter_by_guide_counts(
-            ann, col_guide_rna, col_num_umis, col_condition=col_guide_rna_new,
+            ann, col_guide_rna, col_num_umis, col_condition=col_condition,
             file_perturbations=file_perturbations, guide_split=guide_split,
             feature_split=feature_split, key_control=key_control,
             key_control_patterns=key_control_patterns, **kws_filter)
     else:  # just process
         tg_info, feats_n, perts = get_guide_info(
             ann, col_guide_rna, col_num_umis=col_num_umis,
-            col_condition=col_guide_rna_new, key_control=key_control,
+            col_condition=col_condition, key_control=key_control,
             key_control_patterns=key_control_patterns,
             file_perturbations=file_perturbations,
             guide_split=guide_split, feature_split=feature_split
             )  # process (e.g., multi-probe names, sum & average UMIs)
     cols_fl = ["n", "t", "p"] + [col_target_genes if col_target_genes else []]
-    filt_flat = filt.rename_axis(["bc", col_guide_rna_new])
+    filt_flat = filt.rename_axis(["bc", col_condition])
     if col_target_genes is not None:
         if perts is not None:
             tgs = perts.reset_index().set_index(
-                col_guide_rna_new)[col_target_genes]  # condition-gene mapping
+                col_condition)[col_target_genes]  # condition-gene mapping
             filt_flat = filt_flat.join(filt_flat.groupby(
-                col_guide_rna_new).apply(lambda x: tgs.loc[x.name].unique()[
+                col_condition).apply(lambda x: tgs.loc[x.name].unique()[
                     0] if x.name in tgs.index else x.name).to_frame(
                         col_target_genes))  # join custom target gene column
         else:
-            warn(f"Can't create target genes column ({col_target_genes}) "
-                 "if `file_perturbations` not specified. Setting equal to"
-                 f"the perturbation condition column ({col_guide_rna_new}).")
-            filt_flat.loc[:, col_target_genes] = filt_flat[col_guide_rna_new]
+            warn(f"\n\nCan't create target genes column ({col_target_genes})"
+                 " if `file_perturbations` not specified. Setting equal to"
+                 f" the perturbation condition column ({col_condition}).")
+            filt_flat.loc[:, col_target_genes] = filt_flat[col_condition]
     filt_flat = filt_flat[cols_fl].reset_index(1).rename({
         "n": col_num_umis, "t": "total_umis_cell", "p": "percent_umis"
         }, axis=1).astype(str).apply(lambda y: y.groupby("bc").apply(
@@ -178,7 +176,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         "bc").astype(str).apply(lambda y: y.groupby("bc").apply(
             lambda x: x if feature_split is None else feature_split.join(
                 x.to_list())))  # one row per cell; unique guide IDs
-    for x in [col_num_umis, col_guide_rna, col_guide_rna_new,
+    for x in [col_num_umis, col_guide_rna, col_condition,
               col_guide_rna + "_processed"]:
         if f"{x}_original" in ann.obs:
             warn(f"'{x}_original' already in adata. Dropping.")
@@ -189,8 +187,8 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     if remove_multi_transfected is True:  # remove multi-transfected
         ann.raw = ann.copy()
         nobs = copy.copy(ann.n_obs)
-        ann = ann[~ann.obs[col_guide_rna_new].isnull()]
-        print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
+        ann = ann[~ann.obs[col_condition].isnull()]
+        print(f"\n\nDropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
     ann.uns["kws_filter"] = str(kws_filter)  # store keyword arguments

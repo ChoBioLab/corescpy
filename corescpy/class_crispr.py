@@ -342,7 +342,7 @@ class Crispr(Omics):
             kws_pga = cr.tl.merge({
                 "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
                 "key_control": key_control,
-                "col_guide_rna_new": col_condition}, kws_process_guide_rna)
+                "col_condition": col_condition}, kws_process_guide_rna)
         else:
             kws_pga, kws_process_guide_rna = None, None
         super().__init__(
