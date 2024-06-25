@@ -184,6 +184,13 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             ann.obs = ann.obs.drop(f"{x}_original", axis=1)
     ann.obs = ann.obs.join(tg_cgrna_flat, rsuffix="_processed").join(
         filt_flat, lsuffix="_original")  # join processed/filtered columns
+    ann.uns["kws_filter"] = str(kws_filter)  # store keyword arguments
+    for x in feats_n:  # avoid h5ad write issue
+        feats_n = feats_n.astype({x: float if isinstance(feats_n[x].dropna(
+            ).iloc[0], (int, float)) else "str"})
+    ann.uns["grna_feats_n"] = feats_n.reset_index(1)  # avoid h5ad write issue
+    ann.obs = ann.obs.assign(guide_split=guide_split).assign(
+        feature_split=feature_split)
     if remove_multi_transfected is True:  # remove multi-transfected
         ann.raw = ann.copy()
         nobs = copy.copy(ann.n_obs)
@@ -191,10 +198,6 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         print(f"\n\nDropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
-    ann.uns["kws_filter"] = str(kws_filter)  # store keyword arguments
-    ann.uns["grna_feats_n"] = feats_n.reset_index(1)  # avoid h5ad write issue
-    ann.obs = ann.obs.assign(guide_split=guide_split).assign(
-        feature_split=feature_split)
     return ann
 
 
@@ -224,8 +227,8 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
     """
     # Find Gene Targets & Counts of Guides - Long Data by Cell & Perturbation
     tg_info = adata.obs[[col_guide_rna, col_num_umis]].apply(
-        lambda y: y.apply(lambda x: x if feature_split is None or pd.isnull(
-            x) else x.split(feature_split)).explode())  # guide list -> rows
+        lambda y: y.str.split(feature_split))  # string -> guide list
+    tg_info = tg_info.apply(lambda y: y.explode())  # long: rows ~ cell-guide
     if file_perturbations is None:  # find perturbation name given guide_split
         tg_info.loc[:, col_condition] = tg_info[col_guide_rna].apply(
             lambda x: x if guide_split is None or pd.isnull(x) else
