@@ -6,11 +6,12 @@ import pandas as pd
 
 def process_guide_rna(adata, col_guide_rna="feature_call",
                       col_guide_rna_new="perturbation",
+                      col_target_genes=None,
                       col_num_umis="num_umis",
                       feature_split=None, guide_split=None,
                       file_perturbations=None,
                       key_control_patterns=None, key_control="NT",
-                      remove_multi_transfected=False, kws_filter=None):
+                      remove_multi_transfected=None, kws_filter=None):
     """
     Process and filter guide RNAs, (optionally) remove cells considered
     multiply-transfected (after filtering criteria applied), and remove
@@ -20,77 +21,70 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         adata (AnnData): AnnData object (RNA assay,
             so if multi-modal, subset before passing to this argument).
         col_guide_rna (str): Name of the column containing guide IDs.
+        col_guide_rna_new (str): Desired name for the column in which
+            to store the processed/assigned guide ID-perturbation
+            condition mapping (or, if `file_perturbations` is
+            specified, the column in the dataframe/file containing
+            this information). This argument translates to
+            `col_condition` and/or `col_target_genes` in other
+            areas (e.g., functions arguments, class attributes).
         col_num_umis (str): Column with the UMI counts (string entries
             with (for designs with possible multiple-transfection)
             within-cell probes separated by `feature_split` and
             any probe ID suffixes at the end following `guide_split`
             (e.g., '-' if STAT1-1-2, STAT-1-1-4, etc.).
-        min_n (int, optional): Minimum number of counts to retain a
-            guide past filtering. The default is None.
-        max_pct_control_drop (int, optional): If control
-            UMI counts are less than or equal to this percentage of the
-            total counts for that cell, and if a non-control sgRNA is
-            also present and meets other filtering criteria, then
-            consider that cell pseudo-single-transfected
-            (non-control gene). Note that controls in
-            multiply-transfected cells will also be ultimately dropped
-            if `drop_multi_control` is True.
-            Dropping with this criterion means cells with only control
-            guides will be completely dropped if not meeting criteria.
-            Set to 0 to ignore this filtering. Defaults to None.
-        min_n_target_control_drop (int, optional): If UMI counts
-            across target (non-control) guides are above this number,
-            notwithstanding whether control guide percent exceeds
-            `max_percent_umis_control_drop`, drop control from that
-            cell. For instance, if 100 and
-            `max_percent_umis_control_drop=75`, even if a cell's
-            UMIs are 75% control guides, if there are at least 100
-            non-control guides, consider the cell only transfected for
-            the non-control guides. Set to None to ignore this
-            filtering criterion. Note that controls in
-            multiply-transfected cells will also be ultimately dropped
-            if `drop_multi_control` is True.
-            Dropping with this criterion means cells with only control
-            guides will be completely dropped if not meeting criteria.
-            Defaults to 100.
-        drop_multi_control (bool, optional): If True, drop control
-            guides from cells that, after all other filtering,
-            are multiply-transfected. Defaults to True.
-        min_pct_avg_n (int, optional): sgRNAs with counts below this
-            percentage of the average UMI count will be considered
-            noise and dropped from the list of genes for which
-            that cell is considered transfected. Defaults to 40.
-        min_pct_dominant (int, optional): sgRNAs with counts at or
-            above this percentage of the cell total UMI count will be
-            considered dominant, and all other guides will be dropped
-            from the list of genes for whichmthat cell is considered
-            transfected. Defaults to "highest" (will choose most
-            abundant guide as the dominant guide).
+        col_target_genes (str, optional): Name of the column
+            containing gene symbols (if None, will be inferred
+            from `col_guide_rna`). Defaults to None.
+        file_perturbations (str or DataFrame): Path to a file
+            containing perturbations (e.g., cell-type perturbations)
+            or a DataFrame containing perturbations.
         feature_split (str, optional): For designs with multiple
             guides, the character that splits guide names in
             `col_guide_rna`. For instance, "|" for
-            `STAT1-1|CNTRL-1|CDKN1A`. Defaults to "|".
-            If only single guides, set to None.
+            `STAT1-1|CNTRL-1|CDKN1A`. Defaults to None (only one guide
+            per cell).
         guide_split (str, optional): The character that separates
             guide (rather than gene target)-specific IDs within gene.
             For instance, guides targeting STAT1 may include
             STAT1-1, STAT1-2, etc.; the argument would be "-"
             so the function can identify all of those as
-            targeting STAT1. Defaults to "-".
+            targeting STAT1. It will only remove the
+            last "<guide_split>..." found (e.g., STAT1-2-3 -> STAT1-2).
+            This protects against situations where a dash is used as
+            the ID separator but also in a gene name (e.g., HLA-B).
+            To specify a custom mapping from guide ID to perturbation
+            condition to target gene, specify `file_perturbations`.
+            Defaults to None (i.e., all guides assumed to be same as
+            perturbation condition which is the same as target gene).
         key_control_patterns (list, optional): List (or single string)
             of patterns in guide RNA column entries that correspond to
             a control. For instance, if control entries in the original
             `col_guide_rna` column include `NEGCNTRL` and
             `Control.D`, you should specify ['Control', 'CNTRL']
             (assuming no non-control sgRNA names contain
-            those patterns). If blank entries should be interpreted as
-            control guides, then include np.nan/numpy.nan in this list.
-            Defaults to None -> [np.nan].
+            those strings). If blank entries should be interpreted as
+            control guides, first convert them to strings that can be
+            specified in this argument.
         key_control (str, optional): The name you want the control
             entries to be categorized as under the new `col_guide_rna`.
             for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be
             replaced by "Control" if that's what you specify here.
             Defaults to "Control".
+        kws_filter (dict, optional): Keyword arguments for filtering
+            (see `filter_by_guide_counts()` for description of the
+            arguments that can be specified here, i.e., the ones in
+            that function that don't overlap with the ones explicitly
+            specified in this function, such as `col_guide_rna`).
+            Defaults to None (will just run `get_guide_info()` to
+            return information such as summed guide UMI counts).
+        remove_multi_transfected (bool, optional): If True, remove
+            cells determined as multi-transfected according to
+            criteria specified in `kws_filter`. If False,
+            multi-transfected cells with have NaNs in the
+            `col_guide_rna_new` column. If None, True if `kws_filter`
+            is not None; otherwise, False (if unspecified).
+            Defaults to None (will infer from `kws_filter`).
 
     Returns:
         AnnData: An AnnData object with final, processed guide
@@ -131,6 +125,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     """
     print(f"\n\n<<< PERFORMING gRNA PROCESSING/FILTERING >>>\n\n{kws_filter}")
     ann = adata.copy()
+    ann.raw = adata.copy()
     if guide_split is None:
         guide_split = "$"
     if key_control_patterns is None:
@@ -138,44 +133,70 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     if isinstance(key_control_patterns, str):
         key_control_patterns = [key_control_patterns]  # ensure iterable
     if col_guide_rna_new is None:
-        col_guide_rna_new = f"{col_guide_rna}_new"
+        col_guide_rna_new = f"{col_guide_rna}_condition"
+    if col_target_genes == col_guide_rna_new:
+        col_target_genes = None  # don't consider separately if same
+    if remove_multi_transfected is None:
+        remove_multi_transfected = kws_filter is not None
 
     # Filter by Guide Counts
     if kws_filter is not None:  # process & filter
-        tg_info, feats_n, filt = filter_by_guide_counts(
+        tg_info, feats_n, filt, perts = filter_by_guide_counts(
             ann, col_guide_rna, col_num_umis, col_condition=col_guide_rna_new,
             file_perturbations=file_perturbations, guide_split=guide_split,
             feature_split=feature_split, key_control=key_control,
             key_control_patterns=key_control_patterns, **kws_filter)
     else:  # just process
-        tg_info, feats_n = get_guide_info(
+        tg_info, feats_n, perts = get_guide_info(
             ann, col_guide_rna, col_num_umis=col_num_umis,
             col_condition=col_guide_rna_new, key_control=key_control,
             key_control_patterns=key_control_patterns,
             file_perturbations=file_perturbations,
             guide_split=guide_split, feature_split=feature_split
             )  # process (e.g., multi-probe names, sum & average UMIs)
-    filt_flat = filt.reset_index(1)[["g", "n", "t", "p"]].astype(str).apply(
-        lambda y: y.groupby("bc").apply(
+    cols_fl = ["n", "t", "p"] + [col_target_genes if col_target_genes else []]
+    filt_flat = filt.rename_axis(["bc", col_guide_rna_new])
+    if col_target_genes is None:
+        if perts is not None:
+            tgs = perts.reset_index().set_index(
+                col_guide_rna_new)[col_target_genes]  # condition-gene mapping
+            filt_flat = filt_flat.join(filt_flat.groupby(
+                col_guide_rna_new).apply(lambda x: tgs.loc[x.name].unique()[
+                    0] if x.name in tgs.index else x.name).to_frame(
+                        col_target_genes))  # join custom target gene column
+        else:
+            warn(f"Can't create target genes column ({col_target_genes}) "
+                 "if `file_perturbations` not specified. Setting equal to"
+                 f"the perturbation condition column ({col_guide_rna_new}).")
+            filt_flat.loc[:, col_target_genes] = filt_flat[col_guide_rna_new]
+    filt_flat = filt_flat[cols_fl].reset_index(1).rename({
+        "n": col_num_umis, "t": "total_umis_cell", "p": "percent_umis"
+        }, axis=1).astype(str).apply(lambda y: y.groupby("bc").apply(
             lambda x: x if feature_split is None else feature_split.join(
-                x.to_list()))).rename({
-                    "g": col_guide_rna_new, "n": col_num_umis,
-                    "t": "total_umis_cell", "p": "percent_umis"}, axis=1)
-    for x in [col_num_umis, col_guide_rna, col_guide_rna_new]:
+                x.to_list())))  # flatten to 1 row/cell
+    tg_cgrna_flat = tg_info[[col_guide_rna, col_num_umis]].rename_axis(
+        "bc").astype(str).apply(lambda y: y.groupby("bc").apply(
+            lambda x: x if feature_split is None else feature_split.join(
+                x.to_list())))  # one row per cell; unique guide IDs
+    for x in [col_num_umis, col_guide_rna, col_guide_rna_new,
+              col_guide_rna + "_processed"]:
         if f"{x}_original" in ann.obs:
             warn(f"'{x}_original' already in adata. Dropping.")
             print(ann.obs[[f"{x}_original"]])
             ann.obs = ann.obs.drop(f"{x}_original", axis=1)
-    ann.obs = ann.obs.join(filt_flat, lsuffix="_original")
+    ann.obs = ann.obs.join(tg_cgrna_flat, rsuffix="_processed").join(
+        filt_flat, lsuffix="_original")  # join processed/filtered columns
     if remove_multi_transfected is True:  # remove multi-transfected
+        ann.raw = ann.copy()
         nobs = copy.copy(ann.n_obs)
-        ann.obs = ann.obs.dropna(subset=[col_guide_rna_new])
+        ann = ann[~ann.obs[col_guide_rna_new].isnull()]
         print(f"Dropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
     ann.uns["kws_filter"] = str(kws_filter)  # store keyword arguments
     ann.uns["grna_feats_n"] = feats_n.reset_index(1)  # avoid h5ad write issue
-    ann.obs = ann.obs.assign(guide_split=guide_split)
+    ann.obs = ann.obs.assign(guide_split=guide_split).assign(
+        feature_split=feature_split)
     return ann
 
 
@@ -202,12 +223,6 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
         depends on names of the columns created in this function.
         If they are changed (which should be avoided), be sure to
         change throughout the package.
-
-    Examples:
-    >>> kws = dict(max_pct_control_drop=75, min_pct_avg_n=40,
-    ...            min_n_target_control_drop=100,
-    ...            min_pct_dominant=80, drop_multi_control=False,
-    ...            feature_split="|", guide_split="-")
     """
     # Find Gene Targets & Counts of Guides - Long Data by Cell & Perturbation
     tg_info = adata.obs[[col_guide_rna, col_num_umis]].apply(
@@ -223,12 +238,14 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
         # (e.g., if isoforms s.t. condition is more specific than target gene)
         # only drop string after last separator (e.g., keep -B in HLA-B-1
         # if guide_split = "-"; so you shouldn't put "-" w/i guide ID suffix)
+        perts = None
     else:  # custom mapping: ID -> condition if in df else use guide_split
         read = None if isinstance(file_perturbations, pd.DataFrame) else \
             pd.read_csv if os.path.splitext(file_perturbations)[
                 1] == ".csv" else pd.read_excel  # to read/use mapping data
         perts = (read(file_perturbations) if read else file_perturbations
                  ).drop_duplicates().set_index(col_guide_rna)
+        # TODO: Add error if non-unique mapping to condition or target gene
         tg_info = tg_info.join(tg_info.groupby(col_guide_rna).apply(
             lambda x: perts[col_condition].loc[x.name] if (
                 x.name in perts.index) else x.name if pd.isnull(x.name) or (
@@ -253,7 +270,7 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
     feats_n = feats_n.join(feats_n.groupby("bc").apply(lambda x: len(
         x.reset_index().g.unique())).to_frame("num_transfections"))
     feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame("avg"))
-    return tg_info, feats_n
+    return tg_info, feats_n, perts
 
 
 def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
@@ -267,6 +284,63 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                            min_pct_dominant=None, min_n=0, **kwargs):
     """
     Filter processed guide RNA names (wraps `detect_guide_targets`).
+
+    Args:
+        adata
+        min_n (int, optional): Minimum number of counts to retain a
+            guide (performed after all other filtering).
+            The default is 0.
+        max_pct_control_drop (float, optional): In a cell transfected
+            for exactly one distinct (i.e., one perturbation condition)
+            non-control guide and one control guide
+            (exactly two distinct guies), if
+            control UMI counts are less than or equal to this
+            percentage of the total counts for that cell, and if a
+            non-control sgRNA is also present and meets other filtering
+            criteria, then consider that cell pseudo-single-transfected
+            (non-control gene). If a cell has exactly two distinct
+            perturbation condition guides, one of which is control and
+            has less than `min_pct_control_keep`, the whole cell will
+            be dropped as a "contaminated control-dominant" cell.
+            Defaults to None (will not filter on this criterion).
+        min_pct_control_keep (float, optional): In a cell transfected
+            for exactly one distinct (i.e., one perturbation condition)
+            non-control guide and one control guide
+            (exactly two distinct guies), the minimum percentage
+            of guide UMIs needed to be made up by a control guide in
+            a cell transfected for the cell to be considered
+            pseudo-singly-transfected for control. If 100%, controls in
+            this situation will always be dropped, and the whole cell
+            will be dropped if control count is
+            > `max_pct_control_drop` but <= `min_pct_control_keep`.
+        min_n_target_control_drop (int, optional): If UMI counts
+            across target (non-control) guides are above this number,
+            notwithstanding whether control guide percent exceeds
+            `max_percent_umis_control_drop`, drop control from that
+            cell. For instance, if 100 and
+            `max_percent_umis_control_drop=75`, even if a cell's
+            UMIs are 75% control guides, if there are at least 100
+            non-control guides, consider the cell only transfected for
+            the non-control guides. Set to None to ignore this
+            filtering criterion. Note that controls in
+            multiply-transfected cells will also be ultimately dropped
+            if `drop_multi_control` is True.
+            Dropping with this criterion means cells with only control
+            guides will be completely dropped if not meeting criteria.
+            Defaults to 100.
+        min_pct_avg_n (int, optional): sgRNAs in cells transfected for
+            exactly two distinct (of different perturbation
+            conditions) non-control guides with counts below this
+            percentage of the average UMI count (as re-calculated
+            after performing initial control filtering) will be
+            considered noise and dropped from the list of genes for
+            which the cell is considered transfected. Defaults to None.
+        min_pct_dominant (int, optional): sgRNAs with counts at or
+            above this percentage of the cell total UMI count will be
+            considered dominant, and all other guides will be dropped
+            from the list of genes for whichmthat cell is considered
+            transfected. Defaults to "highest" (will choose most
+            abundant guide as the dominant guide).
 
     Returns:
         pandas.DataFrame: A dataframe (a) with sgRNA names replaced
@@ -292,7 +366,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     ...            feature_split="|", guide_split="-")
     """
     # Extract Guide RNA Information
-    tg_info, feats_n = get_guide_info(
+    tg_info, feats_n, perts = get_guide_info(
         adata, col_guide_rna, col_num_umis, col_condition=col_condition,
         file_perturbations=file_perturbations,
         feature_split=feature_split, guide_split=guide_split,
@@ -339,8 +413,8 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         old_ix = filt.index
         filt = filt.groupby("bc").apply(
             lambda x: x if key_control in list(x.reset_index()["g"]) or (
-                x.shape[0] != 2) else x[x.p >= min_pct_dominant]
-            ).reset_index(0, drop=True)
+                len(x.reset_index().g.unique()) != 2) else
+            x[x.p >= min_pct_dominant]).reset_index(0, drop=True)
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "2"
 
     # 3. If there are >= 3 gene targets (may or may not include control)
@@ -400,6 +474,6 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         lambda x: len(x.reset_index().g.unique())).to_frame(
             "num_transfections"), lsuffix="_pre_final")  # new # transfections
     filt = filt[filt.num_transfections == 1]
-    filt = filt[filt[col_num_umis] >= min_n]
+    filt = filt[filt.n >= min_n]
     feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4D"
-    return tg_info, feats_n, filt
+    return tg_info, feats_n, filt, perts

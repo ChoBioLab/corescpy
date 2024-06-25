@@ -6,7 +6,7 @@ from .preprocessing import (create_object,
                             z_normalize_by_reference,
                             perform_qc, filter_qc)
 
-from .guide_rna import process_guide_rna, process_guide_rna_custom
+from .guide_rna import process_guide_rna
 
 from .importing import (combine_matrix_protospacer, construct_file,
                         process_multimodal_crispr)
@@ -19,9 +19,10 @@ from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
 
 __all__ = [
     "create_object", "create_object_multi", "get_layer_dict", "process_data",
-    "check_normalization", "z_normalize_by_reference", "perform_qc",
-    "filter_qc", "process_guide_rna", "process_guide_rna_custom",
-    "combine_matrix_protospacer", "process_multimodal_crispr",
+    "check_normalization", "z_normalize_by_reference",
+    "perform_qc", "filter_qc",
+    "process_guide_rna", "combine_matrix_protospacer",
+    "process_multimodal_crispr",
     "describe_tiff", "extract_tiff",
     "command_cellpose", "read_spatial", "update_spatial_uns",
     "create_spot_grid", "impute_spatial", "_get_control_probe_names",
