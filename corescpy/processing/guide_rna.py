@@ -156,7 +156,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             )  # process (e.g., multi-probe names, sum & average UMIs)
     cols_fl = ["n", "t", "p"] + [col_target_genes if col_target_genes else []]
     filt_flat = filt.rename_axis(["bc", col_guide_rna_new])
-    if col_target_genes is None:
+    if col_target_genes is not None:
         if perts is not None:
             tgs = perts.reset_index().set_index(
                 col_guide_rna_new)[col_target_genes]  # condition-gene mapping
