@@ -6,6 +6,7 @@ from .data_manipulation import (create_pseudobulk, create_condition_combo,
 from .argument_manipulation import to_list, merge
 from .resources import get_markers_database, get_topp_gene
 
+
 __all__ = [
     "merge_pca_subset", "print_dictionary", "make_printable_object",
     "print_pretty_dictionary", "explore_h5_file", "print_counts",

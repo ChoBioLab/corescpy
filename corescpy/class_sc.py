@@ -258,6 +258,8 @@ class Omics(object):
                          f"({n_top}) markers stored in `.uns['markers']`.")
                 mks = mks.groupby(col_cell_type).apply(lambda x: x.iloc[:min(
                     x.shape[0], n_top)]).reset_index()  # n_top DEGs per type
+            if isinstance(n_top, str):  # if want sub-directory
+                file_mks = os.path.join(file_mks, n_top)
             mks.to_csv(file_mks)  # write markers
         print(f"Markers File: {file_mks}\nClusters File: {file_grp}\n\n")
 
@@ -787,25 +789,41 @@ class Omics(object):
         Specify a CellTypist model for `model` to use CellTypist,
         or a path to a file with the first column as gene symbols and
         the second as annotations (i.e., mapping the markers
-        to cell types).
+        to cell types). You can also provide a
+        dictionary keyed by/series indexed by the cell type column
+        (specify `col_cell_type` in the arguments), with items/series
+        entries as the annotation to replace the cluster names.
         """
-        if model is None:
+        if isinstance(model, (dict, pd.Series)):
+            flavor = "map"
+        elif model is None:
             flavor = "ToppGene"
         elif isinstance(model, pd.DataFrame) or model not in list(
                 celltypist.models.models_description().model):
             flavor = "annotations"
         else:
             flavor = "celltypist"
-        adata, re_ix = self.rna.copy(), False
+        adata, res, figs = self.rna.copy(), {}, {}  # starting objects
         re_ix = self._assay is not None and ":" in adata.var.index.values[0]
         adata.X = adata.layers[self._layers[layer]]  # log 1 p layer
         m_c = kwargs.pop("method_cluster", "leiden" if (
-            "leiden" in self.rna.uns.keys()) else "louvain")  # cluster method
+            "leiden" in adata.uns.keys()) else "louvain")  # cluster method
         c_t = kwargs.pop("col_cell_type", m_c)
         if re_ix is True:  # rename multi-modal index if <assay>:<gene>
             adata.var = adata.var.rename(dict(zip(adata.var.index, ["".join(
                 x.split(":")[1:]) for x in adata.var.index])))
-        if flavor == "celltypist":  # annotate with CellTypist
+        if flavor.lower() == "map":
+            res = dict(model) if isinstance(model, pd.Series) else {**model}
+            if "leiden" in c_t or "louvain" in c_t:  # start with Leiden (str)
+                adata.obs.loc[:, col_annotation] = adata.obs[c_t].astype(
+                    int).astype(str)  # integer Leiden/Louvain => string
+                res = dict(zip([str(int(i)) for i in res], [
+                    res[i] for i in res]))  # integer Leiden/Louvain => string
+            else:  # start with original cell type column
+                adata.obs.loc[:, col_annotation] = adata.obs[c_t].copy()
+            adata.obs.loc[:, col_annotation] = adata.obs.loc[
+                :, col_annotation].replace(res).astype("category")  # annotate
+        elif flavor.lower() == "celltypist":  # annotate with CellTypist
             adata, res, figs = cr.ax.perform_celltypist(
                 adata, model, majority_voting=True, p_threshold=p_threshold,
                 mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
@@ -830,7 +848,6 @@ class Omics(object):
                 0] > 0 else x for x in tgdf], keys=types)  # concatenate
             return tgdf, mks
         else:  # annotate by marker dictionary
-            figs = {}
             if col_annotation in adata.obs:
                 adata.obs = adata.obs.drop(col_annotation, axis=1)
             key_add = kwargs.pop("key_added", f"rank_genes_groups_{c_t}")

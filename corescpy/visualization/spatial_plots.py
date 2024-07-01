@@ -67,7 +67,7 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     kws = merge(dict(figsize=figsize, shape=shape, cmap=cmap,
                      return_ax=True, library_key=col_sample_id,
                      library_id=libid, color=color, alt_var=cgs,
-                     wspace=wspace), kwargs)  # keyword arguments
+                     wspace=wspace, title=title), kwargs)  # keyword arguments
     img_names = list(ann.uns[spatial_key][libid if isinstance(
         libid, str) else libid[0]]["images"].keys())
     kws["img_res_key"] = key_image if key_image else "hires" if (
@@ -87,12 +87,6 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     except Exception:
         fig = str(tb.format_exc())
         print(fig)
-
-    # Modify (e.g, Title)
-    try:
-        fig.figure.suptitle(title, y=1 - title_offset)
-    except Exception:
-        pass
     return fig
 
 

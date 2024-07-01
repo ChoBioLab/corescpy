@@ -13,6 +13,7 @@ from copy import deepcopy
 from dask_image.imread import imread
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import shapely
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon
@@ -415,8 +416,62 @@ class Spatial(cr.Omics):
                                wspace=wspace), kwargs)  # keyword arguments
         kws["img_res_key"] = key_image if key_image else list(
             self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
-        fig = cr.pl.plot_spatial(ann, col_segment=seg, **kws)
+        fig = cr.pl.plot_spatial(ann, col_segment=seg, title=title, **kws)
         return fig
+
+    def plot_clusters(self, col_cell_type=None, key_cell_type=None,
+                      out_dir=None, sep="_", multi_pdf=False,
+                      kws_save=None, **kwargs):
+        """Plot spatial distributions of clusters; optionally, save
+
+        Args:
+            col_cell_type (str, optional): Name of column to plot.
+                Defaults to None (`self._columns['col_cell_type']`).
+            key_cell_type (str or list, optional): One or more entries
+                within the `col_cell_type` column to plot (e.g.,
+                specific  clusters). Defaults to None (will plot all).
+            out_dir (str, optional): Directory path within which to
+                save plots. The files within this directory will be
+                named as <`col_cell_type`><sep><cluster> unless
+                `multi_pdf=True`, in which case, `out_dir` should be
+                the file path where you want to save outputs as
+                separate pages in the same PDF. Defaults to None
+                (won't save ouput).
+            sep (str, optional): Separator between `col_cell_type` and
+                the cluster name in the save file name as described
+                above. (Moot if `multi_pdf=True`.) Defaults to "_".
+            kws_save (dict, optional): Additional keyword arguments to
+                pass to `matplotlib`'s `figure.savefig()` (optionally).
+        """
+        if col_cell_type is None:
+            col_cell_type = self._columns["col_cell_type"]
+        kws_save = {} if kws_save is None else {**kws_save}
+        title = kwargs.pop("title", col_cell_type)
+        if key_cell_type is None or isinstance(key_cell_type, (
+                int, float, str)):
+            key_cell_type = [key_cell_type] if isinstance(key_cell_type, (
+                int, float, str)) else self.rna.obs[col_cell_type].unique()
+        figures = [self.plot_spatial(color=col_cell_type, **kwargs,
+                                     title=f"{col_cell_type}")]
+        for u, i in enumerate(key_cell_type):  # iterate clusters to plot
+            fig = self.plot_spatial(color=col_cell_type, groups=i, **kwargs,
+                                    title=f"{col_cell_type}\nCluster {i}")
+            if title is not None:
+                fig.figure.suptitle(str(title if isinstance(title, (
+                    int, float, str)) else title[u]))  # super-title
+            if out_dir is not None and multi_pdf is False:  # plot separately
+                if not os.path.exists(out_dir):
+                    os.makedirs(out_dir)  # make directory if needed
+                fig.figure.savefig(os.path.join(
+                    out_dir, f"{col_cell_type}{sep}{i}.jpg"), **kws_save)
+            figures += [fig]
+        if multi_pdf is True and out_dir is not None:
+            if not os.path.exists(os.path.dirname(out_dir)):
+                os.makedirs(os.path.dirname(out_dir))  # make directory
+            with PdfPages(out_dir) as pdf:
+                for fig in figures:
+                    pdf.savefig(fig.figure, **kws_save)
+        return figures
 
     def plot_compare_spatial(self, others, color, cmap="magma",
                              wspace=0.3, layer="log1p", **kwargs):

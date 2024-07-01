@@ -13,6 +13,14 @@ import warnings
 import scanpy as sc
 import pandas as pd
 import numpy as np
+import corescpy as cr
+# from cr.pp.constants import (
+#     COL_SAMPLE_ID_O, COL_SAMPLE_ID, COL_SUBJECT, COL_INFLAMED, COL_STRICTURE,
+#     COL_CONDITION, COL_FFF, COL_TANGRAM, COL_SEGMENT, COL_SLIDE,
+#     KEY_INFLAMED, KEY_UNINFLAMED, KEY_STRICTURE)
+from .constants import (
+    COL_SAMPLE_ID_O, COL_SAMPLE_ID, COL_INFLAMED, COL_STRICTURE,
+    COL_CONDITION, COL_FFF, COL_SLIDE, KEY_STRICTURE)
 
 FILE_STRUCTURE = ["matrix", "cells", "genes"]
 DEF_FILE_P = "crispr_analysis/protospacer_calls_per_cell.csv"
@@ -233,7 +241,7 @@ def combine_matrix_protospacer(directory="",
     return adata
 
 
-def construct_file(run="CHO-001", panel_id="TUQ97N", directory=None):
+def construct_file(run=None, panel_id="TUQ97N", directory=None):
     """Construct file path from information."""
     if "outputs" not in directory and os.path.exists(
             os.path.join(directory, "outputs")):
@@ -289,3 +297,43 @@ def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
         adata.mod[rna].obs = adata.mod[rna].obs.join(gdo.obs[
             gdo.obs.columns.difference(adata.mod[rna].obs.columns)])
     return adata
+
+
+def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N", run=None,
+                     col_condition=COL_CONDITION,
+                     col_stricture=COL_STRICTURE,
+                     col_inflamed=COL_INFLAMED,
+                     col_sample_id=COL_SAMPLE_ID,
+                     col_sample_id_o=COL_SAMPLE_ID_O,
+                     col_slide=COL_SLIDE, col_fff=COL_FFF,
+                     key_stricture=KEY_STRICTURE, samples=None):
+    """Retrieve Xenium metadata."""
+    metadata = (pd.read_excel if file_metadata[
+        -4:] == "xlsx" else pd.read_csv)(
+            file_metadata, dtype={col_slide: str})  # read metadata
+    metadata.loc[:, col_condition] = metadata.apply(lambda x: "Stricture" if x[
+        col_stricture].lower() in [key_stricture, "yes"] else x[
+            col_inflamed].capitalize(), axis=1)  # inflamed/stricture/no?
+    metadata.loc[:, col_sample_id] = metadata[col_condition] + "-" + metadata[
+        col_sample_id_o]
+    metadata = metadata.set_index(col_sample_id)
+    fff = np.array(cr.pp.construct_file(run=run, directory=directory,
+                                        panel_id=panel_id))
+    bff = np.array([os.path.basename(i) for i in fff])  # base path names
+    samps = np.array([i.split("__")[2].split("-")[0] for i in fff])
+    for x in metadata[col_sample_id_o]:
+        m_f = metadata[metadata[col_sample_id_o] == x][
+            col_fff].iloc[0]  # ...use to find unconventionally-named files
+        locx = np.where(samps == x)[0] if pd.isnull(
+            m_f) else np.where(bff == m_f)[0]
+        metadata.loc[metadata[col_sample_id_o] == x, col_fff] = fff[
+            locx[0]] if (len(locx) > 0) else np.nan  # output file for row
+    metadata = metadata.dropna(subset=[col_fff]).reset_index(
+        ).drop_duplicates().set_index(col_sample_id)
+    if samples not in ["all", None]:  # subset by sample ID?
+        if samples[0] in metadata[col_sample_id_o].to_list():
+            metadata = metadata.set_index(col_sample_id_o).loc[
+                samples].reset_index().set_index(col_sample_id)
+        else:
+            metadata.loc[samples]
+    return metadata

@@ -11,8 +11,8 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
                       feature_split=None, guide_split=None,
                       file_perturbations=None,
                       key_control_patterns=None, key_control="NT",
-                      remove_multi_transfected=None,
-                      kws_filter=None, **kwargs):
+                      remove_multi_transfected=None, kws_filter=None,
+                      key_unassigned=None, key_multiple=None, **kwargs):
     """
     Process and filter guide RNAs, (optionally) remove cells considered
     multiply-transfected (after filtering criteria applied), and remove
@@ -137,21 +137,35 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     if kwargs:
         print(f"Unused keyword arguments: {kwargs}.\n")
 
+    # Deal with Unassigned Guides
+    if key_unassigned is not None:
+        category = pd.api.types.is_categorical_dtype(ann.obs[col_guide_rna])
+        if category is True:
+            ann.obs.loc[:, col_guide_rna] = ann.obs[
+                col_guide_rna].cat.add_categories(key_unassigned)
+        ann.obs.loc[ann.obs[col_guide_rna].isnull(
+            ), col_guide_rna] = key_unassigned
+
     # Filter by Guide Counts
     if kws_filter is not None:  # process & filter
         tg_info, feats_n, filt, perts = filter_by_guide_counts(
-            ann, col_guide_rna, col_num_umis, col_condition=col_condition,
+            ann if key_unassigned is None else ann[ann.obs[
+                col_guide_rna] != key_unassigned],
+            col_guide_rna, col_num_umis, col_condition=col_condition,
             file_perturbations=file_perturbations, guide_split=guide_split,
             feature_split=feature_split, key_control=key_control,
-            key_control_patterns=key_control_patterns, **kws_filter)
-    else:  # just process
+            key_control_patterns=key_control_patterns,
+            key_unassigned=key_unassigned, **kws_filter)
+    else:  # just process (e.g., multi-probe names, sum & average UMIs)
         tg_info, feats_n, perts = get_guide_info(
-            ann, col_guide_rna, col_num_umis=col_num_umis,
+            ann if key_unassigned is None else ann[ann.obs[
+                col_guide_rna] != key_unassigned],
+            col_guide_rna, col_num_umis=col_num_umis,
             col_condition=col_condition, key_control=key_control,
             key_control_patterns=key_control_patterns,
             file_perturbations=file_perturbations,
-            guide_split=guide_split, feature_split=feature_split
-            )  # process (e.g., multi-probe names, sum & average UMIs)
+            key_unassigned=key_unassigned,
+            guide_split=guide_split, feature_split=feature_split)
     cols_fl = ["n", "t", "p"] + [col_target_genes if col_target_genes else []]
     filt_flat = filt.rename_axis(["bc", col_condition])
     if col_target_genes is not None:
@@ -198,11 +212,16 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         print(f"\n\nDropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
+    else:
+        if key_multiple is not None:  # key for multiply-transfected genes
+            for i in [col_condition, col_target_genes]:
+                if i is not None:
+                    ann.obs.loc[ann.obs[i].isnull(), i] = key_multiple
     return ann
 
 
 def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
-                   file_perturbations=None,
+                   key_unassigned=None, file_perturbations=None,
                    feature_split="|", guide_split="-",
                    key_control_patterns=None, key_control="Control"):
     """
@@ -226,6 +245,9 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
         change throughout the package.
     """
     # Find Gene Targets & Counts of Guides - Long Data by Cell & Perturbation
+    adata = adata.copy()
+    if key_unassigned is not None:
+        adata = adata[adata.obs[col_guide_rna] != key_unassigned]
     tg_info = adata.obs[[col_guide_rna, col_num_umis]].apply(
         lambda y: y.str.split(feature_split))  # string -> guide list
     tg_info = tg_info.apply(lambda y: y.explode())  # long: rows ~ cell-guide
@@ -267,7 +289,7 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
             "bc", "g"])  # n = sum w/i-cell of UMIs by perturbation condition
     feats_n = feats_n.to_frame("n").join(feats_n.groupby(
         "bc").sum().to_frame("t"))  # t = sum all of gRNAs in cell
-    feats_n = feats_n.assign(p=feats_n.n / feats_n.t * 100)  # to %age
+    feats_n = feats_n.assign(p=100 * feats_n.n / feats_n.t)  # to %age
     feats_n = feats_n.join(feats_n.groupby("bc").apply(lambda x: len(
         x.reset_index().g.unique())).to_frame("num_transfections"))
     feats_n = feats_n.join(feats_n.n.groupby("bc").mean().to_frame("avg"))
@@ -277,6 +299,7 @@ def get_guide_info(adata, col_guide_rna, col_num_umis, col_condition=None,
 def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                            col_condition=None, file_perturbations=None,
                            key_control_patterns=None, key_control="Control",
+                           key_unassigned=None,
                            feature_split="|", guide_split="-",
                            min_pct_control_keep=100,
                            max_pct_control_drop=None, min_pct_avg_n=None,
@@ -369,7 +392,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     # Extract Guide RNA Information
     tg_info, feats_n, perts = get_guide_info(
         adata, col_guide_rna, col_num_umis, col_condition=col_condition,
-        file_perturbations=file_perturbations,
+        file_perturbations=file_perturbations, key_unassigned=key_unassigned,
         feature_split=feature_split, guide_split=guide_split,
         key_control_patterns=key_control_patterns, key_control=key_control)
     feats_n = feats_n.join(feats_n.groupby("bc").apply(lambda x: len(
@@ -418,10 +441,10 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             x[x.p >= min_pct_dominant]).reset_index(0, drop=True)
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "2"
 
-    # 3. If there are >= 3 gene targets (may or may not include control)
-    #     (A) First perform an initial filter to remove low gRNA UMI.
-    #     (i) Calculate the average per-condition gRNA UMI.
-    #     (B) Drop genes whose gRNA UMI <(min_pct_avg_n)% of average UMI.
+    # 3. If there are >= 3 gene targets (may or may not include control),
+    #    first perform an initial filter to remove low gRNA UMI.
+    #    Calculate the average per-condition gRNA UMI.
+    #    Drop genes whose gRNA UMI <(min_pct_avg_n)% of average UMI.
     if min_pct_avg_n not in [None, False] and any(
             filt.num_transfections_original > 2):
         old_ix = filt.index
@@ -429,15 +452,17 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             "avg_post"))  # 3i (re-calculate average cell UMI)
         filt = filt[(filt.n >= (min_pct_avg_n / 100) * filt.avg_post) | (
             filt.num_transfections_original < 3)]  # 3B
-        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "3B"
+        feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "3"
     filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
         ).g.unique())).to_frame("num_transfections"),
                      lsuffix="_pre_min_pct_avg")  # new # transfections
 
     # 4: After initial filter:
-    #       (A) If only control remains, the cell is multiply-transfected.
-    #            Cell should be removed.
-    #    If more than one gene target (>=2) remains:
+    #       (A) If only control remains and the cell originally had
+    #               >= 3 targets, the cell is multiply-transfected.
+    #               Cell should be removed.
+    #    If the cell originally had >= 3 targets and
+    #    more than one gene target (>=2) remains (after 4A):
     #       (B) The control can be dropped if present.
     #       (C) If >= 3 genes remain, and the one gene UMI >= 80% of the
     #              remaining total gRNA UMI (recalculate total gRNA UMI
@@ -446,26 +471,26 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     #              should be labeled as single transfected for the
     #              dominant gene, otherwise it is multiple transfected.
     #       (D) For all other cases (including gene # = 2),
-    #              the cell is multiple transfected and should be removed.
+    #           the cell is multiply-transfected and should be removed.
     if remove_contaminated_control:
         ctrl = filt.loc[:, key_control, :]
         old_ix = filt.index
         filt = filt.drop(ctrl[(ctrl.num_transfections == 1) & (
-            ctrl.num_transfections_original >= 2)].index)  # 3Aii
+            ctrl.num_transfections_original >= 3)].index)  # 3Aii
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4A"
         old_ix = filt.index
         filt = filt.drop(filt.loc[:, key_control, :][filt.loc[
-            :, key_control, :].num_transfections >= 2].index)  # 3Cii
+            :, key_control, :].num_transfections_original >= 3].index)  # 3Cii
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4B"
     filt = filt.join(filt.groupby("bc").apply(
         lambda x: x.shape[0]).to_frame("num_transfections"),
                         lsuffix="_pre_dominant_3")  # new # of transfections
     if min_pct_dominant not in [None, False] and any(
-            filt.num_transfections >= 3):
+            filt.num_transfections_original >= 3):
         old_ix = filt.index
         filt = filt.join(filt.n.groupby("bc").sum().to_frame("t_remaining"))
         filt.loc[:, "p_remaining"] = 100 * filt.n / filt.t_remaining
-        filt = filt[(filt.num_transfections <= 2) | (
+        filt = filt[(filt.num_transfections_original <= 3) | (
             filt.p_remaining >= min_pct_dominant)]
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4C"
 
