@@ -237,10 +237,11 @@ class Omics(object):
         """Write clusters (and, if `n_top` != False, markers)."""
         key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
         pre = "" if file_prefix is None else f"{file_prefix}_"
+        outs = [out_directory, os.path.join(out_directory, n_top) if (
+            isinstance(n_top, str)) else out_directory]  # n_top=subdirectory?
         file_grp, file_mks = [os.path.join(
-            out_directory, f"{pre}{col_cell_type}{s}.csv") for s in [
-                "", "_markers"]]  # file names
-        file_mks = None if n_top is False else file_mks
+            outs[i], f"{pre}{col_cell_type}{s}.csv") for i, s in enumerate(
+                ["", "_markers"])]  # file names
         if overwrite is False:
             for x in [file_grp, file_mks]:
                 if x is not None and os.path.exists(x):
@@ -258,8 +259,6 @@ class Omics(object):
                          f"({n_top}) markers stored in `.uns['markers']`.")
                 mks = mks.groupby(col_cell_type).apply(lambda x: x.iloc[:min(
                     x.shape[0], n_top)]).reset_index()  # n_top DEGs per type
-            if isinstance(n_top, str):  # if want sub-directory
-                file_mks = os.path.join(file_mks, n_top)
             mks.to_csv(file_mks)  # write markers
         print(f"Markers File: {file_mks}\nClusters File: {file_grp}\n\n")
 

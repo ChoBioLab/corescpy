@@ -432,10 +432,12 @@ class Spatial(cr.Omics):
                 specific  clusters). Defaults to None (will plot all).
             out_dir (str, optional): Directory path within which to
                 save plots. The files within this directory will be
-                named as <`col_cell_type`><sep><cluster> unless
-                `multi_pdf=True`, in which case, `out_dir` should be
-                the file path where you want to save outputs as
-                separate pages in the same PDF. Defaults to None
+                named as
+                <self._library_id><sep><sep><col_cell_type>\
+                    <sep><cluster>
+                unless `multi_pdf=True`, in which case, `out_dir`
+                should be the file path where you want to save outputs
+                as separate pages in the same PDF. Defaults to None
                 (won't save ouput).
             sep (str, optional): Separator between `col_cell_type` and
                 the cluster name in the save file name as described
@@ -446,7 +448,7 @@ class Spatial(cr.Omics):
         if col_cell_type is None:
             col_cell_type = self._columns["col_cell_type"]
         kws_save = {} if kws_save is None else {**kws_save}
-        title = kwargs.pop("title", col_cell_type)
+        title = kwargs.pop("title", f"{self._library_id}: {col_cell_type}")
         if key_cell_type is None or isinstance(key_cell_type, (
                 int, float, str)):
             key_cell_type = [key_cell_type] if isinstance(key_cell_type, (
@@ -462,8 +464,9 @@ class Spatial(cr.Omics):
             if out_dir is not None and multi_pdf is False:  # plot separately
                 if not os.path.exists(out_dir):
                     os.makedirs(out_dir)  # make directory if needed
+                pfp = f"{self._library_id}{sep}{sep}{col_cell_type}{sep}{i}"
                 fig.figure.savefig(os.path.join(
-                    out_dir, f"{col_cell_type}{sep}{i}.jpg"), **kws_save)
+                    out_dir, pfp + ".jpg"), **kws_save)
             figures += [fig]
         if multi_pdf is True and out_dir is not None:
             if not os.path.exists(os.path.dirname(out_dir)):
