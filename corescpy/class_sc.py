@@ -868,6 +868,7 @@ class Omics(object):
             adata.var = adata.var.reset_index().set_index(
                 self.rna.var.index.names[0])
         if copy is False:  # assign if performing inplace
+            print(adata)
             self.rna = adata
             if flavor != "celltypist":  # annotate with CellTypist
                 figs["umap"] = self.plot_umap(color=col_annotation)  # plot

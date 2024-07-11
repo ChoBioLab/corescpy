@@ -305,6 +305,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                            max_pct_control_drop=None, min_pct_avg_n=None,
                            min_n_target_control_drop=None,
                            remove_contaminated_control=False,
+                           drop_control_at_least_3_transfected=True,
                            min_pct_dominant=None, min_n=0, **kwargs):
     """
     Filter processed guide RNA names (wraps `detect_guide_targets`).
@@ -362,9 +363,17 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         min_pct_dominant (int, optional): sgRNAs with counts at or
             above this percentage of the cell total UMI count will be
             considered dominant, and all other guides will be dropped
-            from the list of genes for whichmthat cell is considered
+            from the list of genes for which that cell is considered
             transfected. Defaults to "highest" (will choose most
             abundant guide as the dominant guide).
+        drop_control_at_least_3_transfected (bool, optional): Drop
+            control guides from list for a cell that was originally
+            transfected with at least 3 targets and still has at least
+            2 remaining targets in the list after other filtering.
+            If a cell with 3+ targets originally only has 2 remaining
+            targets after other filtering, one of which is control,
+            it would result in the cell being considered
+            pseudo-singly-transfected for the non-control target.
 
     Returns:
         pandas.DataFrame: A dataframe (a) with sgRNA names replaced
@@ -415,12 +424,14 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                 :, [key_control], :].index.values  # pseudo-singly-transfected
         filt = filt.drop(ctrl_gene_drop)
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "1A"
-    if max_pct_control_drop not in [None, False]:
+    if max_pct_control_drop not in [None, False] and (
+            remove_contaminated_control is True):
         old_ix = filt.index
         ctrl_cell_drop = filt[(filt.num_transfections == 2) & (
             filt.p >= max_pct_control_drop) & (
-                filt.p < min_pct_control_keep)].reset_index(
-                    "g").index.values  # drop "contaminated" control-dominated
+                filt.p < min_pct_control_keep)].loc[:, [
+                    key_control], :].reset_index(
+                        "g").index.values  # drop "contaminated" control cells
         filt = filt.drop(ctrl_cell_drop)
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "1B"
     filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
@@ -449,9 +460,9 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
             filt.num_transfections_original > 2):
         old_ix = filt.index
         filt = filt.join(feats_n.n.groupby("bc").mean().to_frame(
-            "avg_post"))  # 3i (re-calculate average cell UMI)
+            "avg_post"))  # re-calculate average cell UMI
         filt = filt[(filt.n >= (min_pct_avg_n / 100) * filt.avg_post) | (
-            filt.num_transfections_original < 3)]  # 3B
+            filt.num_transfections_original < 3)]  # - low UMI if 3+ targets
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "3"
     filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
         ).g.unique())).to_frame("num_transfections"),
@@ -472,26 +483,30 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
     #              dominant gene, otherwise it is multiple transfected.
     #       (D) For all other cases (including gene # = 2),
     #           the cell is multiply-transfected and should be removed.
-    if remove_contaminated_control:
+    if remove_contaminated_control is True:
         ctrl = filt.loc[:, key_control, :]
         old_ix = filt.index
         filt = filt.drop(ctrl[(ctrl.num_transfections == 1) & (
             ctrl.num_transfections_original >= 3)].index)  # 3Aii
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4A"
+    if drop_control_at_least_3_transfected is True:  # - control from guides
         old_ix = filt.index
-        filt = filt.drop(filt.loc[:, key_control, :][filt.loc[
-            :, key_control, :].num_transfections_original >= 3].index)  # 3Cii
+        ctrl = filt.loc[:, key_control, :]
+        filt = filt.drop(ctrl[(ctrl.num_transfections_original >= 3) & (
+            ctrl.num_transfections > 1)].index
+                         )  # - control from guides if 3+ originally
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4B"
-    filt = filt.join(filt.groupby("bc").apply(
-        lambda x: x.shape[0]).to_frame("num_transfections"),
-                        lsuffix="_pre_dominant_3")  # new # of transfections
+    filt = filt.join(filt.groupby("bc").apply(lambda x: len(x.reset_index(
+        ).g.unique())).to_frame("num_transfections"),
+                     lsuffix="_pre_dominant_3")  # new # of transfections
     if min_pct_dominant not in [None, False] and any(
             filt.num_transfections_original >= 3):
         old_ix = filt.index
         filt = filt.join(filt.n.groupby("bc").sum().to_frame("t_remaining"))
         filt.loc[:, "p_remaining"] = 100 * filt.n / filt.t_remaining
-        filt = filt[(filt.num_transfections_original <= 3) | (
-            filt.p_remaining >= min_pct_dominant)]
+        filt = filt[(filt.num_transfections_original < 3) | (
+            filt.p_remaining >= min_pct_dominant) | (
+                filt.num_transfections == 1)]  # if originally 3+ & now > 1
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4C"
 
     # Finally, Keep Singly-/Pseudo-Singly-Tranfected; Enforce Minimum UMI

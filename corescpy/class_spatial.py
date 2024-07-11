@@ -421,7 +421,7 @@ class Spatial(cr.Omics):
 
     def plot_clusters(self, col_cell_type=None, key_cell_type=None,
                       out_dir=None, sep="_", multi_pdf=False,
-                      kws_save=None, **kwargs):
+                      kws_save=None, reorder=False, **kwargs):
         """Plot spatial distributions of clusters; optionally, save
 
         Args:
@@ -455,6 +455,9 @@ class Spatial(cr.Omics):
                 int, float, str)) else self.rna.obs[col_cell_type].unique()
         figures = [self.plot_spatial(color=col_cell_type, **kwargs,
                                      title=f"{col_cell_type}")]
+        if reorder is True:
+            key_cell_type = [str(i) for i in list(pd.Series(
+                key_cell_type).astype(int).sort_values())]  # #s in order
         for u, i in enumerate(key_cell_type):  # iterate clusters to plot
             fig = self.plot_spatial(color=col_cell_type, groups=i, **kwargs,
                                     title=f"{col_cell_type}\nCluster {i}")

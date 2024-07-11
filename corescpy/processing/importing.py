@@ -311,11 +311,15 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N", run=None,
     metadata = (pd.read_excel if file_metadata[
         -4:] == "xlsx" else pd.read_csv)(
             file_metadata, dtype={col_slide: str})  # read metadata
-    metadata.loc[:, col_condition] = metadata.apply(lambda x: "Stricture" if x[
-        col_stricture].lower() in [key_stricture, "yes"] else x[
-            col_inflamed].capitalize(), axis=1)  # inflamed/stricture/no?
-    metadata.loc[:, col_sample_id] = metadata[col_condition] + "-" + metadata[
-        col_sample_id_o]
+    if col_stricture in metadata.columns:
+        metadata.loc[:, col_condition] = metadata.apply(
+            lambda x: KEY_STRICTURE if x[col_stricture].lower() in [
+                key_stricture, "yes"] else x[col_inflamed],
+            axis=1)  # inflamed/stricture/no?
+    if col_sample_id_o != col_sample_id:
+        metadata.loc[:, col_sample_id] = metadata[
+            col_condition].apply(
+                lambda x: x.capitalize()) + "-" + metadata[col_sample_id_o]
     metadata = metadata.set_index(col_sample_id)
     fff = np.array(cr.pp.construct_file(run=run, directory=directory,
                                         panel_id=panel_id))
@@ -332,7 +336,7 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N", run=None,
         ).drop_duplicates().set_index(col_sample_id)
     if samples not in ["all", None]:  # subset by sample ID?
         if samples[0] in metadata[col_sample_id_o].to_list():
-            metadata = metadata.set_index(col_sample_id_o).loc[
+            metadata = metadata.reset_index().set_index(col_sample_id_o).loc[
                 samples].reset_index().set_index(col_sample_id)
         else:
             metadata.loc[samples]
