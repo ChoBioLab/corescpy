@@ -229,7 +229,8 @@ class Spatial(cr.Omics):
             if plot is True:
                 cr.pl.plot_tiff(fff)  # plot
 
-    def crop(self, bounds_x, bounds_y=None, bounds_z=None, **kwargs):
+    def crop(self, bounds_x, bounds_y=None, bounds_z=None,
+             pixel_size=0.2125, **kwargs):
         """
         Get a copy of the data cropped to specified coordinates.
 
@@ -250,9 +251,10 @@ class Spatial(cr.Omics):
         if isinstance(bounds_x, (str, Polygon, MultiPolygon)) or isinstance(
                 bounds_x[0], str):  # Xenium Explorer selection(s)
             if isinstance(bounds_x, (list, str)):  # if file(s)
-                coords = [sdio.xenium_explorer_selection(
-                    i) for i in bounds_x] if isinstance(bounds_x, list) else \
-                        sdio.xenium_explorer_selection(bounds_x)
+                coords = [cr.pp.xenium_explorer_selection(
+                    i, pixel_size) for i in bounds_x] if isinstance(
+                        bounds_x, list) else cr.pp.xenium_explorer_selection(
+                            bounds_x, pixel_size=pixel_size)
             else:  # if shapely object
                 coords = bounds_x
             if isinstance(coords, list):  # if multiple selections...

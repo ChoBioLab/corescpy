@@ -26,6 +26,8 @@ import spatialdata_io as sdio
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
+from shapely.geometry.polygon import Polygon
+from shapely.geometry.multipolygon import MultiPolygon
 import tangram as tg
 from anndata import AnnData
 # from spatialdata import SpatialData
@@ -141,6 +143,33 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         if col_sample_id not in adata.table.obs:
             adata.table.obs.loc[:, col_sample_id] = library_id
         return adata
+
+
+def xenium_explorer_selection(file_coord, pixel_size=0.2125):
+    """
+    Read Xenium Explorer selection file & return polygon object.
+
+    Replaces spatialdata-io's function, which doesn't accommodate
+    multi-selection in all versions.
+
+    This version also supports providing a list of selection files.
+    Errors may result if overlapping selections are provided or
+    multiple selections are included in any file.
+
+    """
+    dff = pd.read_csv(file_coord, skiprows=2)
+    if isinstance(file_coord, (list, np.ndarray, set, tuple)):
+        poly = MultiPolygon([xenium_explorer_selection(f, pixel_size)
+                             for f in file_coord])
+    elif "Selection" in dff.columns:
+        poly = []
+        for s in dff.Selection.unique():
+            poly += [Polygon(dff[dff.Selection == s].drop(
+                "Selection", axis=1).values / pixel_size)]
+        poly = MultiPolygon(poly)
+    else:
+        poly = Polygon(dff.values / pixel_size)
+    return poly
 
 
 def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",

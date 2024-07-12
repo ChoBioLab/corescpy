@@ -15,7 +15,8 @@ from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
                          read_spatial, update_spatial_uns,
                          _get_control_probe_names, impute_spatial,
                          construct_obs_spatial_imputation, create_spot_grid,
-                         subset_spatial, SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
+                         subset_spatial, xenium_explorer_selection,
+                         SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
 
 from .constants import (COL_SAMPLE_ID_O, COL_SAMPLE_ID, COL_SUBJECT,
                         COL_INFLAMED, COL_STRICTURE, COL_CONDITION, COL_FFF,
@@ -31,7 +32,8 @@ __all__ = [
     "describe_tiff", "extract_tiff",
     "command_cellpose", "read_spatial", "update_spatial_uns",
     "create_spot_grid", "impute_spatial", "_get_control_probe_names",
-    "construct_file", "construct_obs_spatial_imputation", "subset_spatial",
+    "construct_file", "construct_obs_spatial_imputation",
+    "subset_spatial", "xenium_explorer_selection",
     "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP",
     "COL_SAMPLE_ID_O", "COL_SAMPLE_ID", "COL_SUBJECT",
     "COL_INFLAMED", "COL_STRICTURE", "COL_CONDITION", "COL_FFF",

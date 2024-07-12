@@ -335,6 +335,8 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N", run=None,
     metadata = metadata.dropna(subset=[col_fff]).reset_index(
         ).drop_duplicates().set_index(col_sample_id)
     if samples not in ["all", None]:  # subset by sample ID?
+        if isinstance(samples, str):
+            samples = [samples]
         if samples[0] in metadata[col_sample_id_o].to_list():
             metadata = metadata.reset_index().set_index(col_sample_id_o).loc[
                 samples].reset_index().set_index(col_sample_id)
