@@ -82,6 +82,7 @@ def write_ome_tif(file_path, file_out=None, bf_cmd="./bftools/bfconvert",
                   tile_size=1024, compression="JPEG-2000", pyramid_scale=2):
     """Write .tif file to .ome.tif (modified from 10x functions)."""
     if os.path.splitext(file_out)[1] == ".ndpi":  # NDPI -> TIFF if needed
+        print("\n\nConverting\n{file_path}\nto\n{file_out}")
         fff = os.path.splitext(file_out)[0]
         print("\n*** Converting to intermediary TIFF file")
         if tile_size is not None:

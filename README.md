@@ -23,7 +23,7 @@ with desired environment name):
 `git clone https://github.com/ChoBioLab/corescpy.git`, or
 look above for the green "Code" button and press it for instructions.
 
-5. Naviate to the repository directory (replace <DIRECTORY> with your path):
+5. Navigate to the repository directory (replace <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
 6. Install the package with pip. (Ensure you have pip installed.)
