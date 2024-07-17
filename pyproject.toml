@@ -4,8 +4,8 @@ requires = ["hatchling"]
 
 [project]
 name = "corescpy"
-version = "0.0.1"
-description = "CRISPR analysis (standardized workflow)."
+version = "0.2.0"
+description = "scverse single cell analysis (standardized workflow)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
