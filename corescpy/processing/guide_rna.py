@@ -5,14 +5,14 @@ import pandas as pd
 
 
 def process_guide_rna(adata, col_guide_rna="feature_call",
-                      col_condition="perturbation",
-                      col_target_genes=None,
+                      col_condition="perturbation", col_target_genes=None,
                       col_num_umis="num_umis",
                       feature_split=None, guide_split=None,
                       file_perturbations=None,
                       key_control_patterns=None, key_control="NT",
                       remove_multi_transfected=None, kws_filter=None,
-                      key_unassigned=None, key_multiple=None, **kwargs):
+                      key_unassigned=None, key_multiple=None,
+                      inplace=False, **kwargs):
     """
     Process and filter guide RNAs, (optionally) remove cells considered
     multiply-transfected (after filtering criteria applied), and remove
@@ -35,6 +35,10 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         col_target_genes (str, optional): Name of the column
             containing gene symbols (if None, will be inferred
             from `col_guide_rna`). Defaults to None.
+        key_unassigned (str, optional): Entry to assign to NAs
+            (unassigned/no guide cells) in `col_guide_rna`. NOT
+            used as a pattern search for unassigned guides. Unassigned
+            cells in the input data should have NAs in `col_guide_rna`.
         file_perturbations (str or DataFrame): Path to a file
             containing perturbations (e.g., cell-type perturbations)
             or a DataFrame containing perturbations.
@@ -123,8 +127,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         change throughout the package.
     """
     print(f"\n\n<<< PERFORMING gRNA PROCESSING/FILTERING >>>\n\n{kws_filter}")
-    ann = adata.copy()
-    ann.raw = adata.copy()
+    ann = adata.copy() if inplace is False else adata  # in-place or copied?
     if isinstance(key_control_patterns, str) or key_control_patterns is None:
         key_control_patterns = [key_control_patterns if key_control_patterns
                                 else key_control]  # ensure iterable
@@ -166,7 +169,8 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             file_perturbations=file_perturbations,
             key_unassigned=key_unassigned,
             guide_split=guide_split, feature_split=feature_split)
-    cols_fl = ["n", "t", "p"] + [col_target_genes if col_target_genes else []]
+    cols_fl = ["n", "t", "p"] + list(
+        [col_target_genes] if col_target_genes else [])
     filt_flat = filt.rename_axis(["bc", col_condition])
     if col_target_genes is not None:
         if perts is not None:
@@ -180,7 +184,8 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             warn(f"\n\nCan't create target genes column ({col_target_genes})"
                  " if `file_perturbations` not specified. Setting equal to"
                  f" the perturbation condition column ({col_condition}).")
-            filt_flat.loc[:, col_target_genes] = filt_flat[col_condition]
+            filt_flat.loc[:, col_target_genes] = filt_flat[
+                col_condition].copy()  # target = condition if not custom
     filt_flat = filt_flat[cols_fl].reset_index(1).rename({
         "n": col_num_umis, "t": "total_umis_cell", "p": "percent_umis"
         }, axis=1).astype(str).apply(lambda y: y.groupby("bc").apply(
@@ -198,25 +203,31 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             ann.obs = ann.obs.drop(f"{x}_original", axis=1)
     ann.obs = ann.obs.join(tg_cgrna_flat, rsuffix="_processed").join(
         filt_flat, lsuffix="_original")  # join processed/filtered columns
+    if key_multiple is not None:  # key for multiply-transfected genes
+        for i in [col_condition, col_target_genes]:
+            if i is not None:
+                ann.obs.loc[ann.obs[i].isnull(), i] = key_multiple
+
+    # Store Parameters & Filtering/Processing Output
     ann.uns["kws_filter"] = str(kws_filter)  # store keyword arguments
     for x in feats_n:  # avoid h5ad write issue
         feats_n = feats_n.astype({x: float if isinstance(feats_n[x].dropna(
             ).iloc[0], (int, float)) else "str"})
-    ann.uns["grna_feats_n"] = feats_n.reset_index(1)  # avoid h5ad write issue
     ann.obs = ann.obs.assign(guide_split=guide_split).assign(
-        feature_split=feature_split)
+        feature_split=feature_split)  # store original split characters
+    ann.uns["grna_feats_n"] = feats_n.reset_index(1)[[feats_n.index.names[
+        1]] + list(feats_n.columns)]  # avoid h5ad write issue
+
+    # Remove Multi-Transfected/Unassigned
     if remove_multi_transfected is True:  # remove multi-transfected
-        ann.raw = ann.copy()
-        nobs = copy.copy(ann.n_obs)
-        ann = ann[~ann.obs[col_condition].isnull()]
+        ann.raw = ann.copy()  # original object (unfiltered) stored in .raw
+        nobs = copy.copy(ann.n_obs)  # original number of cells
+        ann = ann[~ann.obs[col_condition].isnull()]  # drop NA rows
+        ann = ann[~ann.obs[col_condition].isin([
+            key_multiple, key_unassigned])]  # drop multiple/unassigned cells
         print(f"\n\nDropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
-    else:
-        if key_multiple is not None:  # key for multiply-transfected genes
-            for i in [col_condition, col_target_genes]:
-                if i is not None:
-                    ann.obs.loc[ann.obs[i].isnull(), i] = key_multiple
     return ann
 
 

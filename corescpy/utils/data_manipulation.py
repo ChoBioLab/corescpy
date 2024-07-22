@@ -77,13 +77,16 @@ def merge_pca_subset(adata, adata_subset,
     return ann
 
 
-def write_ome_tif(file_path, file_out=None, bf_cmd="./bftools/bfconvert",
+def write_ome_tif(file_path, file_out=None, bf_cmd="bfconvert",
+                  # bf_cmd="./bftools/bfconvert",
                   subresolutions=7, pixelsize=0.2125,
                   tile_size=1024, compression="JPEG-2000", pyramid_scale=2):
     """Write .tif file to .ome.tif (modified from 10x functions)."""
-    if os.path.splitext(file_out)[1] == ".ndpi":  # NDPI -> TIFF if needed
-        print("\n\nConverting\n{file_path}\nto\n{file_out}")
-        fff = os.path.splitext(file_out)[0]
+    if file_out is None:
+        file_out = f"{os.path.splitext(file_path)[0]}.ome.tif"
+    if os.path.splitext(file_path)[1] == ".ndpi":  # NDPI -> TIFF if needed
+        fff, ffn = [os.path.splitext(x)[0] for x in [file_path, file_out]]
+        print(f"\n\nConverting\n{fff}.ndpi\nto\n{ffn}.tiff")
         print("\n*** Converting to intermediary TIFF file")
         if tile_size is not None:
             tile_x, tile_y = [tile_size, tile_size] if isinstance(
@@ -93,13 +96,11 @@ def write_ome_tif(file_path, file_out=None, bf_cmd="./bftools/bfconvert",
             bf_cmd += f" -compression {compression}"
         if pyramid_scale is not None:
             bf_cmd += f" -pyramid-scale {pyramid_scale}"
-        os.system(f"{bf_cmd} -bigtiff -series 0 {fff}.ndpi {fff}.tiff")
-        file_path = fff + ".tiff"
+        os.system(f"{bf_cmd} -bigtiff -series 0 {fff}.ndpi {ffn}.tiff")
+        file_path, file_out = ffn + ".tiff", ffn + ".ome.tif"
     image = tf.imread(file_path)
     if len(image.shape) > 2 and image.shape[2] > image.shape[0]:
         image = np.transpose(image, (1, 2, 0))
-    if file_out is None:
-        file_out = f"{os.path.splitext(file_path)[0]}.ome.tif"
     with tf.TiffWriter(file_out, bigtiff=True) as tif:
         metadata = {
             "SignificantBits": 8,
