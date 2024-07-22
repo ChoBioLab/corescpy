@@ -127,6 +127,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         change throughout the package.
     """
     print(f"\n\n<<< PERFORMING gRNA PROCESSING/FILTERING >>>\n\n{kws_filter}")
+    print("CTG", col_target_genes)
     ann = adata.copy() if inplace is False else adata  # in-place or copied?
     if isinstance(key_control_patterns, str) or key_control_patterns is None:
         key_control_patterns = [key_control_patterns if key_control_patterns
@@ -160,6 +161,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
 
     # Filter by Guide Counts
     if kws_filter is not None:  # process & filter
+        print(f"\n\n\t*** CLASSIFYING FOR gRNA FILTERING\n\n{kws_filter}")
         tg_info, feats_n, filt, perts = filter_by_guide_counts(
             ann if key_unassigned is None else ann[ann.obs[
                 col_guide_rna] != key_unassigned],
@@ -169,6 +171,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             key_control_patterns=key_control_patterns,
             key_unassigned=key_unassigned, **kws_filter)
     else:  # just process (e.g., multi-probe names, sum & average UMIs)
+        print(f"\n\n\t*** CLASSIFYING gRNAs\n\n{kws_filter}")
         tg_info, feats_n, perts = get_guide_info(
             ann if key_unassigned is None else ann[ann.obs[
                 col_guide_rna] != key_unassigned],
@@ -181,7 +184,8 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     cols_fl = ["n", "t", "p"] + list(
         [col_target_genes] if col_target_genes else [])
     filt_flat = filt.rename_axis(["bc", col_condition])
-    print(col_target_genes)
+
+    # Join with AnnData
     if col_target_genes is not None:
         if perts is not None:
             tgs = perts.reset_index().set_index(
