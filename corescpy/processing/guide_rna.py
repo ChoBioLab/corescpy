@@ -148,6 +148,15 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
                 col_guide_rna].cat.add_categories(key_unassigned)
         ann.obs.loc[ann.obs[col_guide_rna].isnull(
             ), col_guide_rna] = key_unassigned
+    elif any((pd.isnull(x) for x in key_control_patterns)):  # NA -> control?
+        ann.obs.loc[ann.obs[col_guide_rna].isnull(
+            ), col_guide_rna] = key_control
+        key_control_patterns = list(pd.unique(
+            key_control_patterns + [key_control]))
+    else:
+        warn("`key_unassigned` not specified for gRNA processing. Dropping "
+             f"{ann.obs[col_guide_rna].isnull().sum()} NaN rows.")
+        ann = ann[~ann.obs[col_guide_rna].isnull()]
 
     # Filter by Guide Counts
     if kws_filter is not None:  # process & filter
@@ -172,6 +181,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
     cols_fl = ["n", "t", "p"] + list(
         [col_target_genes] if col_target_genes else [])
     filt_flat = filt.rename_axis(["bc", col_condition])
+    print(col_target_genes)
     if col_target_genes is not None:
         if perts is not None:
             tgs = perts.reset_index().set_index(
@@ -220,7 +230,6 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
 
     # Remove Multi-Transfected/Unassigned
     if remove_multi_transfected is True:  # remove multi-transfected
-        ann.raw = ann.copy()  # original object (unfiltered) stored in .raw
         nobs = copy.copy(ann.n_obs)  # original number of cells
         ann = ann[~ann.obs[col_condition].isnull()]  # drop NA rows
         ann = ann[~ann.obs[col_condition].isin([
@@ -228,6 +237,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         print(f"\n\nDropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
+    print(ann)
     return ann
 
 

@@ -68,6 +68,7 @@ dependencies = [
 
     # Other
     "dask==2023.11.0",
+    "dask-image== 2023.8.1",
     "distributed==2023.11.0",
     "docutils < 0.17,>= 0.10",
     "numpy >=1.24.4",
