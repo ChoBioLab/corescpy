@@ -341,8 +341,8 @@ class Crispr(Omics):
         if kws_process_guide_rna is not False:  # if don't explicitly skip
             kws_pga = cr.tl.merge({
                 "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
-                "key_control": key_control,
-                "col_condition": col_condition}, kws_process_guide_rna)
+                "key_control": key_control, "col_condition": col_condition,
+                "col_target_genes": col_target_genes}, kws_process_guide_rna)
         else:
             kws_pga, kws_process_guide_rna = None, None
         super().__init__(
