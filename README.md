@@ -29,6 +29,16 @@ look above for the green "Code" button and press it for instructions.
 6. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
 
+7. If you have issues with resolving/finding the most up-to-date version of the `spatialdata` and/or `spatialdata-io` packages, try running:
+```
+pip install git+https://github.com/scverse/spatialdata
+pip install git+https://github.com/scverse/spatialdata-io
+```
+in your terminal while in your conda environment, then re-try step (6).
+
+8. If you're planning to use this environment with Jupyter notebooks, run `conda install nb_conda_kernels`, then `pip install ipykernel`.
+
+
 ** Note: To use GPU resources, use `conda install -c rapidsai -c nvidia -c conda-forge cugraph cuml cudf` and install the gpu version of coreSCpy (which should `pip install scanpy[rapids]`).
 
 ## Usage
