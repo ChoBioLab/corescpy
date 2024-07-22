@@ -13,8 +13,8 @@ with open('README.md') as info:
     readme = info.read()
 
 setup(name='corescpy',
-      version='0.1.0',
-      description='CRISPR workflow',
+      version='0.2.0',
+      description='scverse single cell workflow',
       url='http://github.com/easlinger/corescpy',
       author='Elizabeth N. Aslinger',
       packages=find_packages(),
