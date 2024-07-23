@@ -646,7 +646,7 @@ class Omics(object):
         return cts, cts_cl, adata
 
     def preprocess(self, assay_protein=None, layer_in="counts", copy=False,
-                   kws_scale=True, **kwargs):
+                   kws_scale=True, col_n_obs_raw="n_obs_raw", **kwargs):
         """
         Preprocess (specified layer of) data
         (defaulting to originally-loaded layer).
@@ -663,6 +663,8 @@ class Omics(object):
         if assay_protein is None:
             assay_protein = self._assay_protein
         adata = self.get_layer(layer=layer_in, inplace=False)
+        if col_n_obs_raw is not None:
+            adata.obs.loc[:, col_n_obs_raw] = adata.n_obs
         kws = dict(assay_protein=assay_protein, **self._columns, **kwargs)
         kws_scale = {} if isinstance(kws_scale, str) and kws_scale.lower(
             ) == "z" else deepcopy(kws_scale)  # scale kws processing
