@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import scanpy as sc
 import corescpy as cr
-from corescpy import Omics
 from corescpy.analysis.perturbations import layer_perturbation
 import pandas as pd
 import numpy as np
@@ -18,7 +17,7 @@ COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 
 
-class Crispr(Omics):
+class Crispr(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
     _columns_created = dict(guide_percent="Percent of Cell Guides")
