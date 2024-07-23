@@ -673,7 +673,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer="counts"):
 
 
 def filter_qc(adata, outlier_mads=None, drop_outliers=True,
-              cell_filter_pmt=None,
+              cell_filter_pmt=None, cell_filter_prb=None,
               cell_filter_ncounts=None, cell_filter_ngene=None,
               gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
@@ -716,21 +716,29 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
             if drop_outliers is True:
                 ann = ann[:, ~ann.var.outlier]  # filter genes
                 print(f"\tGene # (without/with Outliers): {ann.n_vars}/{nvs}")
-    args = [cell_filter_pmt, cell_filter_ncounts, cell_filter_ngene,
-            gene_filter_ncell, gene_filter_ncounts]
+    args = [cell_filter_pmt, cell_filter_prb, cell_filter_ncounts,
+            cell_filter_ngene, gene_filter_ncell, gene_filter_ncounts]
     if any((i is not None for i in args)):  # manual filtering
         if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %
             cell_filter_pmt = [0, cell_filter_pmt]  # ...assume for maximum %
-        if cell_filter_pmt is None:  # None = no MT filter (0-100% allowed)
-            cell_filter_pmt = [0, 101]
-        min_mt, max_mt = cell_filter_pmt if cell_filter_pmt else None, None
+        if isinstance(cell_filter_prb, (int, float)):  # if just 1 # for MT %
+            cell_filter_prb = [0, cell_filter_prb]  # ...assume for maximum %
         print("\n<<< PERFORMING THRESHOLD-BASED FILTERING >>>")
         print(f"\nTotal Cell Count: {ann.n_obs}")
-        print("\n\t*** Filtering cells by mitochondrial gene percentage...")
-        print(f"\n\tMinimum={min_mt}\n\tMaximum={max_mt}")
-        if min_mt and max_mt:
-            ann = ann[(ann.obs.pct_counts_mt < max_mt) * (
-                ann.obs.pct_counts_mt >= min_mt)]  # filter by MT %
+        if cell_filter_pmt is not None:
+            print("\n\t*** Filtering cells by mitochondrial gene %...")
+            min_mt, max_mt = cell_filter_pmt
+            print(f"\n\t\tMinimum={min_mt}\n\tMaximum={max_mt}")
+            if cell_filter_pmt is not None:
+                ann = ann[(ann.obs["pct_counts_mt"] < max_mt) * (
+                    ann.obs.pct_counts_mt >= min_mt)]  # filter by MT %
+        if cell_filter_prb is not None:
+            print("\n\t*** Filtering cells by ribosomal gene %...")
+            min_rb, max_rb = cell_filter_prb
+            print(f"\n\t\tMinimum={min_mt}\n\tMaximum={max_mt}")
+            if cell_filter_prb is not None:
+                ann = ann[(ann.obs["pct_counts_rb"] < max_rb) * (
+                    ann.obs.pct_counts_rb >= min_rb)]  # filter by RB %
         print(f"\tNew Count: {ann.n_obs}")
         cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
             gene_filter_ncounts = [x if x else [None, None] for x in [

@@ -127,7 +127,6 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         change throughout the package.
     """
     print(f"\n\n<<< PERFORMING gRNA PROCESSING/FILTERING >>>\n\n{kws_filter}")
-    print("CTG", col_target_genes)
     ann = adata.copy() if inplace is False else adata  # in-place or copied?
     if isinstance(key_control_patterns, str) or key_control_patterns is None:
         key_control_patterns = [key_control_patterns if key_control_patterns
@@ -161,7 +160,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
 
     # Filter by Guide Counts
     if kws_filter is not None:  # process & filter
-        print(f"\n\n\t*** CLASSIFYING FOR gRNA FILTERING\n\n{kws_filter}")
+        print("\n\n\t*** CLASSIFYING FOR gRNA FILTERING")
         tg_info, feats_n, filt, perts = filter_by_guide_counts(
             ann if key_unassigned is None else ann[ann.obs[
                 col_guide_rna] != key_unassigned],
@@ -171,7 +170,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             key_control_patterns=key_control_patterns,
             key_unassigned=key_unassigned, **kws_filter)
     else:  # just process (e.g., multi-probe names, sum & average UMIs)
-        print(f"\n\n\t*** CLASSIFYING gRNAs\n\n{kws_filter}")
+        print("\n\n\t*** CLASSIFYING gRNAs")
         tg_info, feats_n, perts = get_guide_info(
             ann if key_unassigned is None else ann[ann.obs[
                 col_guide_rna] != key_unassigned],
@@ -241,7 +240,6 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
         print(f"\n\nDropped {nobs - ann.n_obs} out of {nobs} observations "
               f"({round(100 * (nobs - ann.n_obs) / nobs, 2)}" + "%)"
               " during guide RNA filtering.")
-    print(ann)
     return ann
 
 
