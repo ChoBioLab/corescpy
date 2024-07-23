@@ -514,7 +514,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4A"
     if drop_control_at_least_3_transfected is True:  # - control from guides
         old_ix = filt.index
-        ctrl = filt.loc[:, key_control, :]
+        ctrl = filt.loc[:, [key_control], :]
         filt = filt.drop(ctrl[(ctrl.num_transfections_original >= 3) & (
             ctrl.num_transfections > 1)].index
                          )  # - control from guides if 3+ originally
@@ -532,7 +532,7 @@ def filter_by_guide_counts(adata, col_guide_rna, col_num_umis,
                 filt.num_transfections == 1)]  # if originally 3+ & now > 1
         feats_n.loc[old_ix.difference(filt.index), "reason_drop"] = "4C"
 
-    # Finally, Keep Singly-/Pseudo-Singly-Tranfected; Enforce Minimum UMI
+    # Finally, Keep Singly-/Pseudo-Singly-Transfected; Enforce Minimum UMI
     old_ix = filt.index
     filt = filt.join(filt.groupby("bc").apply(
         lambda x: len(x.reset_index().g.unique())).to_frame(
