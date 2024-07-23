@@ -152,6 +152,10 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
             file)[1] == ".h5mu":  # MuData
         print(f"\n\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
+    elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
+            file)[1] == ".h5":  # MuData
+        print(f"\n\n<<< LOADING 10X FILE {file} >>>")
+        adata = sc.read_10x_h5(file)
     elif isinstance(file, dict):  # metadata in protospacer files
         print("\n\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = cr.pp.combine_matrix_protospacer(
