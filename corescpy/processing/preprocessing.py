@@ -155,15 +155,17 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
             file)[1] == ".h5":  # MuData
         print(f"\n\n<<< LOADING 10X FILE {file} >>>")
-        adata = sc.read_10x_h5(file, var_names=col_gene_symbols, cache=True,
-                               gex_only=gex_only, prefix=prefix, **kwargs)
+        adata = sc.read_10x_h5(file, gex_only=gex_only)
     elif isinstance(file, dict):  # metadata in protospacer files
         print("\n\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = cr.pp.combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, gex_only=gex_only,
             prefix=prefix, **kwargs)  # + metadata from protospacer
-    elif os.path.isdir(file):  # if directory, assume 10x format
+    elif os.path.isdir(file) or os.path.splitext(
+            file)[1] == ".mtx":  # if directory or MTX, assume 10x format
         print(f"\n\n<<< LOADING 10X FILE {file} >>>")
+        if os.path.splitext(file)[1] == ".mtx":
+            file = os.path.dirname(file)
         adata = sc.read_10x_mtx(
             file, var_names=col_gene_symbols, cache=True,
             gex_only=gex_only, prefix=prefix, **kwargs)  # read 10x
