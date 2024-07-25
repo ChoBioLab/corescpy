@@ -46,6 +46,7 @@ def classify_gex_cells(adata, col_cell_type=None, genes=None,
         quants[gene] = result
     quants = pd.concat(quants, names=["Gene"])
     quants.loc[:, "N_Sample"] = adata.obs.shape[0]
+    quants = quants.assign(threshold=threshold)
     return quants
 
 
@@ -87,7 +88,7 @@ def classify_coex_cells(adata, col_cell_type=None, genes=None,
     quants.loc[:, "Percent"] = 100 * quants["N_Cells_Positive"] / quants[
         "N_Cluster"]
     quants.loc[:, "N_Sample"] = adata.obs.shape[0]
-    quants = quants.assign(min_genes=min_genes)
+    quants = quants.assign(min_genes=min_genes).assign(threshold=threshold)
     return quants
 
 

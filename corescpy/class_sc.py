@@ -778,7 +778,7 @@ class Omics(object):
         if re_ix is True:  # rename multi-modal index if <assay>:<gene>
             adata.var = adata.var.rename(dict(zip(adata.var.index, ["".join(
                 x.split(":")[1:]) for x in adata.var.index])))
-        if flavor.lower() == "map":
+        if flavor.lower() == "map":  # mapping provided (e.g., in dictionary)
             res = dict(model) if isinstance(model, pd.Series) else {**model}
             if "leiden" in c_t or "louvain" in c_t:  # start with Leiden (str)
                 adata.obs.loc[:, col_annotation] = adata.obs[c_t].astype(
