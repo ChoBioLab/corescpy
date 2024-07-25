@@ -48,6 +48,11 @@ conda clean -i
 conda clean -t
 ```
 
+If you have issues seeing the environment when choosing the kernel for your Jupyter notebook:
+```
+conda install nb_conda_kernels
+```
+
 ## Usage
 
 1. You can now load `corescpy` like any other distributed Python package.

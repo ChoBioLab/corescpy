@@ -742,7 +742,7 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
         if cell_filter_prb is not None:
             print("\n\t*** Filtering cells by ribosomal gene %...")
             min_rb, max_rb = cell_filter_prb
-            print(f"\n\t\tMinimum={min_mt}\n\tMaximum={max_mt}")
+            print(f"\n\t\tMinimum={min_rb}\n\tMaximum={max_rb}")
             if cell_filter_prb is not None:
                 ann = ann[(ann.obs["pct_counts_rb"] < max_rb) * (
                     ann.obs.pct_counts_rb >= min_rb)]  # filter by RB %
