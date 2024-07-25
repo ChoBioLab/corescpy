@@ -94,7 +94,6 @@ def classify_coex_cells(adata, col_cell_type=None, genes=None,
 def classify_tx(adata, genes=None, col_cell_type=None, layer="counts"):
     """Quantify transcript counts (optionally, by cluster)."""
     adata = adata.copy()
-    if isinstance(genes, str):
     genes = [genes] if isinstance(genes, str) else list(adata.var_names) if (
         genes is None) else list(genes)
     if layer:
