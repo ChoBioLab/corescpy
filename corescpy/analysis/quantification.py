@@ -42,11 +42,12 @@ def classify_gex_cells(adata, col_cell_type=None, genes=None,
         obs.loc[:, "gene_positive"] = gex.flatten()
         grouped = obs.groupby(col_cell_type)["gene_positive"]
         result = grouped.agg(["sum", "count"])
-        result.columns = ["N", "Total_Cluster"]
-        result.loc[:, "Percent"] = 100 * result["N"] / result["Total_Cluster"]
+        result.columns = ["N_Cells_Positive", "N_Cluster"]
+        result.loc[:, "Percent"] = 100 * result["N_Cells_Positive"] / result[
+            "N_Cluster"]
         quants[gene] = result
     quants = pd.concat(quants, names=["Gene"])
-    quants.loc[:, "Total_Sample"] = adata.obs.shape[0]
+    quants.loc[:, "N_Sample"] = adata.obs.shape[0]
     return quants
 
 
@@ -84,8 +85,11 @@ def classify_coex_cells(adata, col_cell_type=None, genes=None,
     adata.obs["coexpressed"] = coex
     grouped = adata.obs.groupby(col_cell_type)["coexpressed"]
     quants = grouped.agg(["sum", "count"])
-    quants.columns = ["N", "Total"]
-    quants.loc[:, "Total_Sample"] = adata.obs.shape[0]
+    quants.columns = ["N_Cells_Positive", "N_Cluster"]
+    quants.loc[:, "Percent"] = 100 * quants["N_Cells_Positive"] / quants[
+        "N_Cluster"]
+    quants.loc[:, "N_Sample"] = adata.obs.shape[0]
+    quants = quants.assign(min_genes=min_genes)
     return quants
 
 
@@ -109,7 +113,8 @@ def classify_tx(adata, genes=None, col_cell_type=None, layer="counts"):
         gex = adata[:, gene].X
         if "toarray" in dir(gex):
             gex = gex.toarray()
-        gex_df = pd.DataFrame(gex, index=adata.obs.index, columns=[gene])
-        results[gene] = gex_df.groupby(adata.obs[col_cell_type]).sum()
+        gex = pd.DataFrame(gex, index=adata.obs.index, columns=[gene])
+        results[gene] = gex.join(adata.obs[[col_cell_type]]).set_index(
+            col_cell_type).groupby(adata.obs[col_cell_type]).sum()[gene]
     txs_cts = pd.concat(results, axis=1)
     return txs_cts
