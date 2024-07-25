@@ -21,12 +21,10 @@ def classify_gex_cells(adata, col_cell_type=None, genes=None,
     (the default is all genes in the combination).
     """
     adata = adata.copy()
-    if isinstance(genes, str):
-        genes = [genes]
+    genes = [genes] if isinstance(genes, str) else list(adata.var_names) if (
+        genes is None) else list(genes)
     if layer:
         adata.X = adata.layers[layer].copy()
-    if genes is None:
-        genes = list(adata.var_names)  # quantify all genes if unspecified
     if col_cell_type is None:  # just calculate overall if unspecified
         col_cell_type = "Cluster"
         adata.obs.loc[:, col_cell_type] = "Overall"
@@ -97,14 +95,10 @@ def classify_tx(adata, genes=None, col_cell_type=None, layer="counts"):
     """Quantify transcript counts (optionally, by cluster)."""
     adata = adata.copy()
     if isinstance(genes, str):
-        genes = [genes]
+    genes = [genes] if isinstance(genes, str) else list(adata.var_names) if (
+        genes is None) else list(genes)
     if layer:
         adata.X = adata.layers[layer].copy()
-    if genes is None:
-        genes = list(adata.var_names)  # quantify all genes if unspecified
-    if col_cell_type is None:  # just calculate overall if unspecified
-        col_cell_type = "Cluster"
-        adata.obs.loc[:, col_cell_type] = "Overall"
     results = {}
     for gene in genes:  # iterate genes
         if gene not in adata.var_names:
@@ -114,7 +108,11 @@ def classify_tx(adata, genes=None, col_cell_type=None, layer="counts"):
         if "toarray" in dir(gex):
             gex = gex.toarray()
         gex = pd.DataFrame(gex, index=adata.obs.index, columns=[gene])
-        results[gene] = gex.join(adata.obs[[col_cell_type]]).set_index(
-            col_cell_type).groupby(adata.obs[col_cell_type]).sum()[gene]
-    txs_cts = pd.concat(results, axis=1)
+        if col_cell_type is None:
+            results[gene] = gex[gene].sum()
+        else:
+            results[gene] = gex.join(adata.obs[[col_cell_type]]).set_index(
+                col_cell_type).groupby(adata.obs[col_cell_type]).sum()[gene]
+    txs_cts = pd.Series(results) if col_cell_type is None else pd.concat(
+        results, axis=1)
     return txs_cts
