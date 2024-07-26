@@ -21,6 +21,7 @@ import squidpy as sq
 import spatialdata
 import spatialdata_plot as sdp
 import spatialdata_io as sdio
+from spatialdata_io._constants._constants import XeniumKeys
 import liana
 # from liana.method import MistyData, genericMistyData, lrMistyData
 # import decoupler as dc
@@ -262,6 +263,13 @@ class Spatial(cr.Omics):
             kws = {"target_coordinate_system": "global",
                    "filter_table": True, **kwargs}
             sdata_crop = self.adata.query.polygon(coords, **kws)  # crop
+            if "table" not in dir(sdata_crop):
+                sdata_crop.table = self.rna[self.rna.obs[
+                    XeniumKeys.CELL_ID].isin(sdata_crop.shapes[
+                        "cell_boundaries"].index)].copy()  # add back table
+                # needed for now b/c issue if any nuclei radius = NA
+                # github.com/scverse/spatialdata-io/
+                # issues/173#issuecomment-2231152498
         else:  # specified coordinates
             minc, maxc = [[x[i] for x in [bounds_x, bounds_y, bounds_z] if (
                 x is not None)] for i in [0, 1]]

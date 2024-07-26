@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=no-member
 """
-Preprocessing CRISPR experiment data.
+Importing data.
 
 @author: E. N. Aslinger
 """
@@ -260,7 +260,8 @@ def construct_file(run=None, panel_id="TUQ97N", directory=None):
     fff = []
     for i, x in enumerate(run):
         d_x = os.path.join(directory, panel_id[i], x)
-        fff += [os.path.join(d_x, y) for y in os.listdir(d_x)]
+        fff += [os.path.join(d_x, y) for y in os.listdir(
+            d_x) if os.path.isdir(os.path.join(d_x, y))]
     return fff
 
 
@@ -302,7 +303,7 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     """Retrieve Xenium metadata."""
     # Get Column & Key Names from Constants Script
     constant_dict = {**CONSTANTS_PANELS[panel_id]}  # panel constants
-    col_sample_id, col_sample_id_o, col_slide, col_condition, col_out_file = [
+    col_sample_id, col_sample_id_o, col_slide, col_condition, col_data_dir = [
         constant_dict[x] if (x in constant_dict) else None for x in [
             "col_sample_id", "col_sample_id_o", "col_slide",
             "col_condition", "col_data_dir"]]
@@ -315,7 +316,7 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
         metadata.loc[:, col_sample_id] = metadata[
             col_condition].apply(lambda x: x.capitalize() if (
                 capitalize_sample is True) else x) + "-" + metadata[
-                    col_sample_id_o]  # combine condition & sample/block ID
+                    col_sample_id_o].astype(str)  # combine condition & block
     metadata = metadata.set_index(col_sample_id)
 
     # Find File Paths
@@ -324,13 +325,16 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     bff = np.array([os.path.basename(i) for i in fff])  # base path names
     samps = np.array([i.split("__")[2].split("-")[0] for i in fff])
     for x in metadata[col_sample_id_o]:
-        m_f = metadata[metadata[col_sample_id_o] == x][
-            col_out_file].iloc[0]  # ...to find unconventionally-named files
+        if col_data_dir is not None and col_data_dir in metadata.columns:
+            m_f = metadata[metadata[col_sample_id_o] == x][col_data_dir].iloc[
+                0]  # ...to find manually-defined unconventionally-named files
+        else:
+            m_f = np.nan
         locx = np.where(samps == x)[0] if pd.isnull(
             m_f) else np.where(bff == m_f)[0]
-        metadata.loc[metadata[col_sample_id_o] == x, col_out_file] = fff[
+        metadata.loc[metadata[col_sample_id_o] == x, col_data_dir] = fff[
             locx[0]] if (len(locx) > 0) else np.nan  # output file for row
-    metadata = metadata.dropna(subset=[col_out_file]).reset_index(
+    metadata = metadata.dropna(subset=[col_data_dir]).reset_index(
         ).drop_duplicates().set_index(col_sample_id)
     if samples not in ["all", None]:  # subset by sample ID?
         if isinstance(samples, str):

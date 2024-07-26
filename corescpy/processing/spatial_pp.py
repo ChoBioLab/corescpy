@@ -18,6 +18,7 @@ import os
 import re
 # import copy
 import traceback
+import inspect
 # import matplotlib.pyplot as plt
 import scanpy as sc
 import squidpy as sq
@@ -110,7 +111,9 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
         if library_id is None:
             print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
             library_id = str(file_path)
-        adata = sdio.xenium(file_path, n_jobs=n_jobs)
+        valid_args = inspect.signature(sdio.xenium).parameters
+        kws = {k: v for k, v in kwargs.items() if k in valid_args}
+        adata = sdio.xenium(file_path, n_jobs=n_jobs, **kws)
         if STORE_UNS_SQUIDPY:
             adata = update_spatial_uns(adata, library_id, col_sample_id)
     return adata
