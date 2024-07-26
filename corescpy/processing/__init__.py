@@ -18,10 +18,7 @@ from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
                          subset_spatial, xenium_explorer_selection,
                          SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
 
-from .constants import (COL_SAMPLE_ID_O, COL_SAMPLE_ID, COL_SUBJECT,
-                        COL_INFLAMED, COL_STRICTURE, COL_CONDITION, COL_FFF,
-                        COL_TANGRAM, COL_SEGMENT, COL_SLIDE, COL_OBJECT,
-                        KEY_INFLAMED, KEY_UNINFLAMED, KEY_STRICTURE)
+from .constants import CONSTANTS_PANELS
 
 __all__ = [
     "create_object", "create_object_multi", "get_layer_dict", "process_data",
@@ -34,9 +31,5 @@ __all__ = [
     "create_spot_grid", "impute_spatial", "_get_control_probe_names",
     "construct_file", "construct_obs_spatial_imputation",
     "subset_spatial", "xenium_explorer_selection",
-    "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP",
-    "COL_SAMPLE_ID_O", "COL_SAMPLE_ID", "COL_SUBJECT",
-    "COL_INFLAMED", "COL_STRICTURE", "COL_CONDITION", "COL_FFF",
-    "COL_TANGRAM", "COL_SEGMENT", "COL_SLIDE", "COL_OBJECT",
-    "KEY_INFLAMED", "KEY_UNINFLAMED", "KEY_STRICTURE"
+    "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP", "CONSTANTS_PANELS"
 ]
