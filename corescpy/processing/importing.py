@@ -298,32 +298,24 @@ def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
 
 
 def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
-                     run=None, samples=None):
+                     run=None, samples=None, capitalize_sample=True):
     """Retrieve Xenium metadata."""
     # Get Column & Key Names from Constants Script
     constant_dict = {**CONSTANTS_PANELS[panel_id]}  # panel constants
-    col_sample_id, col_sample_id_o, col_slide = [constant_dict[x] if (
-        x in constant_dict) else None for x in [
-            "col_sample_id", "col_sample_id_o", "col_slide"]]
-    col_condition, col_stricture, col_inflamed, col_out_file = [constant_dict[
-        x] if x in constant_dict else None for x in [
-            "col_condition", "col_stricture", "col_inflamed", "col_data_dir"]]
-    key_stricture = constant_dict["key_stricture"] if (
-        "key_stricture" in constant_dict) else None
+    col_sample_id, col_sample_id_o, col_slide, col_condition, col_out_file = [
+        constant_dict[x] if (x in constant_dict) else None for x in [
+            "col_sample_id", "col_sample_id_o", "col_slide",
+            "col_condition", "col_data_dir"]]
 
     # Read Metadata
-    metadata = (pd.read_excel if file_metadata[
-        -4:] == "xlsx" else pd.read_csv)(
-            file_metadata, dtype={col_slide: str})  # read metadata
-    if col_stricture is not None and col_stricture in metadata.columns:
-        metadata.loc[:, col_condition] = metadata.apply(
-            lambda x: key_stricture if x[col_stricture].lower() in [
-                key_stricture, "yes"] else x[col_inflamed],
-            axis=1)  # inflamed/stricture/no?
-    if col_sample_id_o != col_sample_id:
+    metadata = (pd.read_excel if os.path.splitext(file_metadata)[
+        1] == ".xlsx" else pd.read_csv)(file_metadata, dtype={
+            col_slide: str} if col_slide else None)  # read metadata
+    if col_sample_id_o != col_sample_id:  # construct <condition>-<block> ID?
         metadata.loc[:, col_sample_id] = metadata[
-            col_condition].apply(
-                lambda x: x.capitalize()) + "-" + metadata[col_sample_id_o]
+            col_condition].apply(lambda x: x.capitalize() if (
+                capitalize_sample is True) else x) + "-" + metadata[
+                    col_sample_id_o]  # combine condition & sample/block ID
     metadata = metadata.set_index(col_sample_id)
 
     # Find File Paths
