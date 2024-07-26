@@ -18,8 +18,6 @@ from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
                          subset_spatial, xenium_explorer_selection,
                          SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
 
-from .constants import CONSTANTS_PANELS
-
 __all__ = [
     "create_object", "create_object_multi", "get_layer_dict", "process_data",
     "check_normalization", "z_normalize_by_reference",
@@ -31,5 +29,5 @@ __all__ = [
     "create_spot_grid", "impute_spatial", "_get_control_probe_names",
     "construct_file", "construct_obs_spatial_imputation",
     "subset_spatial", "xenium_explorer_selection",
-    "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP", "CONSTANTS_PANELS"
+    "SPATIAL_KEY", "SPATIAL_IMAGE_KEY_SEP"
 ]

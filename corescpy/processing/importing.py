@@ -14,11 +14,6 @@ import scanpy as sc
 import pandas as pd
 import numpy as np
 import corescpy as cr
-# from cr.pp.constants import (
-#     COL_SAMPLE_ID_O, COL_SAMPLE_ID, COL_SUBJECT, COL_INFLAMED, COL_STRICTURE,
-#     COL_CONDITION, COL_FFF, COL_TANGRAM, COL_SEGMENT, COL_SLIDE,
-#     KEY_INFLAMED, KEY_UNINFLAMED, KEY_STRICTURE)
-from .constants import CONSTANTS_PANELS
 
 FILE_STRUCTURE = ["matrix", "cells", "genes"]
 DEF_FILE_P = "crispr_analysis/protospacer_calls_per_cell.csv"
@@ -302,7 +297,7 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
                      run=None, samples=None, capitalize_sample=True):
     """Retrieve Xenium metadata."""
     # Get Column & Key Names from Constants Script
-    constant_dict = {**CONSTANTS_PANELS[panel_id]}  # panel constants
+    constant_dict = {**cr.get_panel_constants(panel_id)}  # panel constants
     col_sample_id, col_sample_id_o, col_slide, col_condition, col_data_dir = [
         constant_dict[x] if (x in constant_dict) else None for x in [
             "col_sample_id", "col_sample_id_o", "col_slide",
@@ -312,9 +307,10 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     metadata = (pd.read_excel if os.path.splitext(file_metadata)[
         1] == ".xlsx" else pd.read_csv)(file_metadata, dtype={
             col_slide: str} if col_slide else None)  # read metadata
+    print(metadata)
     if col_sample_id_o != col_sample_id:  # construct <condition>-<block> ID?
         metadata.loc[:, col_sample_id] = metadata[
-            col_condition].apply(lambda x: x.capitalize() if (
+            col_condition].apply(lambda x: str(x).capitalize() if (
                 capitalize_sample is True) else x) + "-" + metadata[
                     col_sample_id_o].astype(str)  # combine condition & block
     metadata = metadata.set_index(col_sample_id)
@@ -326,8 +322,17 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     samps = np.array([i.split("__")[2].split("-")[0] for i in fff])
     for x in metadata[col_sample_id_o]:
         if col_data_dir is not None and col_data_dir in metadata.columns:
+            if "outputs" not in directory and os.path.exists(
+                    os.path.join(directory, "outputs")):
+                direc = os.path.join(directory, "outputs")
+            else:
+                direc = directory
             m_f = metadata[metadata[col_sample_id_o] == x][col_data_dir].iloc[
                 0]  # ...to find manually-defined unconventionally-named files
+            m_f = None if pd.isnull(m_f) else m_f if os.path.isdir(
+                m_f) else os.path.join(direc, m_f) if (os.path.isdir(
+                    os.path.join(direc, m_f))) else None
+            # in case relative path or other description
         else:
             m_f = np.nan
         locx = np.where(samps == x)[0] if pd.isnull(
@@ -339,6 +344,7 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     if samples not in ["all", None]:  # subset by sample ID?
         if isinstance(samples, str):
             samples = [samples]
+        print(metadata[col_sample_id_o])
         if samples[0] in metadata[col_sample_id_o].to_list():
             metadata = metadata.reset_index().set_index(col_sample_id_o).loc[
                 samples].reset_index().set_index(col_sample_id)
