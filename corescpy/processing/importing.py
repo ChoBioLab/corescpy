@@ -307,7 +307,6 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     metadata = (pd.read_excel if os.path.splitext(file_metadata)[
         1] == ".xlsx" else pd.read_csv)(file_metadata, dtype={
             col_slide: str} if col_slide else None)  # read metadata
-    print(metadata)
     if col_sample_id_o != col_sample_id:  # construct <condition>-<block> ID?
         metadata.loc[:, col_sample_id] = metadata[
             col_condition].apply(lambda x: str(x).capitalize() if (
@@ -344,7 +343,6 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     if samples not in ["all", None]:  # subset by sample ID?
         if isinstance(samples, str):
             samples = [samples]
-        print(metadata[col_sample_id_o])
         if samples[0] in metadata[col_sample_id_o].to_list():
             metadata = metadata.reset_index().set_index(col_sample_id_o).loc[
                 samples].reset_index().set_index(col_sample_id)
