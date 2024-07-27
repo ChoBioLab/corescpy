@@ -278,6 +278,7 @@ class Spatial(cr.Omics):
             sdata_crop = spatialdata.bounding_box_query(
                 self.adata, min_coordinate=minc,
                 max_coordinate=maxc, **{**kws_def, **kwargs})
+        sc.pp.calculate_qc_metrics(sdata_crop.table, percent_top=None)
         return sdata_crop
 
     def add_image(self, file, name=None, file_align=None, dim="2d"):
