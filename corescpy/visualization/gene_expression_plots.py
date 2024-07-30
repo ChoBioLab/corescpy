@@ -42,7 +42,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
     if isinstance(kind, str):
         kind = ["dot", "heat", "violin"] if kind == "all" else [kind.lower()]
     kind = [x.lower() for x in kind]
-    names_layers = cr.pp.get_layer_dict()
+    names_layers = cr.get_layer_dict()
     kws_heat, kws_violin, kws_matrix, kws_dot = [
         x if x else {} for x in [kws_heat, kws_violin, kws_matrix, kws_dot]]
     kws_heat = {**{"dendrogram": True, "show_gene_labels": True}, **kws_heat}

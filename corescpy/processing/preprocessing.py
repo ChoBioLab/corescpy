@@ -34,20 +34,6 @@ REGRESS_OUT_VARS = None  # default variables to regress out
 #                    gene_filter_ncounts=None)  # can call using 1 arguments
 
 
-def get_layer_dict():
-    """Retrieve layer name conventions."""
-    lays = {"preprocessing": "preprocessing",
-            "perturbation": "X_pert",
-            "unnormalized": "unnormalized",
-            "norm_total_counts": "norm_total_counts",
-            "log1p": "log1p",
-            "unscaled": "unscaled",
-            "scaled": "scaled",
-            "unregressed": "unregressed",
-            "counts": "counts"}
-    return lays
-
-
 def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
                         kws_cluster=None, kws_harmony=True, **kwargs):
     """Create objects, then preprocess, cluster, & integrate them."""
@@ -227,7 +213,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         cr.tl.print_counts(adata, title="Post-gRNA Processing", group_by=cct)
 
     # Initial Counts Layer (If Not Present)
-    layers = cr.pp.get_layer_dict()  # standard layer names
+    layers = cr.get_layer_dict()  # standard layer names
     rna = adata.table if isinstance(adata, spatialdata.SpatialData
                                     ) else adata[assay] if assay else adata
     if layers["counts"] not in rna.layers:
@@ -345,7 +331,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     """
     # Setup Object
     figs = {}
-    layers = cr.pp.get_layer_dict()  # layer names
+    layers = cr.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
     print(ann)
     if layers["counts"] not in ann.layers:
@@ -548,7 +534,7 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     if layer is None:
-        layer = cr.pp.get_layer_dict()["counts"]  # raw counts layer
+        layer = cr.get_layer_dict()["counts"]  # raw counts layer
     if layer is not None:
         adata.X = adata.layers[layer].copy()  # reset to raw counts
     if layer:
@@ -571,7 +557,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer="counts"):
     figs = {}
     if layer is not None:
         adata.X = adata.layers[layer if (
-            layer in adata.layers) else cr.pp.get_layer_dict()[layer]].copy()
+            layer in adata.layers) else cr.get_layer_dict()[layer]].copy()
     if patterns is None:
         patterns = [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
             "^HB[^(P)]", "^hb[^(p)]")]  # pattern matching for gene symbols

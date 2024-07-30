@@ -36,16 +36,15 @@ from spatialdata.models import TableModel
 from spatialdata_plot.pp import PreprocessingAccessor
 import pandas as pd
 import numpy as np
-# from corescpy.visualization import plot_integration_spatial
+from corescpy.visualization import plot_integration_spatial
 # from corescpy.utils import merge
-import corescpy as cr
+# import corescpy as cr
 
 # Define constant.
 # z-slices are 3 microns apart
 Z_SLICE_MICRON = 3
-SPATIAL_KEY = "spatial"
-SPATIAL_IMAGE_KEY_SEP = "___"
 STORE_UNS_SQUIDPY = True  # for back-compatibility with Squidpy
+SPATIAL_IMAGE_KEY_SEP = "___"
 # store images from SpatialData object in SpatialData.table.uns (AnnData.uns)
 
 
@@ -119,7 +118,8 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
     return adata
 
 
-def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
+def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
+                       spatial_key="spatial"):
     """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
     imgs = {}
     if "images" in dir(adata):
@@ -137,12 +137,12 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
         # if col_sample_id in adata.table.obs:
         #     rna = adata.table[adata.table.obs[col_sample_id] == library_id]
         rna = adata.table if "table" in dir(adata) else adata
-        rna.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-        # rna.uns[SPATIAL_KEY]["library_id"] = library_id
+        rna.uns[spatial_key] = {library_id: {"images": imgs}}
+        # rna.uns[spatial_key]["library_id"] = library_id
         return rna
     else:
-        adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-        # adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
+        adata.table.uns[spatial_key] = {library_id: {"images": imgs}}
+        # adata.table.uns[spatial_key]["library_id"] = library_id
         if col_sample_id not in adata.table.obs:
             adata.table.obs.loc[:, col_sample_id] = library_id
         return adata
@@ -422,7 +422,7 @@ def impute_spatial(adata_sp, adata_sc, col_cell_type,
     # Plot
     if plot is True:  # plotting
         try:
-            figs = cr.pp.plot_integration_spatial(
+            figs = plot_integration_spatial(
                 adata_sp, adata_sp_new, adata_sc=None,
                 col_cell_type=[col_cell_type, col_cell_type_sp],
                 col_annotation=col_annotation, plot_density=plot_density,

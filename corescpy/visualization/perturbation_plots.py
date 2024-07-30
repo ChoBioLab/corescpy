@@ -1,6 +1,5 @@
 # from scanpy.plotting import _utils
 import seaborn as sns
-import corescpy as cr
 import scanpy as sc
 import pertpy as pt
 import matplotlib.pyplot as plt
@@ -10,6 +9,7 @@ import warnings
 import functools
 import pandas as pd
 import numpy as np
+from .basic_plots import square_grid
 
 
 def plot_targeting_efficiency(adata, key_control="NT", key_nonperturbed="NP",
@@ -54,7 +54,7 @@ def plot_targeting_efficiency(adata, key_control="NT", key_nonperturbed="NP",
     all_cells_pct["guide_number"] = guide_split + all_cells_pct[
         "guide_number"]
     np_ko_cells = all_cells_pct[all_cells_pct["Gene"] != key_control]
-    _, cols = cr.pl.square_grid(len(np_ko_cells["Gene"].unique()))
+    _, cols = square_grid(len(np_ko_cells["Gene"].unique()))
     p_1 = sns.catplot(data=np_ko_cells, x="mixscape_class_global", y="value",
                       col="Gene", col_wrap=cols, kind="bar",
                       hue="mixscape_class_global", **kwargs)
@@ -141,7 +141,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
                           f"{protein_of_interest}!")
     if col_guide_rna is not None:
         try:
-            figs["targeting_efficiency"] = cr.pl.plot_targeting_efficiency(
+            figs["targeting_efficiency"] = plot_targeting_efficiency(
                 adata, col_guide_rna=col_guide_rna, key_control=key_control,
                 key_treatment=key_treatment, key_nonperturbed=key_nonperturbed,
                 guide_split=guide_split, feature_split=feature_split,
@@ -162,7 +162,7 @@ def plot_mixscape(adata, col_target_genes, key_treatment, key_control="NT",
         figs["perturbation_clusters"] = err
         warnings.warn(f"{err}\n\nPerturbation cluster plot failed!")
     if ncol is None:
-        nrow, ncol = cr.pl.square_grid(len(target_gene_idents))
+        nrow, ncol = square_grid(len(target_gene_idents))
     else:
         nrow = int(np.ceil(len(target_gene_idents) / ncol))
     if figsize is None:
@@ -209,7 +209,7 @@ def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, layer=None,
         if "ncols" in kwargs:
             ccc = kwargs["n_cols"]
         else:
-            ccc = cr.pl.square_grid(int(1 if isinstance(
+            ccc = square_grid(int(1 if isinstance(
                 col_condition, str) else 2) + len(ifn_pathways))[1]
         cond = list([col_condition] if isinstance(
             col_condition, str) else col_condition) + list(ifn_pathways)

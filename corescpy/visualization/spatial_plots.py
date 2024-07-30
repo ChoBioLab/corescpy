@@ -14,10 +14,10 @@ import scanpy as sc
 import squidpy as sq
 import spatialdata
 import tangram as tg
-import pandas as pd
+# import pandas as pd
 import numpy as np
-from corescpy.processing import (SPATIAL_KEY,
-                                 construct_obs_spatial_imputation)
+# from corescpy import SPATIAL_KEY
+# from corescpy.processing import (construct_obs_spatial_imputation)
 from corescpy.utils import merge
 from corescpy.visualization import plot_gex
 
@@ -41,7 +41,7 @@ def plot_tiff(file_tiff, levels=None, size=16, kind=None):
 
 
 def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
-                 spatial_key=SPATIAL_KEY, key_image=None,
+                 spatial_key="spatial", key_image=None,
                  library_id=None, col_sample_id=None,
                  wspace=0.1, shape=None, cmap=None,
                  title=None, title_offset=0, **kwargs):
@@ -120,18 +120,18 @@ def plot_integration_spatial(adata_sp, adata_sp_new=None, adata_sc=None,
             figs["clusters"] = plt.gcf()
         except Exception:
             figs["clusters"] = tb.format_exc()
-        if plot_density is True:
-            print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
-            try:  # plot integration-inferred spatial cell types
-                tmp, dfp, _ = construct_obs_spatial_imputation(
-                    adata_sp.copy(), adata_sc.copy(), col_cell_type,
-                    perc=perc)  # spatial AnnData + cell type density
-                figs["spatial_density"] = plot_spatial(
-                    tmp, color=list(pd.unique(adata_sc.obs[
-                        col_cell_type])), cmap=cmap)  # cell types plot
-            except Exception:
-                figs["spatial_density"] = tb.format_exc()
-                print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
+        # if plot_density is True:
+        #     print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
+        #     try:  # plot integration-inferred spatial cell types
+        #         tmp, dfp, _ = construct_obs_spatial_imputation(
+        #             adata_sp.copy(), adata_sc.copy(), col_cell_type,
+        #             perc=perc)  # spatial AnnData + cell type density
+        #         figs["spatial_density"] = plot_spatial(
+        #             tmp, color=list(pd.unique(adata_sc.obs[
+        #                 col_cell_type])), cmap=cmap)  # cell types plot
+        #     except Exception:
+        #         figs["spatial_density"] = tb.format_exc()
+        #         print(tb.format_exc(), "\n\n", "UMAP/spatial plots failed!")
     if ad_map is not None:  # plot training scores
         tg.plot_training_scores(ad_map, bins=20, alpha=0.5)  # train score
         figs["scores_training"] = plt.gcf()

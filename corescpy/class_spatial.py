@@ -88,7 +88,7 @@ class Spatial(cr.Omics):
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
                          library_id=library_id, visium=visium,
                          verbose=False, **kwargs)
-        self._spatial_key = cr.pp.SPATIAL_KEY
+        self._spatial_key = cr.SPATIAL_KEY
         self._kind = "xenium" if visium is False else "visium"
         if library_id is None and visium is True:
             library_id = list(self.rna.uns[self._spatial_key].keys())
@@ -131,11 +131,13 @@ class Spatial(cr.Omics):
             print("\n\n<<< RESTORING MULTI-SAMPLE FROM h5ad >>>\n")
             for s in self.rna.obs[csid].unique():
                 self.rna[self.rna.obs[csid] == s] = cr.pp.update_spatial_uns(
-                    self.adata, self._library_id, csid, rna_only=True)
+                    self.adata, self._library_id, csid, rna_only=True,
+                    spatial_key=self._key_spatial)
         elif isinstance(self.adata, spatialdata.SpatialData):  # single-sample
             print("\n\n<<< RESTORING SINGLE-SAMPLE FROM h5ad >>>\n")
             self.rna = cr.pp.update_spatial_uns(
-                self.adata, self._library_id, csid, rna_only=True)
+                self.adata, self._library_id, csid, rna_only=True,
+                spatial_key=self._key_spatial)
         else:  # if not SpatialData object
             print("\n\n<<< RESTORED FROM h5ad >>>\n")
         if original_ix is not None and ("original_ix" not in self.rna.uns or (
@@ -270,6 +272,11 @@ class Spatial(cr.Omics):
                 # needed for now b/c issue if any nuclei radius = NA
                 # github.com/scverse/spatialdata-io/
                 # issues/173#issuecomment-2231152498
+            else:
+                i_x = sdata_crop.table.obs["cell_id"].copy()
+                del sdata_crop.table
+                sdata_crop.table = self.rna[self.rna.obs["cell_id"].isin(i_x[
+                    i_x.isin(self.rna.obs["cell_id"])])]
         else:  # specified coordinates
             minc, maxc = [[x[i] for x in [bounds_x, bounds_y, bounds_z] if (
                 x is not None)] for i in [0, 1]]

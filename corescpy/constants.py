@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=no-member
 """
-Constants
+Constants.
 
 @author: E. N. Aslinger
 """
@@ -44,3 +44,17 @@ def get_panel_constants(panel_id=None):
     if panel_id is not None:
         cons = cons[panel_id]
     return cons
+
+
+def get_layer_dict():
+    """Retrieve layer name conventions."""
+    lays = {"preprocessing": "preprocessing",
+            "perturbation": "X_pert",
+            "unnormalized": "unnormalized",
+            "norm_total_counts": "norm_total_counts",
+            "log1p": "log1p",
+            "unscaled": "unscaled",
+            "scaled": "scaled",
+            "unregressed": "unregressed",
+            "counts": "counts"}
+    return lays

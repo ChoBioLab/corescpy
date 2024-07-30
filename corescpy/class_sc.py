@@ -127,8 +127,7 @@ class Omics(object):
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
-        self._layers = {**cr.pp.get_layer_dict(),
-                        "layer_perturbation": "X_pert"}
+        self._layers = {**cr.get_layer_dict(), "layer_perturbation": "X_pert"}
         self._integrated = kws_multi is not None
 
         # Create Attributes to Store Results/Figures/Methods
