@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 import pertpy as pt
 # import blitzgsea as blitz
 import liana
-import decoupler
 import spatialdata
 import muon
 import anndata
@@ -1149,12 +1148,13 @@ class Omics(object):
             lr_dea_res=res["lr_dea_res"], top_n=top_n, swap_axes=swap_axes,
             key_sources=key_sources, key_targets=key_targets, **kwargs)  # p
         if res["dea_df"] is not None:
+            from decoupler import plot_volcano_df  # noqa: E402
             dea = res["dea_df"].reset_index()
             p_dims = cr.pl.square_grid(len(dea))
             fig, axs = plt.subplots(p_dims[0], p_dims[1], figsize=figsize_dea)
             for i, x in enumerate(dea[cct].unique()):
                 try:
-                    decoupler.plot_volcano_df(
+                    plot_volcano_df(
                         dea[dea[cct] == x], x="log2FoldChange", y="padj",
                         **kws_dea, ax=axs.ravel()[i])  # plot
                     axs.ravel()[i].set_title(x)

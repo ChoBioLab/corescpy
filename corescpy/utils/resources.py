@@ -1,4 +1,3 @@
-import decoupler as dc
 import requests
 import pandas as pd
 import numpy as np
@@ -7,6 +6,7 @@ import numpy as np
 def get_markers_database(resource="PanglaoDB", organism="human",
                          canonical_only=True, **kwargs):
     """Get database of cell type marker genes."""
+    import decoupler as dc  # noqa: E402
     try:
         markers = dc.get_resource("PanglaoDB", organism, **kwargs)
     except Exception:

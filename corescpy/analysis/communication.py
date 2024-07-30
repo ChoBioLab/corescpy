@@ -2,7 +2,6 @@ import traceback
 import squidpy as sq
 import liana
 from liana.method import cellphonedb
-import decoupler as dc
 import omnipath
 # import corneto
 # import stlearn as st
@@ -119,6 +118,7 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
                            max_penalty=1, min_penalty=0.01, edge_penalty=0.01,
                            max_seconds=60*3, solver="scipy", verbose=False):
     """Analyze causal network (adapted from Liana tutorial)."""
+    import decoupler as dc  # noqa: E402
     if layer is not None:
         adata.X = adata.layers[layer].copy()
     if col_gene_symbols is None:

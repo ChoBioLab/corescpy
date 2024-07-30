@@ -10,7 +10,6 @@ Analyzing CRISPR experiment data.
 import pertpy as pt
 import scanpy as sc
 from warnings import warn
-import decoupler
 from pydeseq2.dds import DeseqDataSet
 from pydeseq2.ds import DeseqStats
 import traceback
@@ -518,6 +517,9 @@ def perform_gsea(pdata, adata_sc=None,
     >>>                    geneset_size_range=[15, 500],
     >>>                    filter_by_highly_variable=False)
     """
+    import decoupler  # noqa: E402
+
+    # Pseudo-Bulk
     figs, gsea_results_cell = {}, None
     if adata_sc is not None and pdata is None:  # if needed, create pseudobulk
         pdata = cr.tl.create_pseudobulk(
@@ -661,6 +663,8 @@ def perform_pathway_interference(adata, layer=None, n_top=500, copy=True,
                                  col_cell_type="louvain", pathways=True,
                                  **kwargs):
     """Perform Pathway Interference Analysis."""
+    import decoupler  # noqa: E402
+
     if copy is True:
         adata = adata.copy()
     if layer:
@@ -691,6 +695,8 @@ def perform_dea(adata, col_cell_type, col_covariates, layer=None,
     Perform functional analysis of pseudobulk data
     (created by this method), then differential expression analysis.
     """
+    import decoupler  # noqa: E402
+
     adata = adata.copy()
     if isinstance(col_covariates, str):
         col_covariates = [col_covariates]
@@ -729,6 +735,8 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition, key_control,
 
     Extra keyword arguments are passed to DeseqDataset.
     """
+    import decoupler  # noqa: E402
+
     dea, quiet, figsize = {}, True, kwargs.pop("figsize", (20, 20))
     filt_c, filt_i = [kwargs.pop(x, True) for x in [
         "cooks_filter", "independent_filter"]]  # DESeqStats filter arguments
@@ -747,8 +755,8 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition, key_control,
         # Set Up Pseudo-Bulk Data
         psub = pdata[pdata.obs[col_cell_type] == t].copy()  # subset c type t
         # genes = decoupler.filter_by_expr(  # edgeR-based filtering function
-        #     psub, group=col_condition, min_count=min_count, min_prop=min_prop,
-        #     min_total_count=min_total_count)  # genes with enough counts/reads
+        #     psub, group=col_condition, min_count=min_count,
+        #     min_prop=min_prop, min_total_count=min_total_count)
         # psub = psub[:, genes].copy()  # filter data ~ those genes
 
         # Skip Cell Type if Not Enough Data or Doesn't Contain Both Conditions

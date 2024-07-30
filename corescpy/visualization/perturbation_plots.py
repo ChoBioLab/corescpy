@@ -3,9 +3,9 @@ import seaborn as sns
 import corescpy as cr
 import scanpy as sc
 import pertpy as pt
-import decoupler
 import matplotlib.pyplot as plt
-from scipy.cluster.hierarchy import linkage, dendrogram
+# from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.cluster.hierarchy import dendrogram
 import warnings
 import functools
 import pandas as pd
@@ -199,7 +199,7 @@ def plot_gsea_results(adata, gsea_results, p_threshold=0.0001, layer=None,
     #     axes[i].set_title(q)
     #     sns.heatmap(gsea_results, x=q, y="source",
     #                 vmin=-1, vmax=1, ax=axes[i],
-    #                 cmap=["coolwarm", "coolwarm", "viridis_r"][i])  # heatmaps
+    #                 cmap=["coolwarm", "coolwarm", "viridis_r"][i])  # heatmap
 
     # Cell-Level
     if ifn_pathways not in [None, False]:
@@ -223,6 +223,7 @@ def plot_pathway_interference_results(adata, pathway, col_cell_type=None,
                                       standard_scale="var",
                                       cmap="coolwarm", vcenter=0):
     """Plot results from cr.ax.perform_pathway_interference()."""
+    import decoupler  # noqa: E402
     figs = {}
     if col_cell_type not in adata.obs:
         warnings.warn(f"{col_cell_type} not in `.obs`. Skipping violin plot.")
@@ -285,8 +286,8 @@ def plot_distance(res_pairwise_genes=None, res_pairwise_clusters=None,
                     data=tab[tab.index != ref], x=f"pvalue{suff}" + str(),
                     y="distance", hue=f"significant{suff}", palette=palette)
             plt.title(f"{distance_type} Distance: Contrast Results ({x})")
-            plt.xlabel(f"P" + str(" Adjusted" if p_adjust is True else ""))
-            plt.ylabel(f"Distance to Contrast Group")
+            plt.xlabel("P" + str(" Adjusted" if p_adjust is True else ""))
+            plt.ylabel("Distance to Contrast Group")
             figs[f"contrast_{distance_type}_{x}"] = plt.gcf()
             plt.show()
     return figs
