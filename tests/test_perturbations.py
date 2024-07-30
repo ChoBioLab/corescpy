@@ -1,7 +1,7 @@
-import corescpy as cr
 import scipy
 import pertpy as pt
 import numpy as np
+import corescpy as cr
 
 
 class TestCiteSeq:
@@ -26,10 +26,11 @@ class TestCiteSeq:
     _ = self.preprocess()
     _ = self.cluster()
 
-    def test_celltypist():
+    def test_celltypist(self):
+        """Test CellTypist."""
         _ = TestCiteSeq.self.annotate_clusters("Immune_All_Low.pkl")
 
-    def test_guide_assign(tol=2):
+    def test_guide_assign(self, tol=2):
         """See if guide assignment roughly matches author's."""
         guides = TestCiteSeq.self.rna.obs[[TestCiteSeq.self._columns[
             "col_condition"], "gene_target"]].copy()
@@ -55,8 +56,9 @@ class TestCiteSeq:
 
 class TestAdamson:
     """Adamson 2016 dataset."""
+    key_control_patterns = ["CTRL"]
     kws_pga = dict(feature_split=None, guide_split="_",
-                   key_control_patterns=["CTRL"],
+                   key_control_patterns=key_control_patterns,
                    remove_multi_transfected=True)
     kwargs = dict(col_gene_symbols="gene_symbol", col_cell_type="leiden",
                   col_sample_id=None, col_batch=None, col_subject=None,
@@ -65,5 +67,7 @@ class TestAdamson:
                   key_control="Control", key_treatment="KO",
                   kws_process_guide_rna=kws_pga)
     adata = pt.dt.adamson_2016_upr_perturb_seq()
-    adata.obs[adata.obs.perturbation == "*", "perturbation"] = "CTRL"
+    adata.obs.loc[:, "perturbation"].astype(str, copy=False)
+    adata.obs.loc[:, "perturbation"] = adata.obs["perturbation"].astype(
+        str).replace({"*", key_control_patterns[0]})
     self = cr.Crispr(adata, **kwargs)

@@ -1,7 +1,19 @@
-from corescpy.processing import get_layer_dict
-import decoupler as dc
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=broad-exception-caught
+"""
+Data manipulation utilities.
+
+@author: E. N. Aslinger
+"""
+
+import tifffile as tf
+import cv2
+import os
 import scanpy as sc
 import pandas as pd
+import numpy as np
+from corescpy.processing import get_layer_dict
 
 layers = get_layer_dict()
 
@@ -10,6 +22,7 @@ def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
                       layer=layers["counts"], mode="sum",
                       kws_process=True, **kwargs):
     """Get pseudo-bulk of scRNA-seq data."""
+    import decoupler as dc  # noqa: E402
     if kws_process is True:
         kws_process = dict(target_sum=1e6, max_value=10, n_comps=10)
     if layer and layer not in adata.layers:
@@ -44,62 +57,105 @@ def create_condition_combo(adata, col_condition, col_label_new=None, sep="_"):
     return adata
 
 
-rfx_convert = r"""
+def merge_pca_subset(adata, adata_subset,
+                     key_added="X_pca", retain_cols=True):
+    """Merge gene-subsetted AnnData on which PCA was run into full."""
+    ann = adata.copy()
+    ixs = np.array(pd.Series(ann.var.index.values).isin(list(
+        adata_subset.var.index.values)))
+    n_comps = adata_subset.varm["PCs"].shape[1]
+    ann.uns["pca"] = adata_subset.uns["pca"]
+    ann.obsm[key_added] = adata_subset.obsm[key_added]
+    for i in adata_subset.varm:
+        ann.varm["PCs"] = np.zeros(shape=(ann.n_vars, n_comps))
+        ann.varm["PCs"][ixs] = adata_subset.varm["PCs"]
+    if retain_cols is True:
+        ann.obs = ann.obs.join(adata_subset.obs, lsuffix="_pre_pca_subset")
+    else:
+        ann.obs = ann.obs.drop(list(ann.obs.columns.intersection(
+            adata_subset.obs.columns)), axis=1).join(adata_subset.obs)
+    return ann
+
+
+def write_ome_tif(file_path, file_out=None, bf_cmd="bfconvert",
+                  # bf_cmd="./bftools/bfconvert",
+                  subresolutions=7, pixelsize=0.2125,
+                  tile_size=1024, compression="JPEG-2000", pyramid_scale=2):
+    """Write .tif file to .ome.tif (modified from 10x functions)."""
+    if file_out is None:
+        file_out = f"{os.path.splitext(file_path)[0]}.ome.tif"
+    if os.path.splitext(file_path)[1] == ".ndpi":  # NDPI -> TIFF if needed
+        fff, ffn = [os.path.splitext(x)[0] for x in [file_path, file_out]]
+        print(f"\n\nConverting\n{fff}.ndpi\nto\n{ffn}.tiff")
+        print("\n*** Converting to intermediary TIFF file")
+        if tile_size is not None:
+            tile_x, tile_y = [tile_size, tile_size] if isinstance(
+                tile_size, (int, float)) else tile_size
+            bf_cmd += f" -tilex {tile_x} -tiley {tile_y}"
+        if compression is not None:
+            bf_cmd += f" -compression {compression}"
+        if pyramid_scale is not None:
+            bf_cmd += f" -pyramid-scale {pyramid_scale}"
+        os.system(f"{bf_cmd} -bigtiff -series 0 {fff}.ndpi {ffn}.tiff")
+        file_path, file_out = ffn + ".tiff", ffn + ".ome.tif"
+    image = tf.imread(file_path)
+    if len(image.shape) > 2 and image.shape[2] > image.shape[0]:
+        image = np.transpose(image, (1, 2, 0))
+    with tf.TiffWriter(file_out, bigtiff=True) as tif:
+        metadata = {
+            "SignificantBits": 8,
+            "PhysicalSizeX": pixelsize,
+            "PhysicalSizeXUnit": "µm",
+            "PhysicalSizeY": pixelsize,
+            "PhysicalSizeYUnit": "µm",
+            # "Channel": {"Name": ["newname1", "newname2", "newname3"]}
+            # # Use this line to edit channel names for multi-channel images
+        }
+        kwargs = dict(
+            photometric="minisblack",
+            tile=(1024, 1024),
+            compression="jpeg2000",
+            resolutionunit="CENTIMETER"
+        )
+        tif.write(
+            np.moveaxis(image, -1, 0),
+            subifds=subresolutions,
+            resolution=(1e4 / pixelsize, 1e4 / pixelsize),
+            metadata=metadata,
+            **kwargs
+        )
+
+        scale = 1
+        for i in range(subresolutions):
+            scale /= 2
+            width = int(np.floor(image.shape[1] * scale))
+            height = int(np.floor(image.shape[0] * scale))
+            downsample = cv2.resize(image, (width, height),
+                                    interpolation=cv2.INTER_AREA)
+            tif.write(
+                np.moveaxis(downsample, -1, 0),
+                subfiletype=1,
+                resolution=(1e4 / scale / pixelsize, 1e4 / scale / pixelsize),
+                **kwargs
+            )
+
+
+RFX_CONVERT = r"""
 require(Seurat)
 require(zellkonverter)
 
-extract_layers <- function(seu, assay = NULL, layers = NULL) {
-    layers_x <- list()
-    for (x in assay) {
-        lays <- ifelse(is.null(layers), slotNames(seu@assays[[x]]), intersect(
-            layers, slotNames(seu@assays[[x]])))  # all possible layers
-        lays <- sapply(lays, function(
-            u) ifelse(dim(seu@assays[[x]][u])[1] > 0, u, NA))  # non-empty
-        lays <- lays[!is.na(lays)]  # names of *available* layers
-        if (length(lays) == 0) next  # skip if no available layers
-        layers_x[[x]] <- lapply(lays, function(i) seu@assays[[x]][i])  # .Xs
-    }
-    return(layers_x)
-}
-
-convert <- function(file, file_new = NULL, assay = NULL, overwrite = FALSE,
-                    write_metadata = FALSE, layers = NULL) {
-    if (is.null(file_new)) {
-        file_new <- gsub(".RDS", "_converted.h5ad", file)
-        if (file.exists(file_new) && !overwrite) {
-            stop(paste0("Out file ", file_new, " exists; overwrite=F."))
-        } else {
-            cat(paste0("Output path not provided; setting as ", file_new))
-        }
-    }
-    cat(paste0("\n\n<<< READING DATA >>>\n", file))
-    seu <- readRDS(file)  # read RDS into Seurat object
-    print(str(seu, 3))  # print object structure (3 levels deep)
+convert <- function(file, file_new = NULL, assay = NULL) {
     if (is.null(assay)) {
         assay <- names(seu@assays)  # all assays if not set
     }
-    cat("\n\n<<< CONVERTING DATA TO SINGLE CELL OBJECT >>>")
+    seu <- readRDS(file)  # read RDS into Seurat object
+    print(str(seu, 3))  # print object structure (3 levels deep)
     sce <- Seurat::as.SingleCellExperiment(seu, assay = assay)  # convert
     print(sce)
     if (!identical(file_new, FALSE)) {  # if "file_new" is False; don't write
         cat(paste0("\n\n<<< READING DATA >>>\n", file_new))
         zellkonverter::writeH5AD(sce, file_new)  # write .h5ad
     }
-    layers_x <- extract_layers(seu, assays, layers)
-    if (write_metadata) {  # write metadata about object for later checks
-        print("WRITING METADATA NOT YET SUPPORTED")
-        file_meta <- gsub(".RDS", "_converted_metadata.csv", file)
-        clusters <- ifelse("active.ident" %in% slotNames(seu),
-                           as.data.frame(seu@active.ident), NULL)
-        meta <- list(assays=names(seu@assays), uns=names(seu@reductions),
-                     var_names=rownames(seu@assays[[names(seu@assays)[1]]]),
-                     X=layers_x, clusters=clusters, obs=seu@meta.data)
-        if (file.exists(file_meta) && !overwrite) {
-            stop(paste0("Metadata file ", file_meta,
-                        "exists and overwrite is not allowed."))
-        }
-        # write.csv(meta, file = file_meta, row.names = FALSE)
-    }
-    return(list(seu, sce, meta))
+    return(sce)
 }
 """

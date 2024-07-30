@@ -11,10 +11,21 @@ from scipy.stats import median_abs_deviation
 import numpy as np
 
 
-def is_outlier(data, column, nmads: int):
-    """Determine outliers (from SC Best Practices)."""
+def is_outlier(data, column, nmads):
+    """Determine outliers [below, above median]."""
+    # From SC Best Practices
     metric = data[column]
-    outlier = (metric < np.median(metric) - nmads * median_abs_deviation(
-        metric)) | (np.median(metric) + nmads * median_abs_deviation(
-            metric) < metric)
-    return outlier
+    if isinstance(nmads, (int, float)):
+        nmads = [nmads, nmads]
+    mad = median_abs_deviation(metric)
+    thresh = [np.median(metric) - nmads[0] * mad if nmads[0] else None,
+              np.median(metric) + nmads[1] * mad if nmads[1] else None]
+    if nmads[0] is not None and nmads[1] is not None:
+        outlier = (metric < thresh[0]) | (thresh[1] < metric)
+    elif nmads[0] is None:  # not calculating based on a minimum
+        outlier = thresh[1] < metric
+    elif nmads[1] is None:  # not calculating based on a maximum
+        outlier = metric < thresh[0]
+    else:
+        raise ValueError("Can't have None for both `nmads` elements.")
+    return outlier, thresh  # y/n, threshold

@@ -23,11 +23,35 @@ with desired environment name):
 `git clone https://github.com/ChoBioLab/corescpy.git`, or
 look above for the green "Code" button and press it for instructions.
 
-5. Naviate to the repository directory (replace <DIRECTORY> with your path):
+5. Navigate to the repository directory (replace <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
 6. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
+
+7. If you have issues with resolving/finding the most up-to-date version of the `spatialdata` and/or `spatialdata-io` packages, try running:
+```
+pip install git+https://github.com/scverse/spatialdata
+pip install git+https://github.com/scverse/spatialdata-io
+```
+in your terminal while in your conda environment, then re-try step (6).
+
+8. If you're planning to use this environment with Jupyter notebooks, run `conda install nb_conda_kernels`, then `pip install ipykernel`.
+
+
+** Note: To use GPU resources, use `conda install -c rapidsai -c nvidia -c conda-forge cugraph cuml cudf` and install the gpu version of coreSCpy (which should `pip install scanpy[rapids]`).
+
+** Tip: If you run out of space, run:
+```
+pip cache purge
+conda clean -i
+conda clean -t
+```
+
+If you have issues seeing the environment when choosing the kernel for your Jupyter notebook:
+```
+conda install nb_conda_kernels
+```
 
 ## Usage
 
@@ -64,7 +88,7 @@ Here are the methods (applicable to scRNA-seq generally, not just perturbations)
 
 * `self.preprocess(...)`: Perform filtering, normalization, scaling, quality control analysis, selection for highly variable genes, regressing out confounds, and intial exploration of the data (e.g., cell counts, mitochondrial counts, etc.).
 * `self.cluster(...)`: Perform dimensionality reduction (e.g., PCA) and clustering (Louvain or Leiden), as well as related visualization.
-* `self.plot(...)`: Create additional basic plots (e.g., dot, matrix, and violin gene expression plots).
+* `self.plot(...)`: Create additional basic plots (e.g., dot, matrix, and violin gene expression plots). Use `self.plot_compare(...)` to make plots comparing gene expression across groups.
 
 The following perturbation-specific methods can be executed optionally and in any order:
 

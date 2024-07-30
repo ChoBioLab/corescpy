@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# pylint: disable=no-member
+# pylint: disable=broad-exception-caught
 """
 Preprocessing single-cell data.
 
@@ -8,25 +8,25 @@ Preprocessing single-cell data.
 """
 
 import os
+from warnings import warn
+import traceback
+from copy import deepcopy
+import matplotlib.pyplot as plt
+from scipy.sparse import csr_array
+# import anndata
+from anndata import AnnData
 import scanpy as sc
 import pertpy as pt
 import muon
-from warnings import warn
-import traceback
 import seaborn
 import spatialdata
-import matplotlib.pyplot as plt
-# import anndata
-from copy import deepcopy
-from anndata import AnnData
-import corescpy as cr
-from corescpy.class_sc import Omics
 import pandas as pd
 import numpy as np
+import corescpy as cr
 
 pd.DataFrame.iteritems = pd.DataFrame.items  # back-compatibility
-# regress_out_vars = ["total_counts", "pct_counts_mt"]
-regress_out_vars = None  # default variables to regress out
+# REGRESS_OUT_VARS = ["total_counts", "pct_counts_mt"]
+REGRESS_OUT_VARS = None  # default variables to regress out
 # pp_defaults = dict(cell_filter_pmt=[None, 30],
 #                    cell_filter_ncounts=None,
 #                    cell_filter_ngene=[200, None],
@@ -49,10 +49,12 @@ def get_layer_dict():
 
 
 def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
-                        kws_cluster=None, kws_harmony=True, n_jobs=1):
+                        kws_cluster=None, kws_harmony=True, **kwargs):
     """Create objects, then preprocess, cluster, & integrate them."""
     # Arguments
     ids = list(file_path.keys())
+    if kwargs:
+        print(f"\n\nUn-used Keyword Arguments: {kwargs}")
     [kws_init, kws_pp, kws_cluster] = [
         deepcopy(x) for x in [kws_init, kws_pp, kws_cluster]]
     [kws_init, kws_pp, kws_cluster] = [dict(zip(ids, x)) if isinstance(
@@ -68,7 +70,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
     # Create AnnData Objects
     # selves = dict(zip(ids, [cr.pp.read_spatial(
     #     file_path[f], **kws_init[f], library_id=f
-    #     ) if spatial is True else Omics(file_path[f], **kws_init[f]) if (
+    #     ) if spatial is True else cr.Omics(file_path[f], **kws_init[f]) if (
     #         "kws_process_guide_rna" not in kws_init) else cr.Crispr(
     #             file_path[f], **kws_init[f]) for f in file_path])
     #               )  # create individual objects
@@ -77,7 +79,7 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
             cr.pp.read_spatial(file_path[f], **kws_init[f], library_id=f),
             **kws_init[f], library_id=f) for f in file_path]))
     else:
-        selves = dict(zip(ids, [Omics(file_path[f], **kws_init[f]) if (
+        selves = dict(zip(ids, [cr.Omics(file_path[f], **kws_init[f]) if (
             "kws_process_guide_rna" not in kws_init) else cr.Crispr(
                 file_path[f], **kws_init[f]) for f in file_path]))
 
@@ -110,9 +112,12 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
     if kws_harmony is not None:
         print("\n<<< INTEGRATING WITH HARMONY >>>")
         # sc.tl.pca(adata)  # PCA
+        if kws_harmony is True:
+            kws_harmony = {}
         sc.external.pp.harmony_integrate(
             adata, col_id, basis="X_pca",
-            adjusted_basis="X_pca_harmony", **kws_harmony)  # harmony
+            adjusted_basis="X_pca_harmony", **kws_harmony)  # Harmony
+        adata.obsm["X_pca_original"] = adata.obsm["X_pca"]  # store old basis
         adata.obsm["X_pca"] = adata.obsm["X_pca_harmony"]  # assign new basis
         adata.uns["harmony"] = True
     return adata
@@ -126,31 +131,41 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     """
     # Load Object (or Copy if Already AnnData or MuData)
     csid = kwargs.pop("col_sample_id", None)
-
-
     if isinstance(file, (AnnData, spatialdata.SpatialData,
                          muon.MuData)):  # if already data object
         print("\n\n<<< LOADING OBJECT >>>")
         adata = file.copy() if "copy" in dir(file) else file
+        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
+            adata.table.uns["original_ix"] = adata.table.obs.index.values
+
     # Spatial Data
     elif spatial not in [None, False]:
         kwargs = {**dict(prefix=prefix, col_sample_id=csid,
                          col_gene_symbols=col_gene_symbols),
                   **kwargs}  # user-specified + variable keyword arguments
         adata = cr.pp.read_spatial(file_path=file, **kwargs)
+        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
+            adata.table.uns["original_ix"] = adata.table.obs.index.values
 
     # Non-Spatial Data
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
             file)[1] == ".h5mu":  # MuData
         print(f"\n\n<<< LOADING FILE {file} with muon.read() >>>")
         adata = muon.read(file)
+    elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
+            file)[1] == ".h5":  # MuData
+        print(f"\n\n<<< LOADING 10X FILE {file} >>>")
+        adata = sc.read_10x_h5(file, gex_only=gex_only)
     elif isinstance(file, dict):  # metadata in protospacer files
         print("\n\n<<< LOADING PROTOSPACER METADATA >>>")
         adata = cr.pp.combine_matrix_protospacer(
             **file, col_gene_symbols=col_gene_symbols, gex_only=gex_only,
             prefix=prefix, **kwargs)  # + metadata from protospacer
-    elif os.path.isdir(file):  # if directory, assume 10x format
+    elif os.path.isdir(file) or os.path.splitext(
+            file)[1] == ".mtx":  # if directory or MTX, assume 10x format
         print(f"\n\n<<< LOADING 10X FILE {file} >>>")
+        if os.path.splitext(file)[1] == ".mtx":
+            file = os.path.dirname(file)
         adata = sc.read_10x_mtx(
             file, var_names=col_gene_symbols, cache=True,
             gex_only=gex_only, prefix=prefix, **kwargs)  # read 10x
@@ -158,14 +173,14 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         print(f"\n\n<<< LOADING FILE {file} with sc.read() >>>")
         adata = sc.read(file)
 
-    # For CRISPR Data with gRNAA in Separate Assay of Muon Object
+    # For CRISPR Data with gRNA in Separate Assay of Muon Object
     if assay_gdo:
         print(f"\n\n<<< Joining {assay_gdo} (gRNA) & {assay} assay data >>>")
         kws_pmc = dict(assay=[assay, assay_gdo])
         for x in ["col_guide_rna", "col_num_umis", "feature_split",
                   "guide_split", "keep_extra_columns"]:
-            if (kws_process_guide_rna and x in kws_process_guide_rna
-                    ) or x in kwargs:
+            if (kws_process_guide_rna and x in kws_process_guide_rna) or (
+                    x in kwargs):
                 kws_pmc.update({x: kwargs[x] if (
                     x in kwargs) else kws_process_guide_rna[x]})
         adata = cr.pp.process_multimodal_crispr(adata, **kws_pmc)
@@ -211,7 +226,7 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
             kws_process_guide_rna) else None  # to group counts ~ cell type
         cr.tl.print_counts(adata, title="Post-gRNA Processing", group_by=cct)
 
-    # Layers & QC
+    # Initial Counts Layer (If Not Present)
     layers = cr.pp.get_layer_dict()  # standard layer names
     rna = adata.table if isinstance(adata, spatialdata.SpatialData
                                     ) else adata[assay] if assay else adata
@@ -223,16 +238,17 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         else:
             adata.layers[layers["counts"]] = adata.X.copy()
     # cr.pp.perform_qc(adata.copy(), hue=col_sample_id)  # plot QC
-    print("\n\n", adata)
+    # print("\n\n", adata)
     return adata
 
 
 def process_data(adata, col_gene_symbols=None, col_cell_type=None,
-                 outlier_mads=None, cell_filter_pmt=None,
+                 outlier_mads=None, cell_filter_pmt=None, method_norm="log",
                  cell_filter_ncounts=None, cell_filter_ngene=None,
                  gene_filter_ncell=None, gene_filter_ncounts=None,
                  remove_malat1=False, target_sum=1e4, kws_hvg=True,
-                 kws_scale=None, regress_out=regress_out_vars, **kwargs):
+                 kws_scale=None, regress_out=REGRESS_OUT_VARS,
+                 custom_thresholds=None, figsize=None, **kwargs):
     """
     Perform various data processing steps.
 
@@ -242,16 +258,25 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             index in `.var` containing gene symbols. Defaults to None.
         col_cell_type (str, optional): The name of the column
             in `.obs` containing cell types. Defaults to None.
+        method_norm (str, optional): The method to use for
+            normalization to be stored in the log1p layer
+            (even if another method is used, for consistency).
+            Users should leave as default "log" for most data.
+            The "sqrt" method is 10x-recommended for Xenium data.
+            Defaults to "log".
         target_sum (float, optional): Total-count normalize to
             <target_sum> reads per cell, allowing between-cell
             comparability of counts. If None, total count-normalization
             will not be performed. Defaults to 1e4.
-        outlier_mads (float or int or dict): To calculate outliers
-            based on MADs (see SC Best Practices). If a dictionary,
-            key based on names of columns added by QC. Filtering
-            will be performed based on outlier status rather than
-            other arguments to this function if not None.
-            Defaults to None.
+        outlier_mads (dict, optional): To calculate/filter by outliers
+            based on MADs (see SC Best Practices). Dictionary
+            keyed by names of columns added by QC, with items as
+            lists [minimum # MAD, maximum # of MADs]. Specify None
+            for either element in those lists to not have a minimum
+            or maximum (e.g., filter only based on maximum MT %).
+            Filtering will be performed based on outlier status first,
+            then manual filtering will be performed if other
+            relevant arguments are specified. Defaults to None.
         cell_filter_pmt (list, optional): The range of percentage of
             mitochondrial genes per cell allowed. Will filter out cells
             that have outside the range [minimum % mt, maximum % mt].
@@ -306,8 +331,12 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
             un-log-normalized data, then scaled and set to
             the scaled data. To avoid this behavior, pass "layer" in
             the dictionary to specify a layer to set before scaling.
-        regress_out (list or None, optional): The variables to
-            regress out. Defaults to regress_out_vars.
+        regress_out (list or None, optional): The variables to regress
+            out. Defaults to `pp.preprocessing.REGRESS_OUT_VARS`.
+        custom_thresholds (dict or None, optional): A dictionary, keyed
+            by column names on which to filter data (before all other
+            steps), with lists [minimum, maximum] as each item.
+        figsize (tuple or None, optional): Figure size.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -315,13 +344,14 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         figs (dict): A dictionary of generated figures.
     """
     # Setup Object
+    figs = {}
     layers = cr.pp.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
+    print(ann)
     if layers["counts"] not in ann.layers:
         if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(
                 f"Must have counts in `adata.layers['{layers['counts']}']`.")
-        # warn("\n\nASSUMING COUNTS IN `adata.X`! (No counts layer present.)")
         ann.layers[layers["counts"]] = ann.X.copy()  # store counts in layer
     else:
         ann.X = ann.layers[layers["counts"]]  # use counts layer
@@ -330,59 +360,59 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     ann.obs["log_counts"] = np.log(ann.obs["n_counts"])
     ann.obs["n_genes"] = (ann.X > 0).sum(1)
 
-    # Initial Information/Arguments
+    # Argument Processing
     if col_gene_symbols == ann.var.index.names[0]:  # if symbols=index...
         col_gene_symbols = None  # ...so functions will refer to index name
-    figs = {}
+    max_val, cen = [kws_scale.pop(x, None) for x in [
+        "max_value", "zero_center"]] if isinstance(
+            kws_scale, dict) else [0, True]  # extract scale keywords if need
     if isinstance(kws_scale, dict):  # if extracted all sc.pp.scale arguments
-        max_val, cen = [kws_scale.pop(x, None)
-                        for x in ["max_value", "zero_center"]]
         if any((i for i in [max_val, cen])) and len(
                 kws_scale) == 0:  # if extracted all regular-scale keywords
             kws_scale = True  # so doesn't think scaling by reference (CRISPR)
-    else:
-        max_val, cen = 0, 0
     kws_hvg = {} if kws_hvg is True else kws_hvg
     filter_hvgs = kws_hvg.pop("filter") if "filter" in kws_hvg else False
     n_top = kwargs.pop("n_top", 10)
     sids = [np.nan if f"col_{x}" not in kwargs else np.nan if kwargs[
         f"col_{x}"] is None else kwargs.pop(f"col_{x}") for x in [
             "sample_id", "subject", "batch"]]  # batch/sample/subject
-    sids = list(pd.Series(sids).dropna().unique())  # unique & not None
-    if len(sids) == 0:
-        sids = None
+    sids = list(pd.Series(sids).dropna().unique()) if pd.Series(sids).dropna(
+        ).any() else None  # unique & not None
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
+
+    # Filter by Custom Variables?
+    if custom_thresholds:  # filter on custom thresholds
+        for x in custom_thresholds:
+            dff = ann.obs[x] if x in ann.obs else ann.var[x]  # .obs or .var?
+            if custom_thresholds[x][0]:  # filter by minimum
+                ann = ann[dff >= custom_thresholds[x][0]]
+            if custom_thresholds[x][1]:  # filter by maximum
+                ann = ann[dff <= custom_thresholds[x][1]]
+
+    # Highly Expressed Genes
     try:
-        figs["highly_expressed_genes"] = sc.pl.highest_expr_genes(
-            adata, n_top=n_top, gene_symbols=col_gene_symbols)  # high GEX
+        figs["highly_expressed_genes"], axs = plt.subplots(figsize=figsize)
+        sc.pl.highest_expr_genes(
+            adata, ax=axs, n_top=n_top, gene_symbols=col_gene_symbols)
     except Exception as err:
         print(traceback.format_exc())
         warn(f"\n\n{'=' * 80}\n\nCouldn't plot highly expressed genes!")
         figs["highly_expressed_genes"] = err
 
-    # Set Up Layer & Variables
-    if outlier_mads is not None:  # if filtering based on calculating outliers
-        if isinstance(outlier_mads, (int, float)):  # same MADs, all metrics
-            qc_mets = ["log1p_total_counts", "log1p_n_genes_by_counts",
-                       "pct_counts_in_top_20_genes"]
-            outlier_mads = dict(zip(qc_mets, [outlier_mads] * len(qc_mets)))
-    cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
-
     # Exploration & QC Metrics
+    cr.tl.print_counts(ann, title="Initial", group_by=col_cell_type)
     print("\n<<< PERFORMING QUALITY CONTROL ANALYSIS>>>")
-    figs["qc_metrics"] = cr.pp.perform_qc(
-        ann, n_top=n_top, col_gene_symbols=col_gene_symbols,
-        hue=sids)  # QC metric calculation & plotting
+    figs["qc_metrics"] = cr.pp.perform_qc(ann, hue=sids)  # QC metrics & plots
 
     # Basic Filtering (DO FIRST...ALL INPLACE)
     print("\n<<< FILTERING CELLS (TOO FEW GENES) & GENES (TOO FEW CELLS) >>>")
     if cell_filter_ngene:
         sc.pp.filter_cells(ann, min_genes=cell_filter_ngene[0])
-    cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
+    cr.tl.print_counts(ann, title="Post-`min_gene`", group_by=col_cell_type)
     if gene_filter_ncell:
         sc.pp.filter_genes(ann, min_cells=gene_filter_ncell[0])
-    cr.tl.print_counts(ann, title="Post-Basic Filter", group_by=col_cell_type)
+    cr.tl.print_counts(ann, title="Post-`min_cell`", group_by=col_cell_type)
 
     # Further Filtering
     print("\n<<< FURTHER CELL & GENE FILTERING >>>")
@@ -407,22 +437,32 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     if target_sum is not None:  # total-count normalization INPLACE
         print("\n\t*** Total-count normalizing...")
         sc.pp.normalize_total(ann, target_sum=target_sum, copy=False)
-    print(ann)
-    print(f"\n\t*** Log-normalizing => `.X` & {layers['log1p']} layer...")
-    sc.pp.log1p(ann)  # log-transformed; INPLACE
+    if method_norm:
+        print(f"\n\t*** Normalizing data ({method_norm} method) & storing in"
+              f" `.X` & {layers['log1p']} layer .")
+        if method_norm == "log":
+            print("\n\t*** Performing log-normalization...")
+            sc.pp.log1p(ann)  # log-transformed; INPLACE
+        elif method_norm == "sqrt":
+            print("\n\t*** Performing square root normalization...")
+            ann.X = csr_array(np.sqrt(adata.X) + np.sqrt(adata.X + 1))
+        else:
+            raise ValueError(f"Unknown normalization method {method_norm}.")
+    else:
+        print("\n\t*** Skipping normalization...")
     ann.layers[layers["log1p"]] = ann.X.copy()  # also keep in layer
-    ann.raw = ann.copy()  # before HVG, batch correction, etc.
+    # ann.raw = ann.copy()  # before HVG, batch correction, etc.
 
     # Gene Variability (Detection, Optional Filtering)
     print("\n<<< DETECTING VARIABLE GENES >>>")
     sc.pp.highly_variable_genes(ann, **kws_hvg)
-    cr.pl.plot_hvgs(ann, palette=["red", "black"])
+    cr.pl.plot_hvgs(ann, palette=["red", "black"], figsize=figsize)
     if filter_hvgs is True:
         print("\n<<< FILTERING BY HIGHLY VARIABLE GENES >>>")
         ann = ann[:, ann.var.highly_variable]  # filter by HVGs
         cr.tl.print_counts(ann, title="HVGs", group_by=col_cell_type)
 
-    # Set .raw if Needed
+    # Set .raw?
     if regress_out or max_val:
         adata.raw = adata.copy()
 
@@ -433,7 +473,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
         sc.pp.regress_out(ann, regress_out, copy=False)
         warn("Confound regression doesn't yet properly use layers.")
 
-    # Gene Expression Normalization
+    # Scale Gene Expression
     if kws_scale is not None:  # scale by overall or reference
         print("\n<<< NORMALIZING RAW GENE EXPRESSION >>>")
         normalize_genes(ann, kws_reference=kws_scale if isinstance(
@@ -443,8 +483,7 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
 
     # Final Data Examination
     cr.tl.print_counts(ann, title="Post-Processing", group_by=col_cell_type)
-    figs["qc_metrics_post"] = cr.pp.perform_qc(
-        ann.copy(), n_top=n_top, col_gene_symbols=col_gene_symbols, hue=sids)
+    # figs["qc_metrics_post"] = cr.pp.perform_qc(ann.copy(), hue=sids)
     return ann, figs
 
 
@@ -527,12 +566,12 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     return adata
 
 
-def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
-               hue=None, patterns=None, layer=None):
+def perform_qc(adata, log1p=True, hue=None, patterns=None, layer="counts"):
     """Calculate & plot quality control metrics."""
     figs = {}
     if layer is not None:
-        adata.X = adata.layers[layer].copy()
+        adata.X = adata.layers[layer if (
+            layer in adata.layers) else cr.pp.get_layer_dict()[layer]].copy()
     if patterns is None:
         patterns = [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
             "^HB[^(P)]", "^hb[^(p)]")]  # pattern matching for gene symbols
@@ -545,22 +584,18 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
         names[p] + " " + "%" + " of Counts" for p in names]))
 
     # Calculate QC Metrics
+    qc_vars = []  # to hold mt, rb, hb, etc. if present in data
     print(f"\n\t*** Detecting {', '.join(p_names)} genes...")
     for k in patterns:  # calculate MT, RB, HB counts
-        try:
-            gvars = adata.var_names.str.startswith(patterns[k])
-            adata.var[k] = gvars
-        except Exception as err:
-            print(traceback.format_exc())
-            warn(f"\n\n{'=' * 80}\n\nCouldn't assign {k}: {err}")
+        gvars = adata.var_names.str.startswith(patterns[k])
+        if any(gvars):
+            qc_vars += [k]
+        adata.var[k] = gvars
     print("\n\t*** Calculating & plotting QC metrics...\n\n")
-    sc.pp.calculate_qc_metrics(adata, qc_vars=list(patterns), log1p=log1p,
+    sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, log1p=log1p,
                                percent_top=None, inplace=True)  # QC metrics
 
     # Determine Available QC Metrics & Color-Coding (e.g., by Subject)
-    nonzero = [adata.obs[f"total_counts_{q}"].max() > 0 for q in patterns]
-    qc_vars = list(np.array(list(patterns))[np.where(nonzero)[0]]) if any(
-        nonzero) else []  # only plot MT, RB, HB if present
     pct_n = [f"pct_counts_{k}" for k in qc_vars]  # "% counts" variables
     for x in pct_n:  # replace NaN % (in case no mt, rb, hb) wth 0
         adata.obs.loc[adata.obs[x].isnull(), x] = 0
@@ -571,19 +606,25 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
             len(adata.obs[h].unique()) > 1 for h in hhh])[0]])
         hhh = list(pd.unique(hht if len(hht) > 0 else [
             hhh[0]]))  # if no non-unique hue values, still color by subject
+    hhh = list(set(hhh).intersection(adata.obs.columns))  # available colors
+    if len(hhh) == 0:
+        hhh = [None]
 
     # % Counts (MT, RB, HB) versus Counts (Scatter Plots)
-    rrs, ccs = len(pd.unique(hhh)), len(pct_n + ["n_genes_by_counts"])
+    scatter_vars = pct_n + ["n_genes_by_counts", "cell_area", "nucleus_area"]
+    scatter_vars = list(set(scatter_vars).intersection(
+        adata.obs.columns.union(adata.var.columns)))  # scatter plot variables
+    rrs, ccs = len(pd.unique(hhh)), len(scatter_vars)
     fff, axs = plt.subplots(rrs, ccs, figsize=(
         5 * ccs, 5 * rrs), sharex=False, sharey=False)  # subplot grid
     for i, h in enumerate(pd.unique(hhh)):
-        for j, v in enumerate(pct_n + ["n_genes_by_counts"]):
+        for j, v in enumerate(scatter_vars):
             aij = axs if not isinstance(axs, np.ndarray) else axs[
                 i, j] if len(axs.shape) > 1 else axs[j] if ccs > 1 else axs[i]
             try:  # % mt, etc. vs. counts
                 sc.pl.scatter(adata, x="total_counts", y=v, ax=aij,
                               color=h, frameon=False, show=False)  # scatter
-                if aij.legend_ is not None and v != "n_genes_by_counts":
+                if aij.legend_ is not None and v != scatter_vars[-1]:
                     aij.legend_.remove()  # legend only on last column
                 aij.set_title(f"{v} (by {h})" if h else v)  # title
             except Exception as err:
@@ -596,16 +637,20 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     for h in pd.unique(hhh):
         figs[f"qc_scatter_by_{h}" if h else "qc_scatter"] = fff
         try:  # pairplot of all QC variables (hue=grouping variable, if any)
-            vam = pct_n + ["n_genes_by_counts", "total_counts"] + list(
-                [h] if h else [])  # QC variable names
+            ctm = list(set(
+                ["n_genes_by_counts", "total_counts", "log1p_total_counts"]
+                ).intersection(adata.obs.columns))
+            vam = pct_n + ctm + list([h] if h else [])  # QC variable names
             mets_df = adata.obs[vam].rename_axis("Metric", axis=1).rename(
-                {"total_counts": "Total Counts in Cell", **rename_perc,
-                 "n_genes_by_counts": "Genes Detected in Cell",
+                {"total_counts": "Total Counts in Cell",
+                 "cell_area": "Cell Area", "nucleus_area": "Nucleus Area",
+                 "log1p_total_counts": "Log-Normalized Total Counts",
+                 **rename_perc, "n_genes_by_counts": "Genes Detected in Cell",
                  **patterns_names}, axis=1)  # rename
             fff = seaborn.pairplot(
-                mets_df, diag_kind="kde", hue=h if h else None,
-                diag_kws=dict(fill=True, cut=0), plot_kws=dict(
-                    marker=".", linewidth=0.05))  # QC pairplot
+                mets_df, hue=h if h else None, height=3, diag_kind="hist",
+                #  diag_kind="kde", diag_kws=dict(fill=True, cut=0),
+                plot_kws=dict(marker=".", linewidth=0.05))  # pair
         except Exception as err:
             fff = err
             print(traceback.format_exc())
@@ -634,38 +679,73 @@ def perform_qc(adata, n_top=20, col_gene_symbols=None, log1p=True,
     return figs
 
 
-def filter_qc(adata, outlier_mads=None, cell_filter_pmt=None,
+def filter_qc(adata, outlier_mads=None, drop_outliers=True,
+              cell_filter_pmt=None, cell_filter_prb=None,
               cell_filter_ncounts=None, cell_filter_ngene=None,
               gene_filter_ncell=None, gene_filter_ncounts=None):
     """Filter low-quality/outlier cells & genes."""
     ann = adata.copy()
-    if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %...
-        cell_filter_pmt = [0, cell_filter_pmt]  # ...assume it's for maximum %
-    if cell_filter_pmt is None:  # None = no MT filter but calculates metrics
-        cell_filter_pmt = [0,
-                           100]
-    min_pct_mt, max_pct_mt = cell_filter_pmt
-    if outlier_mads is not None:  # automatic filtering using outlier stats
-        outliers = ann.obs[outlier_mads.keys()]
-        print(f"\n<<< DETECTING OUTLIERS {outliers.columns} >>>")
-        for x in outlier_mads:
-            outliers.loc[:, f"outlier_{x}"] = cr.tl.is_outlier(
-                ann.obs, outlier_mads[x])  # separate metric outlier columns
-        cols_outlier = list(set(
-            outliers.columns.difference(ann.obs.columns)))
-        outliers.loc[:, "outlier"] = outliers[cols_outlier].any()  # binary
-        print(f"\n<<< FILTERING OUTLIERS ({cols_outlier}) >>>")
-        ann.obs = ann.obs.join(outliers[["outlier"]])  # + outlier column
-        print(f"Total Cell Count: {ann.n_obs}")
-        ann = ann[(~ann.obs.outlier) & (~ann.obs.mt_outlier)].copy()  # drop
-        print(f"Cell Count (Outliers Dropped): {ann.n_obs}")
-    else:  # manual filtering
-        print("\n<<< PERFORING THRESHOLD-BASED FILTERING >>>")
+    if outlier_mads is not None:  # automatic filtering by outlier statistics
+        cols_obs = [i for i in outlier_mads if i in ann.obs]  # if in .obs
+        cols_var = [i for i in outlier_mads if i in ann.var]  # if in .var
+        outs_dfs = []  # to hold .obs & .var outlier status variables
+        print("\n<<< DETECTING OUTLIERS >>>")
+        for i, a in enumerate([cols_obs, cols_var]):  # .obs, then .var
+            if len(a) == 0:
+                outliers = None
+            else:
+                outliers = [ann.obs, ann.var][i][a].copy()
+                for x in a:  # iterate variables for which to detect outliers
+                    out_yn, mad = cr.tl.is_outlier([
+                        ann.obs, ann.var][i], x, outlier_mads[x])  # metric
+                    outliers.loc[:, f"outlier_{x}"] = out_yn
+                    outliers.loc[:, f"outlier_{x}_threshold"] = str(
+                        mad)  # threshold (nmads * median absolute deviation)
+                    print(f"\t\t{x} Threshold = "
+                          f"{[round(i, 1) if i else None for i in mad]}")
+                ccs = [f"outlier_{x}" for x in a]  # binary outlier/no columns
+                outliers.loc[:, "outlier"] = outliers[ccs].T.any()  # binary
+                if drop_outliers is True:  # if will filter, drop b/c...
+                    outliers = outliers.drop(ccs, axis=1)  # all left will=F
+            outs_dfs += [outliers]
+        print(f"\n<<< FILTERING OUTLIERS ({cols_obs + cols_var}) >>>\n")
+        if outs_dfs[0] is not None:
+            nos = ann.n_obs  # original # of cells
+            ann.obs = ann.obs[ann.obs.columns.difference(outs_dfs[0].columns)]
+            ann.obs = ann.obs.join(outs_dfs[0])  # outlier column
+            if drop_outliers is True:
+                ann = ann[~ann.obs.outlier]  # drop cells not passing filter
+                print(f"\tCell # (without/with Outliers): {ann.n_obs}/{nos}")
+        if outs_dfs[1] is not None:
+            nvs = ann.n_vars  # original # of genes
+            ann.var = ann.var[ann.var.columns.difference(outs_dfs[1].columns)]
+            ann.var = ann.var.join(outs_dfs[1])  # outlier column
+            if drop_outliers is True:
+                ann = ann[:, ~ann.var.outlier]  # filter genes
+                print(f"\tGene # (without/with Outliers): {ann.n_vars}/{nvs}")
+    args = [cell_filter_pmt, cell_filter_prb, cell_filter_ncounts,
+            cell_filter_ngene, gene_filter_ncell, gene_filter_ncounts]
+    if any((i is not None for i in args)):  # manual filtering
+        if isinstance(cell_filter_pmt, (int, float)):  # if just 1 # for MT %
+            cell_filter_pmt = [0, cell_filter_pmt]  # ...assume for maximum %
+        if isinstance(cell_filter_prb, (int, float)):  # if just 1 # for MT %
+            cell_filter_prb = [0, cell_filter_prb]  # ...assume for maximum %
+        print("\n<<< PERFORMING THRESHOLD-BASED FILTERING >>>")
         print(f"\nTotal Cell Count: {ann.n_obs}")
-        print("\n\t*** Filtering cells by mitochondrial gene percentage...")
-        print(f"\n\tMinimum={min_pct_mt}\n\tMaximum={max_pct_mt}")
-        ann = ann[(ann.obs.pct_counts_mt < max_pct_mt) * (
-            ann.obs.pct_counts_mt >= min_pct_mt)]  # filter by MT %
+        if cell_filter_pmt is not None:
+            print("\n\t*** Filtering cells by mitochondrial gene %...")
+            min_mt, max_mt = cell_filter_pmt
+            print(f"\n\t\tMinimum={min_mt}\n\tMaximum={max_mt}")
+            if cell_filter_pmt is not None:
+                ann = ann[(ann.obs["pct_counts_mt"] < max_mt) * (
+                    ann.obs.pct_counts_mt >= min_mt)]  # filter by MT %
+        if cell_filter_prb is not None:
+            print("\n\t*** Filtering cells by ribosomal gene %...")
+            min_rb, max_rb = cell_filter_prb
+            print(f"\n\t\tMinimum={min_rb}\n\tMaximum={max_rb}")
+            if cell_filter_prb is not None:
+                ann = ann[(ann.obs["pct_counts_rb"] < max_rb) * (
+                    ann.obs.pct_counts_rb >= min_rb)]  # filter by RB %
         print(f"\tNew Count: {ann.n_obs}")
         cell_filter_ngene, cell_filter_ncounts, gene_filter_ncell, \
             gene_filter_ncounts = [x if x else [None, None] for x in [

@@ -18,7 +18,7 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
                          key_sources=None, key_targets=None, figsize=None,
                          lr_dea_res=None,  # Liana LR-DEA results dataframe
                          dot_size="cellphone_pvals",
-                         cmap="magma", **kwargs):
+                         group="both", cmap="magma", **kwargs):
     """Plot Liana receptor-ligand analyses (and, optionally, DEA)."""
     if figsize is None:  # auto-calculate figure size if not provided
         # figsize = (len(key_sources) * len(key_targets) / 4, top_n / 4)
@@ -29,8 +29,8 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
     l_r = [list(liana_res[x].unique()) for x in ["source", "target"]]
     kss, ktt = [list(set(x if x else l_r[i]).intersection(set(l_r[i])))
                 for i, x in enumerate([key_sources, key_targets])]
-    kws = dict(return_fig=True, cmap=cmap, source_labels=kss,
-               target_labels=ktt, top_n=top_n, figure_size=figsize)  # kws
+    kws = dict(return_fig=True, source_labels=kss, figure_size=figsize,
+               cmap=cmap, target_labels=ktt, top_n=top_n)  # arguments
     kws.update(kwargs)  # update with any non-overlapping user kws
     fig = {}
     if adata is not None:
@@ -109,5 +109,4 @@ def plot_cooccurrence(adata, col_cell_type, cluster_key=None, palette=None,
     fig.legend(**legend_kwargs)
     plt.subplots_adjust([11, 12], right=1 - right_margin)
     plt.show()
-
     return fig, axs

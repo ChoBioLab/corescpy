@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=no-member
 """
-Preprocessing CRISPR experiment data.
+Importing data.
 
 @author: E. N. Aslinger
 """
@@ -13,6 +13,7 @@ import warnings
 import scanpy as sc
 import pandas as pd
 import numpy as np
+import corescpy as cr
 
 FILE_STRUCTURE = ["matrix", "cells", "genes"]
 DEF_FILE_P = "crispr_analysis/protospacer_calls_per_cell.csv"
@@ -233,6 +234,32 @@ def combine_matrix_protospacer(directory="",
     return adata
 
 
+def construct_file(run=None, panel_id="TUQ97N", directory=None):
+    """Construct file path from information."""
+    if "outputs" not in directory and os.path.exists(
+            os.path.join(directory, "outputs")):
+        directory = os.path.join(directory, "outputs")
+    run = None if run is None else [run] if isinstance(run, str) else run
+    if isinstance(panel_id, str):
+        if run is None:
+            run = [j for j in os.listdir(os.path.join(
+                directory, panel_id)) if os.path.isdir(os.path.join(
+                    directory, panel_id, j))]
+        panel_id = [panel_id] * len(run)
+    else:
+        if run is None:
+            run = []
+            for x in panel_id:
+                run += [j for j in os.listdir(os.path.join(
+                    directory, x)) if os.path.isdir(j)]
+    fff = []
+    for i, x in enumerate(run):
+        d_x = os.path.join(directory, panel_id[i], x)
+        fff += [os.path.join(d_x, y) for y in os.listdir(
+            d_x) if os.path.isdir(os.path.join(d_x, y))]
+    return fff
+
+
 def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
                               col_num_umis="num_umis", feature_split="|",
                               guide_split="-", keep_extra_columns=True):
@@ -264,3 +291,61 @@ def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
         adata.mod[rna].obs = adata.mod[rna].obs.join(gdo.obs[
             gdo.obs.columns.difference(adata.mod[rna].obs.columns)])
     return adata
+
+
+def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
+                     run=None, samples=None, capitalize_sample=True):
+    """Retrieve Xenium metadata."""
+    # Get Column & Key Names from Constants Script
+    constant_dict = {**cr.get_panel_constants(panel_id=panel_id)}  # constants
+    col_sample_id, col_sample_id_o, col_slide, col_condition, col_data_dir = [
+        constant_dict[x] if (x in constant_dict) else None for x in [
+            "col_sample_id", "col_sample_id_o", "col_slide",
+            "col_condition", "col_data_dir"]]
+
+    # Read Metadata
+    metadata = (pd.read_excel if os.path.splitext(file_metadata)[
+        1] == ".xlsx" else pd.read_csv)(file_metadata, dtype={
+            col_slide: str} if col_slide else None)  # read metadata
+    if col_sample_id_o != col_sample_id:  # construct <condition>-<block> ID?
+        metadata.loc[:, col_sample_id] = metadata[
+            col_condition].apply(lambda x: str(x).capitalize() if (
+                capitalize_sample is True) else x) + "-" + metadata[
+                    col_sample_id_o].astype(str)  # combine condition & block
+    metadata = metadata.set_index(col_sample_id)
+
+    # Find File Paths
+    fff = np.array(cr.pp.construct_file(run=run, directory=directory,
+                                        panel_id=panel_id))
+    bff = np.array([os.path.basename(i) for i in fff])  # base path names
+    samps = np.array([i.split("__")[2].split("-")[0] for i in fff])
+    for x in metadata[col_sample_id_o]:
+        if col_data_dir is not None and col_data_dir in metadata.columns:
+            if "outputs" not in directory and os.path.exists(
+                    os.path.join(directory, "outputs")):
+                direc = os.path.join(directory, "outputs")
+            else:
+                direc = directory
+            m_f = metadata[metadata[col_sample_id_o] == x][col_data_dir].iloc[
+                0]  # ...to find manually-defined unconventionally-named files
+            m_f = None if pd.isnull(m_f) else m_f if os.path.isdir(
+                m_f) else os.path.join(direc, m_f) if (os.path.isdir(
+                    os.path.join(direc, m_f))) else None
+            # in case relative path or other description
+        else:
+            m_f = np.nan
+        locx = np.where(samps == x)[0] if pd.isnull(
+            m_f) else np.where(bff == m_f)[0]
+        metadata.loc[metadata[col_sample_id_o] == x, col_data_dir] = fff[
+            locx[0]] if (len(locx) > 0) else np.nan  # output file for row
+    metadata = metadata.dropna(subset=[col_data_dir]).reset_index(
+        ).drop_duplicates().set_index(col_sample_id)
+    if samples not in ["all", None]:  # subset by sample ID?
+        if isinstance(samples, str):
+            samples = [samples]
+        if samples[0] in metadata[col_sample_id_o].to_list():
+            metadata = metadata.reset_index().set_index(col_sample_id_o).loc[
+                samples].reset_index().set_index(col_sample_id)
+        else:
+            metadata.loc[samples]
+    return metadata

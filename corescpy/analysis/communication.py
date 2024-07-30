@@ -1,14 +1,15 @@
+import traceback
 import squidpy as sq
 import liana
 from liana.method import cellphonedb
-import decoupler as dc
 import omnipath
 # import corneto
-import traceback
+# import stlearn as st
+import pandas as pd
 from corescpy.visualization import plot_receptor_ligand
 from corescpy.utils import merge
 from corescpy.analysis import calculate_dea_deseq2
-import pandas as pd
+# from corescpy.processing import create_spot_grid
 
 
 def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
@@ -76,9 +77,36 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
             figs["lr"] = plot_receptor_ligand(
                 adata=adata, lr_dea_res=res["lr_dea_res"], **kws)  # plots
         except Exception as err:
-            print(traceback.format_exc(), "\n\nLigand-receptor plotting failed!")
+            print(traceback.format_exc(),
+                  "\n\nLigand-receptor plotting failed!")
             figs["lr"] = err
     return res, adata, figs
+
+
+def analyze_lr_spatial(grid, col_cell_type, distance, min_spots, n_pairs,
+                       n_perms=10000, cell_prop_cutoff=0.2,
+                       resource="connectomeDB2020_lit", organism="human",
+                       pval_adj_cutoff=None, adj_method=None, adj_axis="spot",
+                       n_jobs=1, kws_spot_grid=None, **kwargs):
+    """Analyze ligand-receptor & cell-cell interaction with Xenium."""
+    pass
+    # if kws_spot_grid not in [None, False]:  # convert Xenium->spots if need
+    #     grid = grid.copy()
+    #     kws_spot_grid = {} if kws_spot_grid is True else {**kws_spot_grid}
+    #     grid = create_spot_grid(grid, col_cell_type, **kws_spot_grid)
+    # lrs = st.tl.cci.load_lrs([resource], species=organism)  # L-R database
+    # st.tl.cci.run(grid, lrs, min_spots=min_spots, distance=distance,
+    #               n_pairs=n_pairs, n_cpus=n_jobs)  # analyze ligand-receptor
+    # if pval_adj_cutoff is not None or adj_method is not None:  # adjust p?
+    #     grid.uns["lr_summary_preadjust"] = grid.uns["lr_summary"].copy()
+    #     st.tl.cci.adj_pvals(
+    #         grid, correct_axis=adj_axis, pval_adj_cutoff=pval_adj_cutoff,
+    #         adj_method=adj_method)  # optionally, adjust p-values
+    # print(grid.uns["lr_summary"])
+    # st.tl.cci.run_cci(grid, col_cell_type, min_spots=min_spots,
+    #                   cell_prop_cutoff=cell_prop_cutoff, n_cpus=n_jobs,
+    #                   n_perms=n_perms, **kwargs)  # cell-cell interaction
+    # return grid
 
 
 def analyze_causal_network(adata, col_condition, key_control, key_treatment,
@@ -90,6 +118,7 @@ def analyze_causal_network(adata, col_condition, key_control, key_treatment,
                            max_penalty=1, min_penalty=0.01, edge_penalty=0.01,
                            max_seconds=60*3, solver="scipy", verbose=False):
     """Analyze causal network (adapted from Liana tutorial)."""
+    import decoupler as dc  # noqa: E402
     if layer is not None:
         adata.X = adata.layers[layer].copy()
     if col_gene_symbols is None:

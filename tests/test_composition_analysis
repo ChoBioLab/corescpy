@@ -1,4 +1,4 @@
-from corescpy.class_sc import Omics
+from corescpy import Omics
 import pertpy as pt
 
 

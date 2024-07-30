@@ -1,33 +1,43 @@
-import corescpy as cr
-import scanpy as sc
+import os
 import squidpy as sq
-import spatialdata_io as sdio
-import scipy
-import numpy as np
+import corescpy as cr
+
+DIR_TEST_FILE = os.path.dirname(os.path.abspath(__file__))
+DIR_DATA = os.path.join(DIR_TEST_FILE, "data")
 
 
-class TestXenium:
-    """Visium data tests."""
-    sdata = sdio.xenium(file, n_jobs=4)
-    self = cr.Spatial(sdata, **kwargs)
+# class TestXenium:
+#     """Visium data tests."""
+#     url = "https://s3.embl.de/spatialdata/spatialdata-sandbox/"
+#     file = "xenium_rep1_io"
+#     if os.path.exists(os.path.join(DIR_DATA, file)) is False:
+#         os.system(f"wget -P {DIR_DATA} {url}{file}.zip")
+#         os.system(f"unzip {file}.zip -d {os.path.join(DIR_DATA, file)}")
+#     self = cr.Spatial(os.path.join(DIR_DATA, file))
 
-    def test_xenium_ax(self):
-        """Test Xenium analysis."""
-        genes = list(TestXenium.self.rna.var_names[:3])
-        _ = TestXenium.self.preprocess()
-        _ = TestXenium.self.cluster()
-        out_ce = TestXenium.self.calculate_centrality()
-        out_co = TestXenium.self.find_cooccurrence()
-        out_sv = TestXenium.self.find_svgs(genes=genes, method="moran",
-                                           n_perms=10)
-        out_rl = TestXenium.self.calculate_receptor_ligand(
-            col_condition=False, p_threshold=0.001, remove_ns=True)
-        for x in [out_ce, out_co, out_sv, out_rl]:
-            if isinstance(x[-1], dict):  # if figure output is a dictionary
-                for i in x[-1]:
-                    assert not isinstance(x[-1][i], str)  # ensure not error
-            else:
-                assert not isinstance(x[-1], str)  # ensure not error
+#     def test_xenium_attributes(self):
+#         """Ensure proper attributes."""
+#         assert "adata" in dir(TestXenium.self)
+#         assert "rna" in dir(TestXenium.self)
+#         assert "original_ix" in dir(TestXenium.self.rna.uns)
+
+#     def test_xenium_ax(self):
+#         """Test Xenium analysis."""
+#         genes = list(TestXenium.self.rna.var_names[:3])
+#         _ = TestXenium.self.preprocess()
+#         _ = TestXenium.self.cluster()
+#         out_ce = TestXenium.self.calculate_centrality()
+#         out_co = TestXenium.self.find_cooccurrence()
+#         out_sv = TestXenium.self.find_svgs(genes=genes, n_perms=5)
+#         out_rl = TestXenium.self.calculate_receptor_ligand(
+#             col_condition=False, p_threshold=0.001, remove_ns=True)
+#         for x in [out_ce, out_co, out_sv, out_rl]:
+#             if isinstance(x[-1], dict):  # if figure output is a dictionary
+#                 for i in x[-1]:
+#                     assert not isinstance(x[-1][i], str)  # ensure not error
+#             else:
+#                 assert not isinstance(x[-1], str)  # ensure not error
+
 
 class TestVisium:
     """Visium data tests."""

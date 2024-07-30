@@ -4,20 +4,20 @@
 @author: E. N. Aslinger
 """
 
-import scanpy as sc
 import warnings
-import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sns
+import scanpy as sc
 import corescpy as cr
-from .class_sc import Omics
 from corescpy.analysis.perturbations import layer_perturbation
 import pandas as pd
+import numpy as np
 
 COLOR_PALETTE = "tab20"
 COLOR_MAP = "coolwarm"
 
 
-class Crispr(Omics):
+class Crispr(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
     _columns_created = dict(guide_percent="Percent of Cell Guides")
@@ -28,8 +28,10 @@ class Crispr(Omics):
                  col_sample_id="standard_sample_id",
                  col_condition="perturbation", col_perturbed="perturbed",
                  col_guide_rna=None, col_num_umis="num_umis",
+                 col_target_genes=None,
                  key_control="NT", key_treatment="KO", key_nonperturbed="NP",
-                 kws_process_guide_rna=None, kws_multi=None, **kwargs):
+                 kws_process_guide_rna=None, file_perturbations=None,
+                 kws_multi=None, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -297,7 +299,22 @@ class Crispr(Omics):
                         Some functionality may be limited and/or
                         problems occur if set to False and if
                         multiply-transfected cells remain in data.
+            col_target_genes (str): If the target gene names differ
+                from "col_condition" (e.g., if you have different
+                instantiations of perturbations, targeting the same
+                gene, but by which you want to filter or use in
+                other situations instead of the target gene name),
+                provide the column name. Otherwise,
+                will be the same as "col_condition" (target genes).
+            file_perturbations (str | pd.DataFrame, optional): A path
+                to a file (or dataframe with gRNA ID as the index)
+                containing the gRNA ID-target gene-perturbation
+                condition mapping (if it can't be performed using the
+                `kws_process_guide_rna` "guide_split" argument).
+                The file should contain columns matching
+                "col_condition", "col_target_genes", & "col_guide_rna".
         """
+        print("\n\n<<< INITIALIZING CRISPR CLASS OBJECT >>>\n")
         self._assay = assay
         self._assay_protein = assay_protein
         self._file_path = file_path
@@ -308,7 +325,9 @@ class Crispr(Omics):
         if col_guide_rna == col_condition:
             warnings.warn(f"`col_condition` ({col_condition}) can't be same "
                           "as `col_guide_rna`! Now = {col_condition}_target.")
-            col_condition = col_condition + "_target"
+            col_condition = col_condition + "_guide"
+        if col_target_genes is None:
+            col_target_genes = col_condition
 
         # Create Attributes to Store Results/Figures
         self.figures = {}
@@ -321,12 +340,12 @@ class Crispr(Omics):
         if kws_process_guide_rna is not False:  # if don't explicitly skip
             kws_pga = cr.tl.merge({
                 "col_guide_rna": col_guide_rna, "col_num_umis": col_num_umis,
-                "key_control": key_control,
-                "col_guide_rna_new": col_condition}, kws_process_guide_rna)
+                "key_control": key_control, "col_condition": col_condition,
+                "col_target_genes": col_target_genes}, kws_process_guide_rna)
         else:
             kws_pga, kws_process_guide_rna = None, None
         super().__init__(
-            self._file_path, assay=assay, assay_gdo=assay_gdo,
+            self._file_path, assay=assay, assay_gdo=assay_gdo, verbose=False,
             col_gene_symbols=col_gene_symbols, col_sample_id=col_sample_id,
             col_condition=col_condition, key_control=key_control,
             key_treatment=key_treatment, kws_process_guide_rna=kws_pga,
@@ -361,27 +380,23 @@ class Crispr(Omics):
                               " in `.obs`. Assuming perturbation is binary "
                               "(i.e., only has two conditions, including "
                               "control); col_condition will be equivalent.")
-                self.rna.obs.loc[:, col_condition] = self.rna.obs[
-                    col_perturbed].copy()  # col_condition = col_perturbed
         else:
             raise ValueError(f"{' or '.join(conds)} must be in `.obs` ")
-        print(self.adata.obs, "\n\n") if assay else None
 
         # Create Binary Perturbation Column (if not yet existent)
-        if col_perturbed not in self.rna.obs:
+        if col_perturbed not in self.rna.obs:  # binary form of col_condition
             self.rna.obs = self.rna.obs.join(
-                self.rna.obs[col_condition].apply(
+                self.rna.obs[col_target_genes].apply(
                     lambda x: x if pd.isnull(x) else key_control if (
-                        x == key_control) else key_treatment
-                    ).to_frame(col_perturbed), lsuffix="_original"
-                )  # create binary form of col_condition
+                        x == key_control) else key_treatment).to_frame(
+                            col_perturbed), lsuffix="_original")
 
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = {
             **self._columns,
             **dict(col_gene_symbols=col_gene_symbols,
                    col_condition=col_condition,
-                   col_target_genes=col_condition,
+                   col_target_genes=col_target_genes,
                    col_perturbed=col_perturbed,
                    col_cell_type=col_cell_type,
                    col_sample_id=col_sample_id,
@@ -500,11 +515,12 @@ class Crispr(Omics):
         if isinstance(target_gene_idents, str):
             target_gene_idents = [target_gene_idents]
         cols = list(pd.unique([self._columns["col_target_genes"]] + list(
-            [] if group_by is None else group_by))) # group + adata variables
+            [] if group_by is None else group_by)))  # group + adata variables
         dff = self.rna.uns["grna_feats_n"].reset_index(
             "Gene").rename({"Gene": "Guide"}, axis=1).join(self.rna.obs[cols])
         if target_gene_idents:
-            dff = dff[dff[self._columns["col_target_genes"]].isin(target_gene_idents)]
+            dff = dff[dff[self._columns["col_target_genes"]].isin(
+                target_gene_idents)]
         kws_plot = dict(
             # share_x=True, share_y=False,
             # figsize=(30, 30),
@@ -524,6 +540,72 @@ class Crispr(Omics):
             f" by {', '.join(group_by)}" if group_by else ""))
         fig.fig.tight_layout()
         return fig
+
+    def calculate_targeting_efficiency(self, col_condition=None,
+                                       col_target_genes=None,
+                                       key_compare=None, plot=True):
+        """
+        Calculate targeting efficiency for each perturbed gene.
+
+        Args:
+            col_condition (str, optional): Column for which to
+                calculate targeting efficiency.
+                Defaults to None (`self._columns['col_condition']`).
+            col_target_genes (str, optional): Column where target genes
+                (names must be in `self.rna.var_names`) corresponding
+                to `col_condition` are kept. Can be the same or
+                different from `col_condition` (e.g., might be
+                different if you want to calculate efficiency of
+                different guides in knocking down same gene).
+                Defaults to None (`self._columns['col_target_genes']`).
+            key_compare (list, optional): List of keys within
+                `col_perturbation` to use as the comparison (i.e.,
+                that/those groups' counts as the denominator).
+                For instance, you may want to use just control
+                conditions, not perturbations of other genes.
+                Defaults to None (will use all except those in the
+                KO/KD for a given gene).
+
+        Note
+        ----
+
+        May return NaN's if the gene expression of a target gene is < 0
+        in the reference condition (division by zero).
+        """
+        if isinstance(key_compare, str):
+            key_compare = [key_compare]
+        ann = self.get_layer("counts", inplace=False).copy()
+        sc.pp.normalize_total(ann, target_sum=1e4, copy=False)
+        cond = col_condition if col_condition else self._columns[
+            "col_condition"]
+        tgs = self._columns["col_target_genes"] if (
+            col_target_genes) is None else col_target_genes
+        targs = dict(ann.obs[[cond, tgs]].dropna().groupby(cond).apply(
+            lambda x: x[tgs].iloc[0] if len(x[tgs].unique()) == 1 and x[
+                tgs].iloc[0] in ann.var_names else np.nan).dropna())
+        gex_means_ref = pd.Series([np.mean(ann[ann.obs[cond].isin(
+            key_compare) if key_compare else ann.obs[cond] != x, targs[x]].X)
+                                   for x in targs], index=list(targs))
+        gex_means_pert = pd.Series([np.mean(ann[ann.obs[cond] == x, targs[
+            x]].X) for x in targs], index=list(targs))
+        gex_means = gex_means_pert.to_frame("Perturbation").join(
+            gex_means_ref.to_frame("Reference"))
+        kde = gex_means.join(pd.Series(100 * (
+            1 - (gex_means["Perturbation"] / gex_means["Reference"])
+            )).to_frame("Targeting Efficiency"))
+        kde = kde.drop("Targeting Efficiency", axis=1).join(kde.apply(
+            lambda x: x["Targeting Efficiency"] if x[
+                "Reference"] > 0 else np.inf, axis=1).to_frame(
+                    "Targeting Efficiency"))
+        kde = kde.rename_axis(cond)
+        if plot is True:
+            sns.barplot(kde["Targeting Efficiency"], orient="h")
+            plt.show()
+        miss = ann.obs[cond].unique()[np.where([x not in kde.reset_index()[
+            cond].unique() for x in ann.obs[cond].unique()])[0]]
+        if len(miss) > 0:
+            warnings.warn(f"Genes for thedr conditions not found: {miss}")
+        return kde.sort_values("Targeting Efficiency", ascending=False)
 
     def run_mixscape(self, assay=None, assay_protein=None,
                      layer="log1p", col_cell_type=None,
@@ -867,7 +949,7 @@ class Crispr(Omics):
     # def save_output(self, directory_path, run_keys="all", overwrite=False):
     #     """Save figures, results, adata object."""
     #     # TODO: FINISH
-    #     raise NotImplementedError("Saving output isn't yet fully implemented.")
+    #     raise NotImplementedError("Saving output isn't yet implemented.")
     #     if isinstance(run_keys, (str, float)):
     #         run_keys = [run_keys]
     #     elif run_keys == "all":
@@ -887,3 +969,14 @@ class Crispr(Omics):
     #                 dirp = os.path.join(directory_path, r)
     #                 if not os.path.exists(dirp)
     #                 os.makedirs(dirp, exist_ok=overwrite)
+
+    def plot_correlation(self, genes, method="pearson", col_condition=None,
+                         figsize=None, **kwargs):
+        """Plot correlation among conditions (default=target genes)."""
+        if isinstance(figsize, (int, float)):
+            figsize = (figsize, figsize)  # can specify as 1 #: width & height
+        con = col_condition if col_condition else self._columns[
+            "col_target_genes"]
+        axs = sc.pl.correlation_matrix(
+            self.rna, con, genes, method=method, figsize=figsize, **kwargs)
+        return axs
