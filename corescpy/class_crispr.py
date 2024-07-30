@@ -541,14 +541,22 @@ class Crispr(cr.Omics):
         fig.fig.tight_layout()
         return fig
 
-    def calculate_targeting_efficiency(self, col_target_genes=None,
-                                       key_compare=None):
+    def calculate_targeting_efficiency(self, col_condition=None,
+                                       col_target_genes=None,
+                                       key_compare=None, plot=True):
         """
         Calculate targeting efficiency for each perturbed gene.
 
         Args:
-            col_target_genes (str, optional): Column for which to
+            col_condition (str, optional): Column for which to
                 calculate targeting efficiency.
+                Defaults to None (`self._columns['col_condition']`).
+            col_target_genes (str, optional): Column where target genes
+                (names must be in `self.rna.var_names`) corresponding
+                to `col_condition` are kept. Can be the same or
+                different from `col_condition` (e.g., might be
+                different if you want to calculate efficiency of
+                different guides in knocking down same gene).
                 Defaults to None (`self._columns['col_target_genes']`).
             key_compare (list, optional): List of keys within
                 `col_perturbation` to use as the comparison (i.e.,
@@ -557,20 +565,47 @@ class Crispr(cr.Omics):
                 conditions, not perturbations of other genes.
                 Defaults to None (will use all except those in the
                 KO/KD for a given gene).
+
+        Note
+        ----
+
+        May return NaN's if the gene expression of a target gene is < 0
+        in the reference condition (division by zero).
         """
         if isinstance(key_compare, str):
             key_compare = [key_compare]
         ann = self.get_layer("counts", inplace=False).copy()
         sc.pp.normalize_total(ann, target_sum=1e4, copy=False)
-        cond = col_target_genes if col_target_genes else self._columns[
-            "col_target_genes"]
-        targs = set(ann.obs[cond].unique()).intersection(self.rna.var_names)
-        kde = pd.Series([1 - (np.mean(ann[ann.obs[cond] == x, x].X) / np.mean(
-            ann[ann.obs[cond].isin(key_compare) if key_compare else ann.obs[
-                cond] != x, x].X)) for x in targs], index=list(targs)) * 100
-        sns.barplot(kde, orient="h")
-        plt.show()
-        return kde.sort_values(ascending=False)
+        cond = col_condition if col_condition else self._columns[
+            "col_condition"]
+        tgs = self._columns["col_target_genes"] if (
+            col_target_genes) is None else col_target_genes
+        targs = dict(ann.obs[[cond, tgs]].dropna().groupby(cond).apply(
+            lambda x: x[tgs].iloc[0] if len(x[tgs].unique()) == 1 and x[
+                tgs].iloc[0] in ann.var_names else np.nan).dropna())
+        gex_means_ref = pd.Series([np.mean(ann[ann.obs[cond].isin(
+            key_compare) if key_compare else ann.obs[cond] != x, targs[x]].X)
+                                   for x in targs], index=list(targs))
+        gex_means_pert = pd.Series([np.mean(ann[ann.obs[cond] == x, targs[
+            x]].X) for x in targs], index=list(targs))
+        gex_means = gex_means_pert.to_frame("Perturbation").join(
+            gex_means_ref.to_frame("Reference"))
+        kde = gex_means.join(pd.Series(100 * (
+            1 - (gex_means["Perturbation"] / gex_means["Reference"])
+            )).to_frame("Targeting Efficiency"))
+        kde = kde.drop("Targeting Efficiency", axis=1).join(kde.apply(
+            lambda x: x["Targeting Efficiency"] if x[
+                "Reference"] > 0 else np.inf, axis=1).to_frame(
+                    "Targeting Efficiency"))
+        kde = kde.rename_axis(cond)
+        if plot is True:
+            sns.barplot(kde["Targeting Efficiency"], orient="h")
+            plt.show()
+        miss = ann.obs[cond].unique()[np.where([x not in kde.reset_index()[
+            cond].unique() for x in ann.obs[cond].unique()])[0]]
+        if len(miss) > 0:
+            warnings.warn(f"Genes for thedr conditions not found: {miss}")
+        return kde.sort_values("Targeting Efficiency", ascending=False)
 
     def run_mixscape(self, assay=None, assay_protein=None,
                      layer="log1p", col_cell_type=None,
