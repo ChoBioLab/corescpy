@@ -68,7 +68,7 @@ def process_guide_rna(adata, col_guide_rna="feature_call",
             (assuming no non-control sgRNA names contain
             those strings). If blank entries should be interpreted as
             control guides, first convert them to strings that can be
-            specified in this argument.
+            specified in this argument to be safest.
         key_control (str, optional): The name you want the control
             entries to be categorized as under the new `col_guide_rna`.
             for instance, `CNTRL-1`, `NEGCNTRL`, etc. would all be

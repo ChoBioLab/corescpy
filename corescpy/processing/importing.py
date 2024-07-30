@@ -297,7 +297,7 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
                      run=None, samples=None, capitalize_sample=True):
     """Retrieve Xenium metadata."""
     # Get Column & Key Names from Constants Script
-    constant_dict = {**cr.get_panel_constants(panel_id)}  # panel constants
+    constant_dict = {**cr.get_panel_constants(panel_id=panel_id)}  # constants
     col_sample_id, col_sample_id_o, col_slide, col_condition, col_data_dir = [
         constant_dict[x] if (x in constant_dict) else None for x in [
             "col_sample_id", "col_sample_id_o", "col_slide",

@@ -15,9 +15,9 @@ mod = ["ax", "pl", "pp", "tl", "Omics", "Crispr", "Spatial"]
 sys.modules.update({f"{__name__}.{m}": globals()[m] for m in mod})
 
 
-def get_panel_constants():
+def get_panel_constants(**kwargs):
     from .constants import get_panel_constants as gpc  # noqa: E402
-    return gpc()
+    return gpc(**kwargs)
 
 
 __all__ = [
