@@ -870,6 +870,15 @@ class Omics(object):
             adata, assay=assay, method=method, n_genes=n_genes, key_added=key,
             layer=layer, key_reference=key_reference, kws_plot=kws_plot,
             col_cell_type=col_cell_type, use_raw=use_raw, **kwargs)  # markers
+        marks = marks.join(adata.obs[col_cell_type].value_counts(
+            ).to_frame("n_cells"))  # add per-cluster cell counts
+        gex = cr.ax.classify_gex_cells(
+            adata, col_cell_type=col_cell_type, layer=self._layers["counts"],
+            genes=marks.reset_index()[marks.index.names[1]].unique(
+                )).reorder_levels([col_cell_type, "Gene"]).rename_axis(
+                    marks.index.names)  # % of cells + for each marker
+        marks = marks.join(gex.loc[marks.index.intersection(gex.index)][
+            "Percent"].to_frame("cells_gene_pos_percent"))
         if copy is False:
             if all(n_clus) is False:
                 warn("Had to run find_markers on subset of adata because some"

@@ -268,7 +268,7 @@ class Spatial(cr.Omics):
                 coords = shapely.MultiPolygon(coords)  # ...union of areas
             kws = {"target_coordinate_system": "global",
                    "filter_table": True, **kwargs}
-            if "valid" in dir(coords) and coords.is_valid is False:
+            if "is_valid" in dir(coords) and coords.is_valid is False:
                 if allow_make_valid is True:
                     invalid, error = True, None
                 else:

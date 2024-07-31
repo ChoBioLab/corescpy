@@ -55,6 +55,20 @@ class TestOmics:
             np.array(TestOmics.self.adata.obs["rna_change"]),
             np.array(TestOmics.self.rna.obs["rna_change"]))
 
+    def test_classify_gex_cells_overall(self):
+        """Test proper column names, etc. for classify_gex_cells."""
+        adata, col_cell_type = self.rna.copy(), "leiden_fake"
+        adata.obs.loc[:, col_cell_type] = np.random.randint(
+            low=0, high=10, size=adata.obs.shape[0])
+        gex = cr.ax.test_classify_gex_cells_overall(
+            self.rna, col_cell_type=col_cell_type,
+            genes=self.rna.var_names[:2],
+            layer=self._layers["counts"], threshold=0)
+        np.testing.assert_array_equal(
+            np.array(gex.index.names),
+            np.array(["Gene", col_cell_type]))
+        assert "Percent" in gex.columns
+
 
 class TestSpatialVisium:
     """Object creation & basic processing tests."""
