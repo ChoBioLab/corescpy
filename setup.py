@@ -6,7 +6,8 @@ from setuptools import setup, find_packages
 import pathlib
 
 must_test = []  # tests required
-must_have = ['scanpy', 'pertpy', 'pandas', 'numpy']  # dependencies
+# must_have = ['scanpy', 'pertpy', 'pandas', 'numpy']  # dependencies
+must_have = []  # dependencies
 pkg_was_here = pathlib.Path(__file__).parent.resolve()
 
 with open('README.md') as info:

@@ -38,6 +38,7 @@ in your terminal while in your conda environment, then re-try step (6).
 
 8. If you're planning to use this environment with Jupyter notebooks, run `conda install nb_conda_kernels`, then `pip install ipykernel`.
 
+If you have issues importing modules or functions (particularly if it only happens if you don't run the import after launching `python` while you are in the `corescpy` directory), try `mv <CONDA_ENV_PATH>/site-packages/_corescpy.pth <CONDA_ENV_PATH>/_corescpy.pth.bak` (replacing <CONDA_ENV_PATH> with your conda site-packages path, e.g., `/home/elizabeth/elizabeth/miniconda3/envs/corescpy/lib/python3.10/site-packages`), then `pip uninstall corescpy` then `cd corescpy` (replace "corescpy" with path to your corescpy top-level directory if needed) then `pip install -e .`. Then try `cd` to return to your home directory, then `python -c "import corescpy; print(dir(corescpy))"` from your terminal. Make sure it prints out submodules (e.g., `analysis`), and not just the base attributes (e.g., `__doc__`).
 
 ** Note: To use GPU resources, use `conda install -c rapidsai -c nvidia -c conda-forge cugraph cuml cudf` and install the gpu version of coreSCpy (which should `pip install scanpy[rapids]`).
 

@@ -17,6 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import shapely
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon
+import geopandas as gpd
 import squidpy as sq
 import spatialdata
 import spatialdata_plot as sdp
@@ -233,12 +234,15 @@ class Spatial(cr.Omics):
                 cr.pl.plot_tiff(fff)  # plot
 
     def crop(self, bounds_x, bounds_y=None, bounds_z=None,
-             pixel_size=0.2125, **kwargs):
+             pixel_size=0.2125, allow_make_valid=False, **kwargs):
         """
         Get a copy of the data cropped to specified coordinates.
 
         Notes
         -----
+        Setting `allow_make_valid` to True corrects invalid geometries,
+        but you MUST CHECK that this new shape is what you want.
+
         Specify as a list with the minimum & maximum x, y, &
         (optionally) z coordinates (`bounds_z`). For instance,
         `bounds_x=[2, 400]` and `bounds_y=[50, 200]` will yield the
@@ -264,7 +268,38 @@ class Spatial(cr.Omics):
                 coords = shapely.MultiPolygon(coords)  # ...union of areas
             kws = {"target_coordinate_system": "global",
                    "filter_table": True, **kwargs}
-            sdata_crop = self.adata.query.polygon(coords, **kws)  # crop
+            if "valid" in dir(coords) and coords.is_valid is False:
+                if allow_make_valid is True:
+                    invalid, error = True, None
+                else:
+                    p_coords = gpd.GeoSeries(coords).plot()
+                    p_coords.set_title("Input")
+                    raise ValueError(
+                        "Input coordinates have invalid geometry!")
+            else:
+                try:
+                    sdata_crop = self.adata.query.polygon(
+                        coords, **kws)  # crop
+                except Exception as err:
+                    if allow_make_valid is False:
+                        raise err
+                    invalid, error = True, err
+            if invalid is True:
+                if allow_make_valid is True:
+                    try:
+                        warn("\n\n*** Invalid geometry! Making geometry valid"
+                             ". Check new coordinates!\n\n")
+                        p_coords = gpd.GeoSeries(coords).plot()
+                        p_coords.set_title("Input")
+                        plt.show()
+                        coords = shapely.validation.make_valid(coords)
+                        p_coords_new = gpd.GeoSeries(coords).plot()
+                        p_coords_new.set_title("Corrected")
+                        plt.show()
+                        sdata_crop = self.adata.query.polygon(coords, **kws)
+                    except Exception:
+                        print(error)
+                        traceback.print_exc()
             if "table" not in dir(sdata_crop):
                 sdata_crop.table = self.rna[self.rna.obs[
                     XeniumKeys.CELL_ID].isin(sdata_crop.shapes[
