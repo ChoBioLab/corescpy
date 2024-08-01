@@ -384,7 +384,7 @@ def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
 def plot_matrix(adata, col_cell_type, genes, layer="counts",
                 cmap="coolwarm", vcenter=0, genes_dict_colors=None,
                 dendrogram=False, label="Expression", linecolor="lightgray",
-                linewidth=0.5, fig_scale=1, show=True, **kwargs):
+                linewidth=0.5, fig_scale=1, title=None, show=True, **kwargs):
     """
     Create custom matrix plot with GEX + per-cluster cell counts.
 
@@ -432,13 +432,15 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
     if dendrogram is True:
         h_m.add_dendrogram("right", pad=0.1)
     h_m.add_legends()
+    if title is not None:
+        mplt.add_title(title)
     if show is True:
         h_m.render()
     return h_m
 
 
 def plot_dot(adata, col_cell_type, genes, layer="counts",
-             genes_dict_colors=None,  cmap="coolwarm", vcenter=0,
+             genes_dict_colors=None, cmap="coolwarm", title=None,
              dendrogram=False, fig_scale=1, show=True, **kwargs):
     """
     Create custom dot plot with GEX + per-cluster cell counts.
@@ -471,7 +473,7 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
         size=size, color=agg_exp, cluster_data=size,
         height=fig_scale * agg_exp.shape[0] / 3,
         width=fig_scale * agg_exp.shape[1] / 3,
-        edgecolor="lightgray", cmap=cmap, vcenter=vcenter,
+        edgecolor="lightgray", cmap=cmap,
         size_legend_kws=dict(colors="#538bbf",
                              title="Fraction of Cells\nin Groups (%)",
                              labels=["20%", "40%", "60%", "80%", "100%"],
@@ -495,6 +497,8 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
     if dendrogram is True:
         mplt.add_dendrogram("right", pad=0.1)
     mplt.add_legends()
+    if title is not None:
+        mplt.add_title(title)
     if show is True:
         mplt.render()
     return mplt
