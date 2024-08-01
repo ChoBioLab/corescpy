@@ -10,9 +10,12 @@ Visualizing CRISPR experiment analysis results.
 # import cowplot
 import warnings
 import copy
+import functools
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import seaborn as sb
+import marsilea as ma
+import marsilea.plotter as mp
 import scanpy as sc
 import pandas as pd
 import numpy as np
@@ -376,3 +379,122 @@ def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
     fig = sb.catplot(data=mark.to_frame("Expression").reset_index(), x="Gene",
                      y="Expression", col="Comparison", **kws)  # plot
     return fig
+
+
+def plot_matrix(adata, col_cell_type, genes, layer="counts",
+                cmap="coolwarm", vcenter=0, genes_dict_colors=None,
+                dendrogram=False, label="Expression", linecolor="lightgray",
+                linewidth=0.5, fig_scale=1, show=True, **kwargs):
+    """
+    Create custom matrix plot with GEX + per-cluster cell counts.
+
+    Notes
+    -----
+    Adapted from
+    scanpy.readthedocs.io/en/stable/how-to/plotting-with-marsilea.html.
+    """
+    adata = adata.copy()
+    if layer is not None:
+        adata.X = adata.layers[layer].copy()
+    genes_dict = {**genes} if isinstance(genes, dict) else None
+    if genes_dict is not None:
+        genes_dict = dict(zip(genes_dict, [genes_dict[x] if isinstance(
+            genes_dict[x], str) else genes_dict[x] for x in genes_dict]))
+        genes_dict = dict(zip(genes_dict, [[i for i in genes_dict[
+            x] if i in adata.var_names] for x in genes_dict]))
+        genes = list(pd.unique(functools.reduce(lambda i, j: i + j, [
+            genes_dict[x] for x in genes_dict])))
+    agg = sc.get.aggregate(adata[:, genes], by=col_cell_type, func=[
+        "mean", "count_nonzero"])
+    agg.obs = agg.obs.join(adata.obs[col_cell_type].value_counts(
+        ).to_frame("cell_counts"))
+    agg_exp = agg.layers["mean"]
+    # agg_count = agg.layers["count_nonzero"]
+    agg_cell_counts = agg.obs["cell_counts"].to_numpy()
+    h_m = ma.Heatmap(
+        agg_exp, height=fig_scale * agg_exp.shape[0] / 3,
+        width=fig_scale * agg_exp.shape[1] / 3, cmap=cmap,
+        linewidth=linewidth, linecolor="lightgray", **kwargs
+    )
+    h_m.add_right(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.1)
+    if genes_dict is not None:
+        cells, markers = [], []
+        for c, ms in genes_dict.items():
+            cells += [c] * len(ms)
+            markers += ms
+        h_m.add_top(mp.Labels(markers), pad=0.1)
+        h_m.group_cols(cells, order=list(genes_dict.keys()))
+        h_m.add_top(mp.Chunk(list(genes_dict.keys()),
+                             fill_colors=genes_dict_colors, rotation=90))
+    else:
+        h_m.add_top(mp.Labels(genes), pad=0.1)
+    h_m.add_left(mp.Numbers(agg_cell_counts, color="#EEB76B", label="Count"))
+    if dendrogram is True:
+        h_m.add_dendrogram("right", pad=0.1)
+    h_m.add_legends()
+    if show is True:
+        h_m.render()
+    return h_m
+
+
+def plot_dot(adata, col_cell_type, genes, layer="counts",
+             genes_dict_colors=None,  cmap="coolwarm", vcenter=0,
+             dendrogram=False, fig_scale=1, show=True, **kwargs):
+    """
+    Create custom dot plot with GEX + per-cluster cell counts.
+
+    Notes
+    -----
+    Adapted from
+    scanpy.readthedocs.io/en/stable/how-to/plotting-with-marsilea.html.
+    """
+    adata = adata.copy()
+    if layer is not None:
+        adata.X = adata.layers[layer].copy()
+    genes_dict = {**genes} if isinstance(genes, dict) else None
+    if genes_dict is not None:
+        genes_dict = dict(zip(genes_dict, [genes_dict[x] if isinstance(
+            genes_dict[x], str) else genes_dict[x] for x in genes_dict]))
+        genes_dict = dict(zip(genes_dict, [[i for i in genes_dict[
+            x] if i in adata.var_names] for x in genes_dict]))
+        genes = list(pd.unique(functools.reduce(lambda i, j: i + j, [
+            genes_dict[x] for x in genes_dict])))
+    agg = sc.get.aggregate(adata[:, genes], by=col_cell_type, func=[
+        "mean", "count_nonzero"])
+    agg.obs = agg.obs.join(adata.obs[col_cell_type].value_counts(
+        ).to_frame("cell_counts"))
+    agg_exp = agg.layers["mean"]
+    agg_count = agg.layers["count_nonzero"]
+    agg_cell_counts = agg.obs["cell_counts"].to_numpy()
+    size = agg_count / agg_cell_counts[:, np.newaxis]
+    mplt = ma.SizedHeatmap(
+        size=size, color=agg_exp, cluster_data=size,
+        height=fig_scale * agg_exp.shape[0] / 3,
+        width=fig_scale * agg_exp.shape[1] / 3,
+        edgecolor="lightgray", cmap=cmap, vcenter=vcenter,
+        size_legend_kws=dict(colors="#538bbf",
+                             title="Fraction of Cells\nin Groups (%)",
+                             labels=["20%", "40%", "60%", "80%", "100%"],
+                             show_at=[0.2, 0.4, 0.6, 0.8, 1.0]),
+        color_legend_kws=dict(title="Mean Expression\nin Group"),
+    )
+    if genes_dict is not None:
+        cells, markers = [], []
+        for c, ms in genes_dict.items():
+            cells += [c] * len(ms)
+            markers += ms
+        mplt.add_top(mp.Labels(markers), pad=0.1)
+        mplt.group_cols(cells, order=list(genes_dict.keys()))
+        mplt.add_top(mp.Chunk(list(genes_dict.keys()),
+                              fill_colors=genes_dict_colors, rotation=90))
+    else:
+        mplt.add_top(mp.Labels(genes), pad=0.1)
+    mplt.add_right(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.1)
+    mplt.add_left(mp.Numbers(agg_cell_counts, color="#EEB76B",
+                             label="Count"), size=0.5, pad=0.1)
+    if dendrogram is True:
+        mplt.add_dendrogram("right", pad=0.1)
+    mplt.add_legends()
+    if show is True:
+        mplt.render()
+    return mplt

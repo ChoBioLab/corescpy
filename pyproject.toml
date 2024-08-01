@@ -28,6 +28,7 @@ dependencies = [
     "muon",
     "celltypist",
     "requests",
+    "marsilea",
     # "setuptools<60.0.0",  # stlearn/numba compatibility?
 
     # GSEA
