@@ -384,7 +384,8 @@ def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
 def plot_matrix(adata, col_cell_type, genes, layer="counts",
                 cmap="coolwarm", vcenter=0, genes_dict_colors=None,
                 dendrogram=False, label="Expression", linecolor="lightgray",
-                linewidth=0.5, fig_scale=1, title=None, show=True, **kwargs):
+                linewidth=0.5, fig_scale=1, percent="right",
+                title=None, title_fontsize=20, show=True, **kwargs):
     """
     Create custom matrix plot with GEX + per-cluster cell counts.
 
@@ -408,40 +409,50 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
         "mean", "count_nonzero"])
     agg.obs = agg.obs.join(adata.obs[col_cell_type].value_counts(
         ).to_frame("cell_counts"))
+    agg.obs.loc[:, "cell_percents"] = round(100 * agg.obs[
+        "cell_counts"] / adata.obs.shape[0], 1)
     agg_exp = agg.layers["mean"]
-    # agg_count = agg.layers["count_nonzero"]
-    agg_cell_counts = agg.obs["cell_counts"].to_numpy()
-    h_m = ma.Heatmap(
+    agg_cell_ct = agg.obs["cell_counts"].to_numpy()
+    agg_cell_ctp = agg.obs["cell_percents"].to_numpy()
+    mplt = ma.Heatmap(
         agg_exp, height=fig_scale * agg_exp.shape[0] / 3,
         width=fig_scale * agg_exp.shape[1] / 3, cmap=cmap,
         linewidth=linewidth, linecolor="lightgray", **kwargs
     )
-    h_m.add_right(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.1)
+    mplt.add_legends()
     if genes_dict is not None:
         cells, markers = [], []
         for c, ms in genes_dict.items():
             cells += [c] * len(ms)
             markers += ms
-        h_m.add_top(mp.Labels(markers), pad=0.1)
-        h_m.group_cols(cells, order=list(genes_dict.keys()))
-        h_m.add_top(mp.Chunk(list(genes_dict.keys()),
-                             fill_colors=genes_dict_colors, rotation=90))
+        mplt.add_top(mp.Labels(markers), pad=0.1)
+        mplt.group_cols(cells, order=list(genes_dict.keys()))
+        mplt.add_top(mp.Chunk(list(genes_dict.keys()),
+                              fill_colors=genes_dict_colors, rotation=90))
     else:
-        h_m.add_top(mp.Labels(genes), pad=0.1)
-    h_m.add_left(mp.Numbers(agg_cell_counts, color="#EEB76B", label="Count"))
+        mplt.add_top(mp.Labels(genes), pad=0.1)
+    fxp = mplt.add_right if percent == "right" else mplt.add_left
+    fxc = mplt.add_right if percent == "left" else mplt.add_left
+    fxc(mp.Numbers(agg_cell_ct, color="#EEB76B", label="Count"),
+        size=0.5, pad=0.2)
+    fxp(mp.Numbers(agg_cell_ctp, color="#EEB76B", label="Percent"),
+        size=0.5, pad=0.5)
+    fxp(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.5)
     if dendrogram is True:
-        h_m.add_dendrogram("right", pad=0.1)
-    h_m.add_legends()
+        mplt.add_dendrogram("right", pad=0.1)
+    mplt.add_legends()
     if title is not None:
-        mplt.add_title(title)
+        mplt.add_title(title, fontsize=title_fontsize, pad=0.3)
     if show is True:
-        h_m.render()
-    return h_m
+        mplt.render()
+    return mplt
 
 
 def plot_dot(adata, col_cell_type, genes, layer="counts",
-             genes_dict_colors=None, cmap="coolwarm", title=None,
-             dendrogram=False, fig_scale=1, show=True, **kwargs):
+             genes_dict_colors=None, cmap="Reds", title=None,
+             dendrogram=False, fig_scale=1, percent="right",
+             vmin=None, vmax=None, center=None,
+             title_fontsize=20, show=True, **kwargs):
     """
     Create custom dot plot with GEX + per-cluster cell counts.
 
@@ -465,10 +476,13 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
         "mean", "count_nonzero"])
     agg.obs = agg.obs.join(adata.obs[col_cell_type].value_counts(
         ).to_frame("cell_counts"))
+    agg.obs.loc[:, "cell_percents"] = round(100 * agg.obs[
+        "cell_counts"] / adata.obs.shape[0], 1)
     agg_exp = agg.layers["mean"]
     agg_count = agg.layers["count_nonzero"]
-    agg_cell_counts = agg.obs["cell_counts"].to_numpy()
-    size = agg_count / agg_cell_counts[:, np.newaxis]
+    agg_cell_ct = agg.obs["cell_counts"].to_numpy()
+    agg_cell_ctp = agg.obs["cell_percents"].to_numpy()
+    size = agg_count / agg_cell_ct[:, np.newaxis]
     mplt = ma.SizedHeatmap(
         size=size, color=agg_exp, cluster_data=size,
         height=fig_scale * agg_exp.shape[0] / 3,
@@ -478,7 +492,7 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
                              title="Fraction of Cells\nin Groups (%)",
                              labels=["20%", "40%", "60%", "80%", "100%"],
                              show_at=[0.2, 0.4, 0.6, 0.8, 1.0]),
-        color_legend_kws=dict(title="Mean Expression\nin Group"),
+        color_legend_kws=dict(title="Mean Expression\nin Group"), **kwargs
     )
     if genes_dict is not None:
         cells, markers = [], []
@@ -491,14 +505,18 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
                               fill_colors=genes_dict_colors, rotation=90))
     else:
         mplt.add_top(mp.Labels(genes), pad=0.1)
-    mplt.add_right(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.1)
-    mplt.add_left(mp.Numbers(agg_cell_counts, color="#EEB76B",
-                             label="Count"), size=0.5, pad=0.1)
+    fxp = mplt.add_right if percent == "right" else mplt.add_left
+    fxc = mplt.add_right if percent == "left" else mplt.add_left
+    fxc(mp.Numbers(agg_cell_ct, color="#EEB76B", label="Count"),
+        size=0.5, pad=0.2)
+    fxp(mp.Numbers(agg_cell_ctp, color="#EEB76B", label="Percent"),
+        size=0.5, pad=0.5)
+    fxp(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.2)
     if dendrogram is True:
         mplt.add_dendrogram("right", pad=0.1)
     mplt.add_legends()
     if title is not None:
-        mplt.add_title(title)
+        mplt.add_title(title, fontsize=title_fontsize)
     if show is True:
         mplt.render()
     return mplt

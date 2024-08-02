@@ -658,7 +658,7 @@ class Spatial(cr.Omics):
 
     def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
                                library_id=None, library_key=None, seed=1618,
-                               layer=None, palette=None, size=None,
+                               layer="log1p", palette=None, size=None,
                                key_image=None, shape="hex",
                                title="Neighborhood Enrichment",
                                kws_plot=None, figsize=None, cmap="magma",
