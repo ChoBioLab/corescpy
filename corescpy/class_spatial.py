@@ -772,15 +772,16 @@ class Spatial(cr.Omics):
         sq.gr.co_occurrence(adata, cluster_key=cct, n_jobs=n_jobs,
                             spatial_key=self._spatial_key, **kwargs)
         fig["co_occurrence"] = {}
-        try:
-            fig["spatial_scatter"] = self.plot_spatial(
-                color=col_cell_type, groups=key_cell_type,
-                shape=shape, figsize=figsize, cmap=cmap,
-                library_id=library_id, return_ax=True)  # cell types plot
-            if title:
-                fig["spatial_scatter"].suptitle(title)
-        except Exception:
-            traceback.print_exc()
+        if key_cell_type is not None:
+            try:
+                fig["spatial_scatter"] = self.plot_spatial(
+                    color=col_cell_type, groups=key_cell_type,
+                    shape=shape, figsize=figsize, cmap=cmap,
+                    library_id=library_id, return_ax=True)  # cell types plot
+                if title:
+                    fig["spatial_scatter"].suptitle(title)
+            except Exception:
+                traceback.print_exc()
         # fig["co_occurrence"] = sq.pl.co_occurrence(
         #     adata, cluster_key=cct, legend=False,
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
