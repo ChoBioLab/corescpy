@@ -121,8 +121,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                          muon.MuData)):  # if already data object
         print("\n\n<<< LOADING OBJECT >>>")
         adata = file.copy() if "copy" in dir(file) else file
-        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
-            adata.table.uns["original_ix"] = adata.table.obs.index.values
 
     # Spatial Data
     elif spatial not in [None, False]:

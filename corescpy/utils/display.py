@@ -108,23 +108,40 @@ def explore_h5_file(file):
 def print_counts(adata, group_by=None, title="Total", **kwargs):
     if kwargs:
         pass
-    adata = (adata.table if isinstance(adata, spatialdata.SpatialData
-                                       ) else adata).copy()
-    print(f"\n\n{'=' * 80}\nCounts: {title}\n{'=' * 80}\n")
-    print(f"\n\tObservations: {adata.n_obs}\n")
-    if group_by is not None and group_by in adata.obs:
-        print(f"{'-' * 40}\nLAYER DIMENSIONS:\n{'-' * 40}")
-        for x in adata.layers:
-            print(f"{x}: {adata.layers[x].shape}")
-        print(f"{'-' * 40}\n")
+    try:
+        if isinstance(adata, spatialdata.SpatialData):
+            if "tables" in dir(adata) and adata.tables["table"]:
+                key_table = kwargs.pop("key_table", "table" if (
+                    "table" in adata.tables) else list(adata.tables.keys()))
+                if isinstance(key_table, (list, tuple, set, np.ndarray)):
+                    for x in adata.tables:
+                        if adata.tables[x] is not None:
+                            print_counts(adata.tables[x], group_by=group_by,
+                                         title=x, **kwargs)
+                    return None
+            elif "table" in dir(adata) and adata.table is not None:
+                adata = adata.table.copy()
+            else:
+                print(f"\n\n{'=' * 80}\nNo valid table attribute. "
+                      "Cannot print counts.\n{'=' * 80}\n")
+                return None
+        print(f"\n\n{'=' * 80}\nCounts: {title}\n{'=' * 80}\n")
+        print(f"\n\tObservations: {adata.n_obs}\n")
         if group_by is not None and group_by in adata.obs:
-            print("\n", adata.obs[group_by].value_counts().round(2))
-        print("\n")
-    if "var" in dir(adata):
-        print(f"\tGenes: {adata.n_vars}\n")
-        des = adata.var.reset_index().describe()
-        des = des.loc[list(set(["25%", "50%", "75%"]).intersection(
-            des.index))].sort_index()
-        if des.empty is False:
-            print(des)
+            print(f"{'-' * 40}\nLAYER DIMENSIONS:\n{'-' * 40}")
+            for x in adata.layers:
+                print(f"{x}: {adata.layers[x].shape}")
+            print(f"{'-' * 40}\n")
+            if group_by is not None and group_by in adata.obs:
+                print("\n", adata.obs[group_by].value_counts().round(2))
+            print("\n")
+        if "var" in dir(adata):
+            print(f"\tGenes: {adata.n_vars}\n")
+            des = adata.var.reset_index().describe()
+            des = des.loc[list(set(["25%", "50%", "75%"]).intersection(
+                des.index))].sort_index()
+            if des.empty is False:
+                print(des)
+    except Exception as err:
+        print(f"{err}\n\nError printing counts {adata}")
     print(f"\n\n{'=' * 80}\n")

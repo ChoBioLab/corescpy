@@ -20,6 +20,7 @@ from shapely.geometry.polygon import Polygon
 import geopandas as gpd
 import squidpy as sq
 import spatialdata
+from spatialdata.models import TableModel
 import spatialdata_plot as sdp
 import spatialdata_io as sdio
 from spatialdata_io._constants._constants import XeniumKeys
@@ -42,7 +43,7 @@ class Spatial(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
     def __init__(self, file_path, col_sample_id="Sample", library_id=None,
-                 visium=False, **kwargs):
+                 key_table="table", visium=False, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -81,6 +82,9 @@ class Spatial(cr.Omics):
                 as True to use default arguments. The default is False
                 (assumes 10x Xenium data format and
                 `file_path_spatial` provided).
+            key_table (str, optional): For `spatialdata` objects,
+                `self.adata.tables[key_table]` will be the default
+                used for the `self.rna` attribute.
             kwargs (dict, optional): Keyword arguments to pass to the
                 Omics class initialization method.
         """
@@ -88,13 +92,15 @@ class Spatial(cr.Omics):
         _ = kwargs.pop("file_path_spatial", None)
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
                          library_id=library_id, visium=visium,
-                         verbose=False, **kwargs)
+                         verbose=False, key_table=key_table, **kwargs)
         self._spatial_key = cr.SPATIAL_KEY
         self._kind = "xenium" if visium is False else "visium"
         if library_id is None and visium is True:
             library_id = list(self.rna.uns[self._spatial_key].keys())
             if len(library_id) == 1:
                 library_id = library_id[0]
+        if "key_table" not in self._keys:
+            self._keys["key_table"] = key_table
         self._columns["col_segment"] = SEG_CELL_ID_VISIUM if (
             visium is True) else SEG_CELL_ID_XENIUM
         if self._columns["col_sample_id"] not in self.rna.obs:
@@ -122,7 +128,12 @@ class Spatial(cr.Omics):
         """Update SpatialData object `.table` from h5ad file."""
         original_ix = self.rna.uns[
             "original_ix"] if "original_ix" in self.rna.uns else None
-        self.rna = sc.read(os.path.splitext(file)[0] + ".h5ad")
+        ann = sc.read(os.path.splitext(file)[0] + ".h5ad")
+        for x in ann.uns[TableModel.ATTRS_KEY]:
+            if isinstance(ann.uns[TableModel.ATTRS_KEY][x], np.ndarray):
+                ann.uns[TableModel.ATTRS_KEY][x] = list(
+                    ann.uns[TableModel.ATTRS_KEY][x])
+        self.rna = ann
         csid = self._columns["col_sample_id"]
         if file_path_markers and not os.path.exists(file_path_markers):
             file_path_markers = None
@@ -133,12 +144,12 @@ class Spatial(cr.Omics):
             for s in self.rna.obs[csid].unique():
                 self.rna[self.rna.obs[csid] == s] = cr.pp.update_spatial_uns(
                     self.adata, self._library_id, csid, rna_only=True,
-                    spatial_key=self._key_spatial)
+                    spatial_key=self._spatial_key)
         elif isinstance(self.adata, spatialdata.SpatialData):  # single-sample
             print("\n\n<<< RESTORING SINGLE-SAMPLE FROM h5ad >>>\n")
             self.rna = cr.pp.update_spatial_uns(
                 self.adata, self._library_id, csid, rna_only=True,
-                spatial_key=self._key_spatial)
+                spatial_key=self._spatial_key)
         else:  # if not SpatialData object
             print("\n\n<<< RESTORED FROM h5ad >>>\n")
         if original_ix is not None and ("original_ix" not in self.rna.uns or (

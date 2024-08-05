@@ -117,6 +117,7 @@ class Omics(object):
                 "kws_process_guide_rna"] in [False, None]:
             _ = kwargs.pop("kws_process_guide_rna")
         kpg = kwargs.pop("kws_process_guide_rna", None)
+        key_table = kwargs.pop("key_table", None)
         col_num_umis = kpg["col_num_umis"] if kpg not in [
             None, False] else kwargs["col_num_umis"] if (
                 "col_num_umis" in kwargs) else None
@@ -142,7 +143,7 @@ class Omics(object):
             col_subject=col_subject,  # e.g., patient ID rather than sample
             col_condition=col_condition, col_num_umis=col_num_umis)
         self._keys = dict(key_control=key_control,
-                          key_treatment=key_treatment)
+                          key_treatment=key_treatment, key_table=key_table)
         if verbose is True:
             for q in [self._columns, self._keys]:
                 cr.tl.print_pretty_dictionary(q)
@@ -167,9 +168,12 @@ class Omics(object):
         print(f"{self.adata.obs}\n\n" if assay and verbose is True else "")
 
         # Let Property Setters Run
-        self.rna = self.adata.table if isinstance(
-            self.adata, spatialdata.SpatialData) else self.adata[
-                self._assay] if self._assay else self.adata
+        self.rna = (self.adata.tables[key_table] if "tables" in dir(
+            self.adata) and (
+                key_table in self.adata.tables) else self.adata.table) if (
+                    isinstance(self.adata, spatialdata.SpatialData)
+                    ) else self.adata[self._assay] if (
+                        self._assay) else self.adata
         if self._columns["col_cell_type"] in self.rna.obs and not isinstance(
                 self.rna.obs[self._columns["col_cell_type"]], pd.Categorical):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
@@ -193,10 +197,11 @@ class Omics(object):
             #                           self._assay: value})
             self._rna = self.adata.mod[self._assay]
         elif isinstance(self.adata, spatialdata.SpatialData):
-            if self.adata.table is not None:
-                del self.adata.table
-            self.adata.table = value
-            self._rna = self.adata.table
+            if self._keys["key_table"] in self.adata.tables and (
+                    self.adata.tables[self._keys["key_table"]] is not None):
+                del self.adata.tables[self._keys["key_table"]]
+            self.adata.tables[self._keys["key_table"]] = value
+            self._rna = self.adata.tables[self._keys["key_table"]]
         else:
             if self._assay:
                 self.adata[self._assay] = value
@@ -835,8 +840,14 @@ class Omics(object):
         if copy is False:  # assign if performing inplace
             print(adata)
             self.rna = adata
-            if flavor != "celltypist":  # annotate with CellTypist
-                figs["umap"] = self.plot_umap(color=col_annotation)  # plot
+            try:  # plot
+                if flavor != "celltypist":  # annotate with CellTypist
+                    figs["umap"] = self.plot_umap(color=col_annotation)
+                    if "plot_spatial" in dir(self):
+                        figs["spatial"] = self.plot_spatial(
+                            color=col_annotation)
+            except Exception as err:
+                print(f"\n\n\n{err}\n\n\nPlotting annotations failed!")
             self.results[flavor] = res
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension
