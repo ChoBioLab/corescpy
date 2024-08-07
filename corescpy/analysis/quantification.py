@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=no-member
 """
-Analyses focused on cell type composition analyses.
+Analyses focused on quantification of transcripts and cell types.
 
 @author: E. N. Aslinger
 """

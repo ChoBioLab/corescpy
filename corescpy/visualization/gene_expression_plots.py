@@ -385,7 +385,8 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
                 cmap="coolwarm", vcenter=0, genes_dict_colors=None,
                 dendrogram=False, label="Expression", linecolor="lightgray",
                 linewidth=0.5, fig_scale=1, percent="right",
-                title=None, title_fontsize=20, show=True, **kwargs):
+                title=None, title_fontsize=20,
+                show=True, out_file=None, **kwargs):
     """
     Create custom matrix plot with GEX + per-cluster cell counts.
 
@@ -445,6 +446,8 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
         mplt.add_title(title, fontsize=title_fontsize, pad=0.3)
     if show is True:
         mplt.render()
+    if out_file is not None:
+        mplt.save(out_file)
     return mplt
 
 
@@ -452,7 +455,7 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
              genes_dict_colors=None, cmap="Reds", title=None,
              dendrogram=False, fig_scale=1, percent="right",
              vmin=None, vmax=None, center=None,
-             title_fontsize=20, show=True, **kwargs):
+             title_fontsize=20, show=True, out_file=None, **kwargs):
     """
     Create custom dot plot with GEX + per-cluster cell counts.
 
@@ -519,4 +522,6 @@ def plot_dot(adata, col_cell_type, genes, layer="counts",
         mplt.add_title(title, fontsize=title_fontsize)
     if show is True:
         mplt.render()
+    if out_file is not None:
+        mplt.save(out_file)
     return mplt

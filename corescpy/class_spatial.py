@@ -268,11 +268,14 @@ class Spatial(cr.Omics):
         """
         if isinstance(bounds_x, (str, Polygon, MultiPolygon)) or isinstance(
                 bounds_x[0], str):  # Xenium Explorer selection(s)
-            if isinstance(bounds_x, (list, str)):  # if file(s)
-                coords = [cr.pp.xenium_explorer_selection(
-                    i, pixel_size) for i in bounds_x] if isinstance(
-                        bounds_x, list) else cr.pp.xenium_explorer_selection(
-                            bounds_x, pixel_size=pixel_size)
+            if isinstance(bounds_x, (list, np.ndarray, tuple, str)):  # file
+                if isinstance(bounds_x, (list, np.ndarray, tuple)):  # fileS
+                    coords = [cr.pp.xenium_explorer_selection(
+                         i, pixel_size=pixel_size, as_list=False)
+                               for i in bounds_x]
+                else:  # single file
+                    coords = cr.pp.xenium_explorer_selection(
+                        bounds_x, pixel_size=pixel_size, as_list=False)
             else:  # if shapely object
                 coords = bounds_x
             if isinstance(coords, list):  # if multiple selections...
@@ -288,10 +291,12 @@ class Spatial(cr.Omics):
                     raise ValueError(
                         "Input coordinates have invalid geometry!")
             else:
+                invalid = False
                 try:
                     sdata_crop = self.adata.query.polygon(
                         coords, **kws)  # crop
                 except Exception as err:
+                    sdata_crop = None
                     if allow_make_valid is False:
                         raise err
                     invalid, error = True, err
@@ -309,6 +314,7 @@ class Spatial(cr.Omics):
                         plt.show()
                         sdata_crop = self.adata.query.polygon(coords, **kws)
                     except Exception:
+                        sdata_crop = None
                         print(error)
                         traceback.print_exc()
             if "table" not in dir(sdata_crop):
@@ -457,7 +463,8 @@ class Spatial(cr.Omics):
     def plot_spatial(self, color=None, kind="dot", key_image=None,
                      col_sample_id=None, library_id=None, title="",
                      shape="hex", figsize=30, cmap="magma", wspace=0,
-                     mode="squidpy", layer=None, title_offset=0, **kwargs):
+                     mode="squidpy", layer=None, title_offset=0,
+                     out_file=None, **kwargs):
         """Create basic spatial plots."""
         color = None if color is False else color if color else self._columns[
             "col_cell_type"]  # no color if False; clusters if unspecified
@@ -482,7 +489,8 @@ class Spatial(cr.Omics):
                                wspace=wspace), kwargs)  # keyword arguments
         kws["img_res_key"] = key_image if key_image else list(
             self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
-        fig = cr.pl.plot_spatial(ann, col_segment=seg, title=title, **kws)
+        fig = cr.pl.plot_spatial(ann, col_segment=seg, title=title,
+                                 save=out_file, **kws)
         return fig
 
     def plot_clusters(self, col_cell_type=None, key_cell_type=None,
@@ -615,12 +623,15 @@ class Spatial(cr.Omics):
                              coord_type="generic", n_jobs=None, figsize=None,
                              palette=None, copy=False, cmap="magma",
                              title=None, kws_plot=None,
-                             normalized=True, **kwargs):
+                             out_plot=None, normalized=True, **kwargs):
         """
         Characterize connectivity, centrality, and interaction matrix.
         """
         # Connectivity & Centrality
         print("\t*** Building connectivity matrix...")
+        out, ext = os.path.splitext(out_plot) if out_plot else (None, None)
+        if ext == "":
+            ext = ".jpeg"
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
         self.rna.obs = self.rna.obs.astype({cct: "category"})
@@ -639,13 +650,17 @@ class Spatial(cr.Omics):
         print("\t*** Computing & plotting centrality scores...")
         sq.gr.centrality_scores(adata, cluster_key=cct, n_jobs=n_jobs)  # run
         try:
-            sq.pl.centrality_scores(adata, cluster_key=cct, figsize=f_s)
+            sq.pl.centrality_scores(
+                adata, cluster_key=cct, figsize=f_s, save=os.path.join(
+                    out, "_centrality" + ext) if out else None)
             fig = plt.gcf()
         except Exception:
             try:
                 ann = adata.table.copy()
                 _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
-                sq.pl.centrality_scores(ann, cluster_key=cct, figsize=f_s)
+                sq.pl.centrality_scores(
+                    ann, cluster_key=cct, figsize=f_s, save=os.path.join(
+                        out, "_centrality" + ext) if out else None)  # plot
                 fig = plt.gcf()
             except Exception:
                 fig = str(traceback.format_exc())
@@ -653,21 +668,28 @@ class Spatial(cr.Omics):
         if not isinstance(fig, str) and title:
             fig.suptitle(title)
         print("\t*** Computing interaction matrix...")
-        sq.gr.interaction_matrix(self.adata, cct, normalized=normalized)
+        sq.gr.interaction_matrix(adata, cct, normalized=normalized)
         try:
             if "figsize" in kws_plot and kws_plot["figsize"]:
                 kws_plot["figsize"] = (kws_plot["figsize"][0] / 3,
                                        kws_plot["figsize"][1])
-            sq.pl.interaction_matrix(self.rna, cct, **kws_plot)
+            sq.pl.interaction_matrix(adata, cct, save=os.path.join(
+                out, "_interaction" + ext), **kws_plot)
             fig_ix = plt.gcf()
+            if out_plot is None:
+                try:
+                    fig_ix
+                except Exception:
+                    warn("\n\n*** Failed to save interaction matrix plot\n\n")
         except Exception:
             fig_ix = str(traceback.format_exc())
-        if copy is False:
-            self.figures["centrality"] = fig
-            self.figures["interaction_matrix"] = fig_ix
+        for u, v in zip(["Centrality scores", "Interaction matrix results"], [
+                "centrality_scores", "_interactions"]):
+            print(f"\n\n*** {u} stored in `.rna.uns['{cct}_{v}']`\n\n")
         return adata, fig
 
-    def calculate_neighborhood(self, col_cell_type=None, mode="zscore",
+    def calculate_neighborhood(self, col_cell_type=None,
+                               mode="zscore", normalized=False,
                                library_id=None, library_key=None, seed=1618,
                                layer="log1p", palette=None, size=None,
                                key_image=None, shape="hex",
@@ -678,6 +700,8 @@ class Spatial(cr.Omics):
         adata = self.adata
         if library_key is None:
             library_key = self._columns["col_sample_id"]
+        if title == "Neighborhood Enrichment":
+            title += f" ({mode}{' Normalized by Row' if normalized else ''})"
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
         if cbar_range is None:
@@ -722,6 +746,8 @@ class Spatial(cr.Omics):
             traceback.print_exc()
         if copy is False:
             self.figures["neighborhood_enrichment"] = plt.gcf()
+        print("\n\n*** Neighborhood results stored in "
+              f"`.rna.uns['{cct}_nhood_enrichment']`\n\n")
         return adata, fig
 
     def cluster_spatial(self, layer="log1p", alpha=0.2,
@@ -744,7 +770,8 @@ class Spatial(cr.Omics):
     def find_cooccurrence(self, col_cell_type=None, key_cell_type=None,
                           layer=None, library_id=None, cmap="magma",
                           n_jobs=None, figsize=15, palette=None, title=None,
-                          kws_plot=None, shape="hex", size=None, **kwargs):
+                          kws_plot=None, out_plot=None,
+                          shape="hex", size=None, **kwargs):
         """
         Find co-occurrence using spatial data. (similar to neighborhood
         enrichment analysis, but uses original spatial coordinates rather
@@ -766,7 +793,7 @@ class Spatial(cr.Omics):
             palette = matplotlib.colors.Colormap(palette)
         kws_plot = cr.tl.merge(dict(
             palette=palette, size=size, key_cell_type=key_cell_type,
-            figsize=figsize), kws_plot)  # plot keywods
+            figsize=figsize, out_file=out_plot), kws_plot)  # plot keywods
         if n_jobs is None and n_jobs is not False:
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.co_occurrence(adata, cluster_key=cct, n_jobs=n_jobs,
@@ -801,13 +828,14 @@ class Spatial(cr.Omics):
                 print(traceback.format_exc())
         if title:
             fig["co_occurrence"].suptitle(title)
-        self.figures["co_occurrence"] = fig["co_occurrence"]
+        print("\n\n*** Co-occurrence results stored in "
+              f"`.rna.uns['{cct}_co_occurrence']`\n\n")
         return adata, fig
 
     def find_svgs(self, genes=10, method="moran", shape="hex", n_perms=10,
                   layer=None, library_id=None, col_cell_type=None, title=None,
                   col_sample_id=None, n_jobs=2, figsize=15,
-                  key_image=None, kws_plot=None):
+                  key_image=None, out_plot=None, kws_plot=None):
         """Find spatially-variable genes."""
         adata = self.adata
         # adata.table = self.get_layer(layer=layer, subset=None, inplace=True)
@@ -830,12 +858,14 @@ class Spatial(cr.Omics):
             fig = self.plot_spatial(
                 genes + [cct], shape=shape, figsize=figsize, title=title,
                 key_image=key_image, library_id=library_id,
-                library_key=csid, **kws_plot)
+                library_key=csid, out_file=out_plot, **kws_plot)
         except Exception:
             fig = str(traceback.format_exc())
             traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
+        print(self.rna.uns["moranI"].head(10), "\n\n\n")
+        print("\n\n*** SVG results stored in `.rna.uns['moranI']`\n\n")
         return adata, fig
 
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):
@@ -889,26 +919,29 @@ class Spatial(cr.Omics):
 
     def calculate_receptor_ligand_spatial(self, col_cell_type=None,
                                           method="cosine", layer="log1p",
-                                          genes=None, **kwargs):
+                                          genes=None, cmap="coolwarm",
+                                          top_n=3, **kwargs):
         """Calculate receptor-ligand information using spatial data."""
         # raise NotImplementedError("Spatially-informed ligand-receptor "
         #                           "analysis not yet implemented.")
         adata = self.get_layer(layer=layer, inplace=False)  # get layer copy
         if isinstance(adata, spatialdata.SpatialData):
-            adata = adata.table.copy()  # AnnData from SpatialData object
+            k_t = kwargs.pop("key_table", self._keys["key_table"])
+            adata = adata.tables[k_t].copy() if (
+                "tables" in dir(adata)) else adata.table.copy()  # anndata
         kws = cr.tl.merge(dict(
             n_perms=100, mask_negatives=False, add_categories=True,
             expr_prop=0.2, use_raw=False, verbose=True), kwargs, how="left")
         liana.mt.lr_bivar(adata, function_name=method, **kws)  # run
-        lrdata = adata.obsm["local_scores"].sort_values(
-            "global_mean", ascending=False).head(3)
+        lrd = adata.obsm["local_scores"].sort_values(
+            "global_mean", ascending=False)
         for x in ["global_mean", "global_sd"]:
-            print(x, lrdata.var.sort_values(x, ascending=False).head(3))
+            print(x, lrd.var.sort_values(x, ascending=False).head(top_n))
         if genes:
-            combos = [f"{g[0]}^{g[1]}" for g in permutations(genes, 2)]
-            sc.pl.spatial(lrdata, layer="cats", color=combos, size=1.4,
-                          cmap="coolwarm")
-        return adata, lrdata
+            combs = [f"{g[0]}^{g[1]}" for g in permutations(genes, 2)]
+            sc.pl.spatial(lrd.head(top_n), layer="cats", color=combs,
+                          cmap=cmap, size=1.4)
+        return adata, adata.obsm["local_scores"]
 
     def calculate_spatial_distance(self, key_reference, col_reference=None,
                                    genes=None, metric="euclidean",

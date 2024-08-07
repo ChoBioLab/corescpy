@@ -13,6 +13,7 @@ and `stlearn` tutorials.
 """
 
 import tifffile
+import functools
 import csv
 import os
 import re
@@ -148,7 +149,7 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
         return adata
 
 
-def xenium_explorer_selection(file_coord, pixel_size=0.2125):
+def xenium_explorer_selection(file_coord, pixel_size=0.2125, as_list=False):
     """
     Read Xenium Explorer selection file & return polygon object.
 
@@ -160,18 +161,23 @@ def xenium_explorer_selection(file_coord, pixel_size=0.2125):
     multiple selections are included in any file.
 
     """
-    dff = pd.read_csv(file_coord, skiprows=2)
     if isinstance(file_coord, (list, np.ndarray, set, tuple)):
-        poly = MultiPolygon([xenium_explorer_selection(f, pixel_size)
-                             for f in file_coord])
-    elif "Selection" in dff.columns:
-        poly = []
-        for s in dff.Selection.unique():
-            poly += [Polygon(dff[dff.Selection == s].drop(
-                "Selection", axis=1).values / pixel_size)]
-        poly = MultiPolygon(poly)
+        poly = [xenium_explorer_selection(
+            f, pixel_size=pixel_size, as_list=True) for f in file_coord]
+        poly = MultiPolygon(functools.reduce(lambda i, j: i + j, poly))
     else:
-        poly = Polygon(dff.values / pixel_size)
+        dff = pd.read_csv(file_coord, skiprows=2)
+        if "Selection" in dff.columns:
+            poly = []
+            for s in dff.Selection.unique():
+                poly += [Polygon(dff[dff.Selection == s].drop(
+                    "Selection", axis=1).values / pixel_size)]
+            if as_list is False:
+                poly = MultiPolygon(poly)
+        else:
+            poly = Polygon(dff.values / pixel_size)
+            if as_list is True:
+                poly = [poly]
     return poly
 
 

@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# pylint: disable=no-member
+"""
+Analyses focused on cell type interaction/co-occurrence..
+
+@author: E. N. Aslinger
+"""
+
+import traceback
 import liana
 from squidpy.pl._color_utils import _get_palette
 from squidpy.pl._graph import _get_data
@@ -61,7 +71,7 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
 def plot_cooccurrence(adata, col_cell_type, cluster_key=None, palette=None,
                       figsize=None, fontdict=None, legend_kwargs=None,
                       key_cell_type=None, dpi=100, wspace=2,
-                      right_margin=0.15, **kwargs):
+                      right_margin=0.15, out_file=None, **kwargs):
     """
     Plot co-occurrence of cell types in spatial data.
 
@@ -109,4 +119,10 @@ def plot_cooccurrence(adata, col_cell_type, cluster_key=None, palette=None,
     fig.legend(**legend_kwargs)
     plt.subplots_adjust([11, 12], right=1 - right_margin)
     plt.show()
+    if out_file is not None:
+        try:
+            fig.savefig(out_file)
+        except Exception:
+            traceback.print_exc()
+            print("\n\n*** Failed to save co-occurrence plot!\n\n")
     return fig, axs
