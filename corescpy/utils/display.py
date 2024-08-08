@@ -110,21 +110,22 @@ def print_counts(adata, group_by=None, title="Total", **kwargs):
         pass
     try:
         if isinstance(adata, spatialdata.SpatialData):
-            if "tables" in dir(adata) and adata.tables["table"]:
+            if "tables" in dir(adata):
                 key_table = kwargs.pop("key_table", "table" if (
                     "table" in adata.tables) else list(adata.tables.keys()))
-                if isinstance(key_table, (list, tuple, set, np.ndarray)):
-                    for x in adata.tables:
-                        if adata.tables[x] is not None:
-                            print_counts(adata.tables[x], group_by=group_by,
-                                         title=x, **kwargs)
-                    return None
+                key_table = [key_table] if isinstance(
+                    key_table, str) else key_table
+                for x in key_table:
+                    if adata.tables[x] is not None:
+                        print_counts(adata.tables[x], group_by=group_by,
+                                     title=f"{title}: {x}", **kwargs)
             elif "table" in dir(adata) and adata.table is not None:
-                adata = adata.table.copy()
+                print_counts(adata.table, group_by=group_by,
+                             title=title, **kwargs)
             else:
                 print(f"\n\n{'=' * 80}\nNo valid table attribute. "
                       "Cannot print counts.\n{'=' * 80}\n")
-                return None
+            return None
         print(f"\n\n{'=' * 80}\nCounts: {title}\n{'=' * 80}\n")
         print(f"\n\tObservations: {adata.n_obs}\n")
         if group_by is not None and group_by in adata.obs:
