@@ -26,6 +26,10 @@ import squidpy as sq
 # import stlearn as st
 import spatialdata_io as sdio
 from spatialdata_io.experimental import from_legacy_anndata
+from spatialdata_io._constants._constants import XeniumKeys
+from spatialdata_io.readers.xenium import _get_images
+from spatialdata_io.readers._utils._utils import (
+    _initialize_raster_models_kwargs)
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
@@ -58,7 +62,8 @@ def _get_control_probe_names():
 def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
                  visium=False, spatial_key="spatial", library_id=None,
                  col_gene_symbols="gene_symbols", prefix=None, gex_only=False,
-                 col_sample_id="library_key_spatial", n_jobs=1, **kwargs):
+                 col_sample_id="library_key_spatial", n_jobs=1,
+                 path_xenium=None, **kwargs):
     """Read Xenium or Visium spatial data into an AnnData object."""
     # missing_fps = file_path_spatial is None and visium is False
     # uns_spatial = kwargs.pop("uns_spatial", None)
@@ -124,13 +129,14 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
                       "\n\n*** Failed to convert anndata to spatialdata.\n\n")
         else:
             adata = sdio.xenium(file_path, n_jobs=n_jobs, **kws)
-            if STORE_UNS_SQUIDPY:
-                adata = update_spatial_uns(adata, library_id, col_sample_id)
+        if STORE_UNS_SQUIDPY:
+            adata = update_spatial_uns(adata, library_id, col_sample_id,
+                                       path_xenium=path_xenium)
     return adata
 
 
 def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
-                       spatial_key="spatial"):
+                       spatial_key="spatial", path_xenium=None, **kwargs):
     """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
     imgs = {}
     if "images" in dir(adata):
@@ -144,6 +150,29 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
                 if len(scales) > 0 and "scale" in i and str(i.split(
                         "scale")[1]) == str(min(scales)):
                     imgs["hires"] = imgs[key]  # Squidpy-compatible
+    elif path_xenium is not None:
+        imread_kwargs = kwargs.pop("imread_kwargs", {})
+        kws_img_mods = kwargs.pop("image_models_kwargs", {})
+        kws_img_mods, _ = _initialize_raster_models_kwargs(kws_img_mods, {})
+        morph_dir = os.path.join(path_xenium,
+                                 XeniumKeys.MORPHOLOGY_FOCUS_DIR)
+        files = {f for f in os.listdir(morph_dir) if f.endswith(".ome.tif")}
+        if len(files) == 1:
+            channel_names = {0: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_0.value}
+        else:
+            channel_names = {0: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_0.value,
+                             1: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_1.value,
+                             2: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_2.value,
+                             3: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_3.value,
+                             4: "dummy"}
+        kws_img_mods = dict(kws_img_mods)
+        kws_img_mods["c_coords"] = list(channel_names.values())
+        imgs["morphology_focus"] = _get_images(
+            morph_dir, XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_IMAGE.format(0),
+            imread_kwargs, kws_img_mods)
+    else:
+        print("\n\nMorphology images not available to load in objects at "
+              "time of import. Check if already present.")
     if rna_only is True:
         # if col_sample_id in adata.table.obs:
         #     rna = adata.table[adata.table.obs[col_sample_id] == library_id]

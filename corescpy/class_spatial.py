@@ -471,8 +471,9 @@ class Spatial(cr.Omics):
                                return_ax=True, library_key=col_sample_id,
                                library_id=libid, color=color, alt_var=cgs,
                                wspace=wspace), kwargs)  # keyword arguments
-        kws["img_res_key"] = key_image if key_image else list(
-            self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
+        kws["img_res_key"] = key_image if key_image else None if len(
+            self.rna.uns[self._spatial_key][libid]["images"]) == 0 else list(
+                self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
         fig = cr.pl.plot_spatial(ann, col_segment=seg, title=title,
                                  save=out_file, **kws)
         return fig

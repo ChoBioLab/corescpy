@@ -71,7 +71,8 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     img_names = list(ann.uns[spatial_key][libid if isinstance(
         libid, str) else libid[0]]["images"].keys())
     kws["img_res_key"] = key_image if key_image else "hires" if (
-        "hires" in img_names) else img_names[0]
+        "hires" in img_names) else None if len(
+            img_names) == 0 else img_names[0]
 
     # Plot
     try:
