@@ -636,16 +636,16 @@ class Spatial(cr.Omics):
         sq.gr.centrality_scores(adata, cluster_key=cct, n_jobs=n_jobs)  # run
         try:
             sq.pl.centrality_scores(
-                adata, cluster_key=cct, figsize=f_s, save=os.path.join(
-                    f"{out}_centrality" + ext) if out else None)
+                adata, cluster_key=cct, figsize=f_s,
+                save=f"{out}{ext}" if out else None)
             fig = plt.gcf()
         except Exception:
             try:
                 ann = adata.table.copy()
                 _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 sq.pl.centrality_scores(
-                    ann, cluster_key=cct, figsize=f_s, save=os.path.join(
-                        out, "_centrality" + ext) if out else None)  # plot
+                    ann, cluster_key=cct, figsize=f_s,
+                    save=f"{out}{ext}" if out else None)  # plot
                 fig = plt.gcf()
             except Exception:
                 fig = str(traceback.format_exc())
@@ -658,16 +658,14 @@ class Spatial(cr.Omics):
             if "figsize" in kws_plot and kws_plot["figsize"]:
                 kws_plot["figsize"] = (kws_plot["figsize"][0] / 3,
                                        kws_plot["figsize"][1])
-            sq.pl.interaction_matrix(adata, cct, save=os.path.join(
-                f"{out}_interaction" + ext), **kws_plot)
-            fig_ix = plt.gcf()
-            if out_plot is None:
-                try:
-                    fig_ix
-                except Exception:
-                    warn("\n\n*** Failed to save interaction matrix plot\n\n")
+            sq.pl.interaction_matrix(
+                adata, cct, save=f"{out}_interaction{ext}" if out else None,
+                **kws_plot)  # plot interaction matrix
         except Exception:
-            fig_ix = str(traceback.format_exc())
+            sq.pl.interaction_matrix(
+                adata.table, cct, 
+                save=f"{out}_interaction{ext}" if out else None,
+                **kws_plot)  # plot interaction matrix
         for u, v in zip(["Centrality scores", "Interaction matrix results"], [
                 "centrality_scores", "_interactions"]):
             print(f"\n\n*** {u} stored in `.rna.uns['{cct}_{v}']`\n\n")
