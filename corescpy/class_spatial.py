@@ -637,7 +637,7 @@ class Spatial(cr.Omics):
         try:
             sq.pl.centrality_scores(
                 adata, cluster_key=cct, figsize=f_s, save=os.path.join(
-                    out, "_centrality" + ext) if out else None)
+                    f"{out}_centrality" + ext) if out else None)
             fig = plt.gcf()
         except Exception:
             try:
@@ -659,7 +659,7 @@ class Spatial(cr.Omics):
                 kws_plot["figsize"] = (kws_plot["figsize"][0] / 3,
                                        kws_plot["figsize"][1])
             sq.pl.interaction_matrix(adata, cct, save=os.path.join(
-                out, "_interaction" + ext), **kws_plot)
+                f"{out}_interaction" + ext), **kws_plot)
             fig_ix = plt.gcf()
             if out_plot is None:
                 try:
@@ -701,7 +701,7 @@ class Spatial(cr.Omics):
             int, float)) else (15, 7) if figsize is None else figsize
         kws_plot = {} if kws_plot is None else {**kws_plot}
         if out_plot is not None:
-            kws_plot["save"] = kws_plot
+            kws_plot["save"] = out_plot
         sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=n_jobs,
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
