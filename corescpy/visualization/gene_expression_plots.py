@@ -44,6 +44,18 @@ def plot_gex(adata, col_cell_type=None, title=None,
     figs = {}
     if isinstance(kind, str):
         kind = ["dot", "heat", "violin"] if kind == "all" else [kind.lower()]
+    if genes is None and marker_genes_dict:  # marker_genes_dict -> genes
+        genes = pd.unique(functools.reduce(lambda i, j: i + j, [
+            marker_genes_dict[k] for k in marker_genes_dict]))
+    if genes is not None:
+        if any((g not in adata.var_names for g in genes)):
+            warnings.warn("Will not plot " + ", ".join(set(genes).difference(
+                set(adata.var_names))) + " (not in `adata.var_names`).")
+            genes = list(set(genes).intersection(set(adata.var_names)))
+    if marker_genes_dict is not None:
+        marker_genes_dict = dict(zip(marker_genes_dict, [list(set(
+            marker_genes_dict[x]).intersection(set(
+                adata.var_names))) for x in marker_genes_dict]))
     kind = [x.lower() for x in kind]
     names_layers = cr.get_layer_dict()
     kws_heat, kws_violin, kws_matrix, kws_dot = [
@@ -381,10 +393,10 @@ def plot_markers(adata, n_genes=3, use_raw=False, key_cell_type=None,
     return fig
 
 
-def plot_matrix(adata, col_cell_type, genes, layer="counts",
+def plot_matrix(adata, col_cell_type, genes, layer=None,
                 cmap="coolwarm", vcenter=0, genes_dict_colors=None,
                 dendrogram=False, label="Expression", linecolor="lightgray",
-                linewidth=0.5, fig_scale=1, percent="right",
+                linewidth=0.5, fig_scale=1, percent="left",
                 title=None, title_fontsize=20,
                 show=True, out_file=None, **kwargs):
     """
@@ -418,9 +430,18 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
     mplt = ma.Heatmap(
         agg_exp, height=fig_scale * agg_exp.shape[0] / 3,
         width=fig_scale * agg_exp.shape[1] / 3, cmap=cmap,
-        linewidth=linewidth, linecolor="lightgray", **kwargs
+        linewidth=linewidth,
+        # color_legend_kws=dict(title="Expression"),
+        **{"linecolor": "lightgray", "label": "Expression", **kwargs}
     )
-    mplt.add_legends()
+    # mplt.add_legends()
+    fxp = mplt.add_right if percent == "right" else mplt.add_left
+    fxc = mplt.add_right if percent == "left" else mplt.add_left
+    fxc(mp.Numbers(agg_cell_ct, color="#EEB76B", label="Count"),
+        size=0.5, pad=0.2)
+    fxp(mp.Numbers(agg_cell_ctp, color="#EEB76B", label="Percent"),
+        size=0.5, pad=0.5)
+    fxp(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.5)
     if genes_dict is not None:
         cells, markers = [], []
         for c, ms in genes_dict.items():
@@ -432,18 +453,11 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
                               fill_colors=genes_dict_colors, rotation=90))
     else:
         mplt.add_top(mp.Labels(genes), pad=0.1)
-    fxp = mplt.add_right if percent == "right" else mplt.add_left
-    fxc = mplt.add_right if percent == "left" else mplt.add_left
-    fxc(mp.Numbers(agg_cell_ct, color="#EEB76B", label="Count"),
-        size=0.5, pad=0.2)
-    fxp(mp.Numbers(agg_cell_ctp, color="#EEB76B", label="Percent"),
-        size=0.5, pad=0.5)
-    fxp(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.5)
     if dendrogram is True:
         mplt.add_dendrogram("right", pad=0.1)
-    mplt.add_legends()
     if title is not None:
         mplt.add_title(title, fontsize=title_fontsize, pad=0.3)
+    mplt.add_legends()
     if show is True:
         mplt.render()
     if out_file is not None:
@@ -451,7 +465,7 @@ def plot_matrix(adata, col_cell_type, genes, layer="counts",
     return mplt
 
 
-def plot_dot(adata, col_cell_type, genes, layer="counts",
+def plot_dot(adata, col_cell_type, genes, layer=None,
              genes_dict_colors=None, cmap="Reds", title=None,
              dendrogram=False, fig_scale=1, percent="right",
              vmin=None, vmax=None, center=None,

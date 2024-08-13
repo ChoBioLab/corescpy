@@ -25,6 +25,7 @@ import scanpy as sc
 import squidpy as sq
 # import stlearn as st
 import spatialdata_io as sdio
+from spatialdata_io.experimental import from_legacy_anndata
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
@@ -111,11 +112,20 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
         if library_id is None:
             print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
             library_id = str(file_path)
-        valid_args = inspect.signature(sdio.xenium).parameters
+        valid_args = inspect.signature(sc.read_h5ad if os.path.splitext(
+            file_path)[1] == ".h5ad" else sdio.xenium).parameters
         kws = {k: v for k, v in kwargs.items() if k in valid_args}
-        adata = sdio.xenium(file_path, n_jobs=n_jobs, **kws)
-        if STORE_UNS_SQUIDPY:
-            adata = update_spatial_uns(adata, library_id, col_sample_id)
+        if os.path.splitext(file_path)[1] == ".h5ad":
+            adata = sc.read_h5ad(file_path, **kws)
+            try:
+                adata = from_legacy_anndata(adata)
+            except Exception:
+                print(traceback.format_exc(),
+                      "\n\n*** Failed to convert anndata to spatialdata.\n\n")
+        else:
+            adata = sdio.xenium(file_path, n_jobs=n_jobs, **kws)
+            if STORE_UNS_SQUIDPY:
+                adata = update_spatial_uns(adata, library_id, col_sample_id)
     return adata
 
 

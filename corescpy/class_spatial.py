@@ -17,6 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import shapely
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon
+# from shapely.geometry.collection import GeometryCollection
 import geopandas as gpd
 import squidpy as sq
 import spatialdata
@@ -266,6 +267,7 @@ class Spatial(cr.Omics):
         You can also pass a `shapely` polygon or multipolygon object
         to `bounds_x`.
         """
+        key_table = kwargs.pop("key_table", self._keys["key_table"])
         if isinstance(bounds_x, (str, Polygon, MultiPolygon)) or isinstance(
                 bounds_x[0], str):  # Xenium Explorer selection(s)
             if isinstance(bounds_x, (list, np.ndarray, tuple, str)):  # file
@@ -282,53 +284,35 @@ class Spatial(cr.Omics):
                 coords = shapely.MultiPolygon(coords)  # ...union of areas
             kws = {"target_coordinate_system": "global",
                    "filter_table": True, **kwargs}
-            if "is_valid" in dir(coords) and coords.is_valid is False:
-                if allow_make_valid is True:
-                    invalid, error = True, None
-                else:
-                    p_coords = gpd.GeoSeries(coords).plot()
-                    p_coords.set_title("Input")
-                    raise ValueError(
-                        "Input coordinates have invalid geometry!")
-            else:
-                invalid = False
-                try:
-                    sdata_crop = self.adata.query.polygon(
-                        coords, **kws)  # crop
-                except Exception as err:
-                    sdata_crop = None
-                    if allow_make_valid is False:
-                        raise err
-                    invalid, error = True, err
-            if invalid is True:
-                if allow_make_valid is True:
-                    try:
-                        warn("\n\n*** Invalid geometry! Making geometry valid"
-                             ". Check new coordinates!\n\n")
-                        p_coords = gpd.GeoSeries(coords).plot()
-                        p_coords.set_title("Input")
-                        plt.show()
-                        coords = shapely.validation.make_valid(coords)
-                        p_coords_new = gpd.GeoSeries(coords).plot()
-                        p_coords_new.set_title("Corrected")
-                        plt.show()
-                        sdata_crop = self.adata.query.polygon(coords, **kws)
-                    except Exception:
-                        sdata_crop = None
-                        print(error)
-                        traceback.print_exc()
-            if "table" not in dir(sdata_crop):
-                sdata_crop.table = self.rna[self.rna.obs[
+            invalid = "is_valid" in dir(coords) and coords.is_valid is False
+            p_coords = gpd.GeoSeries(coords).plot()
+            p_coords.set_title("Input")
+            plt.show()
+            if invalid is True and allow_make_valid is True:
+                warn("\n\n*** Invalid geometry! Making geometry valid."
+                     "Correcting shape. Check new coordinates!\n\n")
+                coords = shapely.validation.make_valid(coords)
+                p_coords_new = gpd.GeoSeries(coords).plot()
+                p_coords_new.set_title("Corrected")
+                plt.show()
+            sdata_crop = self.adata.query.polygon(coords, **kws)
+            if "tables" not in dir(sdata_crop) or (
+                    key_table not in sdata_crop.tables):
+                sdata_crop.tables[key_table] = self.rna[self.rna.obs[
                     XeniumKeys.CELL_ID].isin(sdata_crop.shapes[
-                        "cell_boundaries"].index)].copy()  # add back table
+                        spatialdata.SpatialData.get_annotated_regions(
+                            sdata_crop.tables[
+                                key_table])].index)].copy()  # restore table
                 # needed for now b/c issue if any nuclei radius = NA
                 # github.com/scverse/spatialdata-io/
                 # issues/173#issuecomment-2231152498
             else:
-                i_x = sdata_crop.table.obs["cell_id"].copy()
-                del sdata_crop.table
-                sdata_crop.table = self.rna[self.rna.obs["cell_id"].isin(i_x[
-                    i_x.isin(self.rna.obs["cell_id"])])]
+                i_x = sdata_crop.tables[key_table].obs[
+                    XeniumKeys.CELL_ID].copy()  # cropped index
+                del sdata_crop.tables[key_table]
+                sdata_crop.tables[key_table] = self.rna[
+                    self.rna.obs[XeniumKeys.CELL_ID].isin(i_x[
+                        i_x.isin(list(self.rna.obs[XeniumKeys.CELL_ID]))])]
         else:  # specified coordinates
             minc, maxc = [[x[i] for x in [bounds_x, bounds_y, bounds_z] if (
                 x is not None)] for i in [0, 1]]
@@ -692,10 +676,10 @@ class Spatial(cr.Omics):
                                mode="zscore", normalized=False,
                                library_id=None, library_key=None, seed=1618,
                                layer="log1p", palette=None, size=None,
-                               key_image=None, shape="hex",
-                               title="Neighborhood Enrichment",
-                               kws_plot=None, figsize=None, cmap="magma",
-                               vcenter=None, cbar_range=None, copy=False):
+                               key_image=None, shape="hex", vcenter=None,
+                               cbar_range=None, cmap="magma", figsize=None,
+                               title="Neighborhood Enrichment", n_jobs=None,
+                               kws_plot=None, out_plot=None, copy=False):
         """Perform neighborhood enrichment analysis."""
         adata = self.adata
         if library_key is None:
@@ -714,21 +698,17 @@ class Spatial(cr.Omics):
                 "images"].keys())[0]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
-        if size is None:
-            size = int(1 if figsize[0] < 25 else figsize[0] / 15)
-        if isinstance(palette, list):
-            palette = matplotlib.colors.Colormap(palette)
-        kws_plot = cr.tl.merge(dict(palette=palette, size=size, use_raw=False,
-                                    layer=layer), kws_plot)
-        sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=None,
-                               # n_jobs=n_jobs,  # not working for some reason
+        kws_plot = {} if kws_plot is None else {**kws_plot}
+        if out_plot is not None:
+            kws_plot["save"] = kws_plot
+        sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=n_jobs,
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
         try:
             pkws = dict(cluster_key=cct, title=title, library_id=library_id,
                         library_key=library_key, vcenter=vcenter,
-                        vmin=cbar_range[0], vmax=cbar_range[1],
-                        img_res_key=key_image, cmap=cmap, ax=axs[0])
+                        vmin=cbar_range[0], vmax=cbar_range[1], ax=axs[0],
+                        img_res_key=key_image, cmap=cmap, **kws_plot)
             sq.pl.nhood_enrichment(adata.table if isinstance(
                 adata, spatialdata.SpatialData) else adata, **pkws)  # matrix
         except Exception:
