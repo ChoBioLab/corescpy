@@ -58,7 +58,7 @@ def make_printable_object(obj, show=False, numpy_alias="np"):
 
 def print_pretty_dictionary(dct, show=True, numpy_alias="np"):
     """Print a dictionary to allow copy-pasting code for object assignment."""
-    print("\n\n")
+    print("\n\n\n")
     if isinstance(dct, str):
         # items = re.sub(", ", ",", dct).split(",")
         # if "dict(" == dct[:5]:
@@ -91,6 +91,7 @@ def print_pretty_dictionary(dct, show=True, numpy_alias="np"):
         text = "\n".join(
             [f"{i}={make_printable_object(dct[i])}" for i in dct])
         print(text)
+        print("\n\n\n")
     else:
         return text
 

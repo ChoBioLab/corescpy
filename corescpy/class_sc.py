@@ -178,8 +178,8 @@ class Omics(object):
                 self.rna.obs[self._columns["col_cell_type"]], pd.Categorical):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[
                 self._columns["col_cell_type"]].astype("category")  # category
-        print("\n\n", self.rna, "\n\n", self.rna.var.head(),
-              "\n\n", self.rna.obs.head() if verbose is True else "")
+        print("\n\n", self.rna, "\n\n", self.rna.var.head(), "\n\n",
+              self.rna.obs.head() if verbose is True else "", "\n\n\n\n")
 
     @property
     def rna(self):
@@ -827,7 +827,7 @@ class Omics(object):
                 adata, model, col_cell_type=c_t, key_added=key_add,
                 col_new=col_annotation, **kwargs)  # annotate
             col_ann = [col_annotation]  # to write results (optional)
-            print(res)
+            print("\n\n\n", res, "\n\n\n")
             annots = dict(zip(res.index, list(res[col_annotation])))
             adata.obs.loc[:, col_annotation] = adata.obs[c_t].replace(
                 annots).astype(str)
@@ -838,7 +838,7 @@ class Omics(object):
             adata.var = adata.var.reset_index().set_index(
                 self.rna.var.index.names[0])
         if copy is False:  # assign if performing inplace
-            print(adata)
+            print(adata, "\n\n")
             self.rna = adata
             try:  # plot
                 if flavor != "celltypist":  # annotate with CellTypist
@@ -847,7 +847,7 @@ class Omics(object):
                         figs["spatial"] = self.plot_spatial(
                             color=col_annotation)
             except Exception as err:
-                print(f"\n\n\n{err}\n\n\nPlotting annotations failed!")
+                print(f"\n\n\n{err}\n\n\nPlotting annotations failed!\n\n")
             self.results[flavor] = res
         if out_file:  # write to file if specified
             self.write(out_file)  # write .adata or .rna, based on extension

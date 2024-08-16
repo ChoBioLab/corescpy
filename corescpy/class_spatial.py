@@ -113,6 +113,7 @@ class Spatial(cr.Omics):
         if isinstance(self.adata, spatialdata.SpatialData):
             self.rna = self.adata.table
             self.adata.pl = sdp.pl.basic.PlotAccessor(self.adata)
+            print(self.adata)
         for q in [self._columns, self._keys]:
             cr.tl.print_pretty_dictionary(q)
 
@@ -613,6 +614,7 @@ class Spatial(cr.Omics):
         Characterize connectivity, centrality, and interaction matrix.
         """
         # Connectivity & Centrality
+        print("\n\n<<< QUANTIFYING GRAPH >>>\n\n")
         print("\t*** Building connectivity matrix...")
         out, ext = os.path.splitext(out_plot) if out_plot else (None, None)
         if ext == "":
@@ -627,7 +629,7 @@ class Spatial(cr.Omics):
             palette = matplotlib.colors.Colormap(palette)
         kws_plot = cr.tl.merge(dict(figsize=f_s, palette=palette, cmap=cmap),
                                kws_plot)  # interaction matrix plot arguments
-        if n_jobs is None and n_jobs is not False:
+        if n_jobs == -1 or (isinstance(n_jobs, bool) and n_jobs is True):
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.spatial_neighbors(
             adata, coord_type=coord_type, delaunay=delaunay,
@@ -652,7 +654,7 @@ class Spatial(cr.Omics):
                 traceback.print_exc()
         if not isinstance(fig, str) and title:
             fig.suptitle(title)
-        print("\t*** Computing interaction matrix...")
+        print("\n\t*** Computing interaction matrix...")
         sq.gr.interaction_matrix(adata, cct, normalized=normalized)
         try:
             if "figsize" in kws_plot and kws_plot["figsize"]:
@@ -663,7 +665,7 @@ class Spatial(cr.Omics):
                 **kws_plot)  # plot interaction matrix
         except Exception:
             sq.pl.interaction_matrix(
-                adata.table, cct, 
+                adata.table, cct,
                 save=f"{out}_interaction{ext}" if out else None,
                 **kws_plot)  # plot interaction matrix
         for u, v in zip(["Centrality scores", "Interaction matrix results"], [
@@ -700,6 +702,9 @@ class Spatial(cr.Omics):
         kws_plot = {} if kws_plot is None else {**kws_plot}
         if out_plot is not None:
             kws_plot["save"] = out_plot
+        if n_jobs == -1 or (isinstance(n_jobs, bool) and n_jobs is True):
+            n_jobs = os.cpu_count() - 1  # threads for parallel processing
+        print(f"\n\n<<< QUANTIFYING NEIGHBORHOOD ENRICHMENT ({mode}) >>>\n\n")
         sq.gr.nhood_enrichment(adata, cluster_key=cct, n_jobs=n_jobs,
                                seed=seed)  # neighborhood enrichment
         fig, axs = plt.subplots(1, 2, figsize=figsize)  # set up facet figure
@@ -773,8 +778,9 @@ class Spatial(cr.Omics):
         kws_plot = cr.tl.merge(dict(
             palette=palette, size=size, key_cell_type=key_cell_type,
             figsize=figsize, out_file=out_plot), kws_plot)  # plot keywods
-        if n_jobs is None and n_jobs is not False:
+        if n_jobs == -1 or (isinstance(n_jobs, bool) and n_jobs is True):
             n_jobs = os.cpu_count() - 1  # threads for parallel processing
+        print("\n\n<<< QUANTIFYING CO-OCCURRENCE >>>\n\n")
         sq.gr.co_occurrence(adata, cluster_key=cct, n_jobs=n_jobs,
                             spatial_key=self._spatial_key, **kwargs)
         fig["co_occurrence"] = {}
@@ -819,15 +825,15 @@ class Spatial(cr.Omics):
         adata = self.adata
         # adata.table = self.get_layer(layer=layer, subset=None, inplace=True)
         kws_plot = cr.tl.merge({"cmap": "magma", "use_raw": False}, kws_plot)
-        if n_jobs == -1:
-            n_jobs = os.cpu_count() - 1  # threads for parallel processing
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
         csid = col_sample_id if col_sample_id else self._columns[
             "col_sample_id"]
         figsize = (figsize, figsize) if isinstance(figsize, (
             int, float)) else (15, 7) if figsize is None else figsize
-        print(f"\n<<< QUANTIFYING AUTO-CORRELATION (method = {method}) >>>")
+        print(f"\n\n<<< QUANTIFYING AUTO-CORRELATION ({method}) >>>\n\n")
+        if n_jobs == -1 or (isinstance(n_jobs, bool) and n_jobs is True):
+            n_jobs = os.cpu_count() - 1  # threads for parallel processing
         sq.gr.spatial_autocorr(adata, mode=method, layer=layer, n_jobs=n_jobs,
                                n_perms=n_perms)  # autocorrelation
         if isinstance(genes, int):

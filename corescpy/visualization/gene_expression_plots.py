@@ -408,6 +408,7 @@ def plot_matrix(adata, col_cell_type, genes, layer=None,
     scanpy.readthedocs.io/en/stable/how-to/plotting-with-marsilea.html.
     """
     adata = adata.copy()
+    show_legend = kwargs.pop("legend", True)
     if layer is not None:
         adata.X = adata.layers[layer].copy()
     genes_dict = {**genes} if isinstance(genes, dict) else None
@@ -457,7 +458,8 @@ def plot_matrix(adata, col_cell_type, genes, layer=None,
         mplt.add_dendrogram("right", pad=0.1)
     if title is not None:
         mplt.add_title(title, fontsize=title_fontsize, pad=0.3)
-    mplt.add_legends()
+    if show_legend is True:
+        mplt.add_legends(pad=0.2)
     if show is True:
         mplt.render()
     if out_file is not None:
@@ -479,6 +481,7 @@ def plot_dot(adata, col_cell_type, genes, layer=None,
     scanpy.readthedocs.io/en/stable/how-to/plotting-with-marsilea.html.
     """
     adata = adata.copy()
+    show_legend = kwargs.pop("legend", True)
     if layer is not None:
         adata.X = adata.layers[layer].copy()
     genes_dict = {**genes} if isinstance(genes, dict) else None
@@ -516,12 +519,12 @@ def plot_dot(adata, col_cell_type, genes, layer=None,
         for c, ms in genes_dict.items():
             cells += [c] * len(ms)
             markers += ms
-        mplt.add_top(mp.Labels(markers), pad=0.1)
+        mplt.add_top(mp.Labels(markers), pad=0.2)
         mplt.group_cols(cells, order=list(genes_dict.keys()))
         mplt.add_top(mp.Chunk(list(genes_dict.keys()),
                               fill_colors=genes_dict_colors, rotation=90))
     else:
-        mplt.add_top(mp.Labels(genes), pad=0.1)
+        mplt.add_top(mp.Labels(genes), pad=0.2)
     fxp = mplt.add_right if percent == "right" else mplt.add_left
     fxc = mplt.add_right if percent == "left" else mplt.add_left
     fxc(mp.Numbers(agg_cell_ct, color="#EEB76B", label="Count"),
@@ -530,8 +533,9 @@ def plot_dot(adata, col_cell_type, genes, layer=None,
         size=0.5, pad=0.5)
     fxp(mp.Labels(agg.obs[col_cell_type], align="center"), pad=0.2)
     if dendrogram is True:
-        mplt.add_dendrogram("right", pad=0.1)
-    mplt.add_legends()
+        mplt.add_dendrogram("right", pad=0.2)
+    if show_legend is True:
+        mplt.add_legends(pad=0.2)
     if title is not None:
         mplt.add_title(title, fontsize=title_fontsize)
     if show is True:
