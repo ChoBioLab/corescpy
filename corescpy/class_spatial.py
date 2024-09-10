@@ -685,14 +685,15 @@ class Spatial(cr.Omics):
         adata = self.adata
         if library_key is None:
             library_key = self._columns["col_sample_id"]
+        if library_id is None:
+            library_id = self._library_id
         if title == "Neighborhood Enrichment":
             title += f" ({mode}{' Normalized by Row' if normalized else ''})"
+            title = f"{title} ({library_id})"
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]
         if cbar_range is None:
             cbar_range = [None, None]
-        if library_id is None:
-            library_id = self._library_id
         if key_image is None and not isinstance(
                 self.adata, spatialdata.SpatialData):
             key_image = list(self.rna.uns[self._spatial_key][library_id][
@@ -849,8 +850,8 @@ class Spatial(cr.Omics):
             traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
-        print(self.rna.uns["moranI"].head(10), "\n\n\n")
         print("\n\n*** SVG results stored in `.rna.uns['moranI']`\n\n")
+        print(self.rna.uns["moranI"].head(10), "\n\n\n")
         return adata, fig
 
     def calculate_distribution_pattern(self, col_cell_type=None, mode="L"):

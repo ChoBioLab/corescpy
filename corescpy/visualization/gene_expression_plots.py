@@ -230,6 +230,7 @@ def plot_gex(adata, col_cell_type=None, title=None,
                     show=False)  # matrix plot
                 # figs[lab].fig.supxlabel("Gene")
                 # figs[lab].fig.supylabel(lab_cluster_mat)
+                plt.subplots_adjust(top=0.9)
                 figs[lab].show()
             except Exception as err:
                 warnings.warn(f"{err} in plotting GEX matrix for label {i}")

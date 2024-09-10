@@ -39,7 +39,7 @@ import tangram as tg
 from anndata import AnnData
 # from spatialdata import SpatialData
 from spatialdata.models import TableModel
-from spatialdata_plot.pp import PreprocessingAccessor
+# from spatialdata_plot.pp import PreprocessingAccessor
 import pandas as pd
 import numpy as np
 from corescpy.visualization import plot_integration_spatial
@@ -244,7 +244,7 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
     Returns:
         A new SpatialData instance
     """
-    sdata.pp: PreprocessingAccessor  # noqa: F401
+    # sdata.pp: PreprocessingAccessor  # noqa: F401
     # sdata_subset = copy.deepcopy(sdata)
     sdata_subset = sdata.subset(element_names=[
         x[1] for x in sdata.gen_elements()], filter_tables=True)

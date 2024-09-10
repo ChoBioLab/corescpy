@@ -16,25 +16,25 @@ Correspondence: elizabeth.aslinger@aya.yale.edu
 with desired environment name):
 `conda create -n corescpy python=3.10.4  # create python environment`
 
-3. Activate the conda environment with `conda activate corescpy`.
+1. Activate the conda environment with `conda activate corescpy`.
 
 4. Clone the repository to your local computer:
 `git clone git@github.com:ChoBioLab/corescpy.git`,
 `git clone https://github.com/ChoBioLab/corescpy.git`, or
 look above for the green "Code" button and press it for instructions.
 
-5. Navigate to the repository directory (replace <DIRECTORY> with your path):
+1. Navigate to the repository directory (replace <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
-6. Install the package with pip. (Ensure you have pip installed.)
+1. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
 
-7. If you have issues with resolving/finding the most up-to-date version of the `spatialdata` and/or `spatialdata-io` packages, try running:
+1. If you have issues with resolving/finding the most up-to-date version of the `spatialdata` and/or `spatialdata-io` packages, try running:
 ```
 pip install git+https://github.com/scverse/spatialdata
 pip install git+https://github.com/scverse/spatialdata-io
 ```
-in your terminal while in your conda environment, then re-try step (6).
+in your terminal while in your conda environment, then re-try step (6). If you have an M1 Mac, [see this thread about known compatibility issues](https://github.com/scverse/pertpy/issues/201#issuecomment-1431621313) with `pertpy` if you have issues with the install.
 
 8. If you're planning to use this environment with Jupyter notebooks, run `conda install nb_conda_kernels`, then `pip install ipykernel`.
 
