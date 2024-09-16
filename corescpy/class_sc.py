@@ -235,7 +235,7 @@ class Omics(object):
             raise ValueError("File extension must be .h5ad or .h5mu")
 
     def write_clusters(self, out_directory, col_cell_type="leiden",
-                       file_prefix=None, n_top=True,
+                       file_prefix=True, n_top=True,
                        p_threshold=None, overwrite=False, **kwargs):
         """Write clusters (and, if `n_top` != False, markers)."""
         key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
@@ -858,7 +858,7 @@ class Omics(object):
                     out_file)[0] + f"_{x}.csv")
         return adata, [res, figs]
 
-    def find_markers(self, assay=None, n_genes=5, layer="log1p", copy=False,
+    def find_markers(self, assay=None, n_genes=20, layer="log1p", copy=False,
                      method="wilcoxon", key_reference="rest", kws_plot=True,
                      col_cell_type=None, use_raw=False,
                      out_file=None, **kwargs):

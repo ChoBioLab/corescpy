@@ -294,7 +294,8 @@ def process_multimodal_crispr(adata, assay=None, col_guide_rna="guide_ids",
 
 
 def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
-                     run=None, samples=None, capitalize_sample=True):
+                     run=None, samples=None, capitalize_sample=False,
+                     path_col_only=False):
     """Retrieve Xenium metadata."""
     # Get Column & Key Names from Constants Script
     constant_dict = {**cr.get_panel_constants(panel_id=panel_id)}  # constants
@@ -315,6 +316,8 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
     metadata = metadata.set_index(col_sample_id)
 
     # Find File Paths
+    if os.path.basename(directory) == panel_id:  # already panel sub-directory
+        directory = os.path.dirname(directory)  # get parent directory
     fff = np.array(cr.pp.construct_file(run=run, directory=directory,
                                         panel_id=panel_id))
     bff = np.array([os.path.basename(i) for i in fff])  # base path names
@@ -348,4 +351,4 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
                 samples].reset_index().set_index(col_sample_id)
         else:
             metadata.loc[samples]
-    return metadata
+    return metadata[col_data_dir] if path_col_only is True else metadata

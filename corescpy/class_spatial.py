@@ -581,6 +581,24 @@ class Spatial(cr.Omics):
                 title=titles[i], **kws_show, ax=axes.flatten()[i])  # plot
         return fig, axes
 
+    def plot_image(self, image_name, title="", figsize=None, **kwargs):
+        """Plot a `spatialdata` object image(s)."""
+        if "coordinate_systems" not in kwargs:
+            kwargs["coordinate_systems"] = "global"
+        figsize = kwargs.pop("figsize", None)
+        if isinstance(image_name, (list, tuple, np.ndarray)):  # multi-image
+            if isinstance(title, str) or title is None:
+                title = [title] * len(image_name)  # if all same title
+            if figsize is None:
+                figsize = (20, 6 * len(image_name))
+            axes = plt.subplots(1, len(image_name), figsize=figsize)[
+                1].flatten()
+            for i, x in enumerate(image_name):
+                self.plot_image(x, title=title[i], ax=axes[i], **kwargs)
+        else:  # single image plot
+            self.adata.pl.render_images(image_name).pl.show(
+                title=title, **kwargs)
+
     def impute(self, adata_sc, col_cell_type=None, mode="cells",
                layer="log1p", device="cpu", inplace=True,
                col_annotation="tangram_prediction", out_file=None,  **kwargs):
