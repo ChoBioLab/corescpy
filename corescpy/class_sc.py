@@ -157,14 +157,15 @@ class Omics(object):
                     col_gene_symbols=col_gene_symbols,
                     col_condition=col_condition, kws_process_guide_rna=kpg,
                     key_control=key_control, key_treatment=key_treatment,
-                    col_cell_type=col_cell_type, raw=raw,
+                    col_cell_type=col_cell_type, raw=raw, key_table=key_table,
                     col_sample_id=col_sample_id, **kwargs), spatial=spatial,
                 **kws_multi)  # create integrated object
         else:
             self.adata = cr.pp.create_object(
                 self._file_path, prefix=prefix, col_sample_id=col_sample_id,
                 col_gene_symbols=col_gene_symbols, kws_process_guide_rna=kpg,
-                spatial=spatial, assay=assay, raw=raw, **kwargs)  # object
+                spatial=spatial, assay=assay, raw=raw,
+                key_table=key_table, **kwargs)  # object
         print(f"{self.adata.obs}\n\n" if assay and verbose is True else "")
 
         # Let Property Setters Run
@@ -284,14 +285,6 @@ class Omics(object):
     def get_layer(self, layer=None, subset=None, inplace=False):
         """Get layer (and optionally, subset)."""
         adata = self.rna.copy() if inplace is False else self.rna
-        # if isinstance(self.adata, spatialdata.SpatialData):
-        #     if inplace is False:
-        #         warn("Non-inplace spatialdata layers not supported")
-        #     del(self.adata.table)
-        #     adata = adata.table
-        # else:
-        #     adata = self.adata.copy() if inplace is False else self.adata
-        #     adata = adata[self._assay] if self._assay else adata
         if layer:
             layer = layer if layer in adata.layers else self._layers[layer]
             adata.X = adata.layers[layer].copy()

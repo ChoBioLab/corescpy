@@ -26,6 +26,8 @@ look above for the green "Code" button and press it for instructions.
 1. Navigate to the repository directory (replace <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
+2. Install 
+
 1. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
 

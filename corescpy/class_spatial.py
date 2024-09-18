@@ -82,7 +82,9 @@ class Spatial(cr.Omics):
                 arguments to pass to `scanpy.read_visium()` or simply
                 as True to use default arguments. The default is False
                 (assumes 10x Xenium data format and
-                `file_path_spatial` provided).
+                `file_path_spatial` provided). Pass `visium='hd'` or a
+                dictionary:
+                {hd': True, **<spatialdata_io.visium_hd arguments>}.
             key_table (str, optional): For `spatialdata` objects,
                 `self.adata.tables[key_table]` will be the default
                 used for the `self.rna` attribute.
@@ -111,7 +113,7 @@ class Spatial(cr.Omics):
         if self._kind == "xenium":
             self.rna.ob = self.rna.obs.set_index("cell_id")
         if isinstance(self.adata, spatialdata.SpatialData):
-            self.rna = self.adata.table
+            self.rna = self.adata.tables[self._keys["key_table"]]
             self.adata.pl = sdp.pl.basic.PlotAccessor(self.adata)
             print(self.adata)
         for q in [self._columns, self._keys]:
@@ -170,7 +172,8 @@ class Spatial(cr.Omics):
         """Write AnnData to .h5ad (default) or SpatialData to .zarr."""
         if mode == "h5ad":
             file = os.path.splitext(file)[0] + ".h5ad"
-            adata = self.adata.table.copy()  # copy so don't alter self
+            adata = self.adata.tables[self._keys["key_table"]].copy(
+                )  # copy so don't alter self
             if self._spatial_key in adata.uns:  # can't write all SpatialData
                 _ = adata.uns.pop(self._spatial_key)  # have to remove .images
             try:
@@ -322,9 +325,11 @@ class Spatial(cr.Omics):
             sdata_crop = spatialdata.bounding_box_query(
                 self.adata, min_coordinate=minc,
                 max_coordinate=maxc, **{**kws_def, **kwargs})
-        if sdata_crop.table is not None:
-            sc.pp.calculate_qc_metrics(sdata_crop.table, percent_top=None,
-                                       inplace=True)
+        if "tables" in dir(sdata_crop) and sdata_crop.tables is not None and (
+                self._keys["key_table"] in sdata_crop.tables and (
+                    sdata_crop.tables[self._keys["key_table"]] is not None)):
+            sc.pp.calculate_qc_metrics(sdata_crop.tables[self._keys[
+                "key_table"]], percent_top=None, inplace=True)
         return sdata_crop
 
     def add_image(self, file, name=None, file_align=None, dim="2d"):
@@ -661,7 +666,7 @@ class Spatial(cr.Omics):
             fig = plt.gcf()
         except Exception:
             try:
-                ann = adata.table.copy()
+                ann = adata.tables[self._keys["key_table"]].copy()
                 _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 sq.pl.centrality_scores(
                     ann, cluster_key=cct, figsize=f_s,
@@ -683,7 +688,7 @@ class Spatial(cr.Omics):
                 **kws_plot)  # plot interaction matrix
         except Exception:
             sq.pl.interaction_matrix(
-                adata.table, cct,
+                adata.tables[self._keys["key_table"]], cct,
                 save=f"{out}_interaction{ext}" if out else None,
                 **kws_plot)  # plot interaction matrix
         for u, v in zip(["Centrality scores", "Interaction matrix results"], [
@@ -732,11 +737,12 @@ class Spatial(cr.Omics):
                         library_key=library_key, vcenter=vcenter,
                         vmin=cbar_range[0], vmax=cbar_range[1], ax=axs[0],
                         img_res_key=key_image, cmap=cmap, **kws_plot)
-            sq.pl.nhood_enrichment(adata.table if isinstance(
-                adata, spatialdata.SpatialData) else adata, **pkws)  # matrix
+            sq.pl.nhood_enrichment(adata.tables[self._keys["key_table"]] if (
+                isinstance(adata, spatialdata.SpatialData)) else adata,
+                                   **pkws)  # plot neighborhood enrichment
         except Exception:
             try:
-                ann = adata.table.copy()
+                ann = adata.tables[self._keys["key_table"]].copy()
                 _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 sq.pl.nhood_enrichment(ann, **pkws)  # matrix
             except Exception:
@@ -818,12 +824,12 @@ class Spatial(cr.Omics):
         #     clusters=key_cell_type, figsize=figsize)  # plot co-occurrrence
         try:
             fig["co_occurrence"] = cr.pl.plot_cooccurrence(
-                adata.table if isinstance(
+                adata.tables[self._keys["key_table"]] if isinstance(
                     adata, spatialdata.SpatialData) else adata,
                 col_cell_type=cct, **kws_plot)  # lines plot
         except Exception:
             try:
-                ann = adata.table.copy()
+                ann = adata.tables[self._keys["key_table"]].copy()
                 _ = ann.uns.pop(f"{cct}_colors", None)  # Squidpy palette bug
                 fig["co_occurrence"] = cr.pl.plot_cooccurrence(
                     ann, col_cell_type=cct, **kws_plot)  # lines plot
@@ -842,7 +848,6 @@ class Spatial(cr.Omics):
                   key_image=None, out_plot=None, kws_plot=None):
         """Find spatially-variable genes."""
         adata = self.adata
-        # adata.table = self.get_layer(layer=layer, subset=None, inplace=True)
         kws_plot = cr.tl.merge({"cmap": "magma", "use_raw": False}, kws_plot)
         cct = col_cell_type if col_cell_type else self._columns[
             "col_cell_type"]

@@ -51,7 +51,6 @@ from corescpy.visualization import plot_integration_spatial
 Z_SLICE_MICRON = 3
 STORE_UNS_SQUIDPY = True  # for back-compatibility with Squidpy
 SPATIAL_IMAGE_KEY_SEP = "___"
-# store images from SpatialData object in SpatialData.table.uns (AnnData.uns)
 
 
 def _get_control_probe_names():
@@ -106,17 +105,25 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
     #             }},  uns_spatial)}  # default .uns merge w/ specified
     # if col_sample_id not in adata.obs:
     #     adata.obs.loc[:, col_sample_id] = library_id
-    if isinstance(visium, dict) or visium is True:
+    if library_id is None:
+        print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
+        library_id = str(file_path)
+    if isinstance(visium, dict) or visium is True or visium == "hd":
+        visium_hd = (isinstance(visium, str) and visium == "hd") or (
+            isinstance(visium, dict) and "hd" in visium and visium["hd"])
         if not isinstance(visium, dict):
-            visium = {}  # unpack file path & arguments
-        adata = sq.read.visium(file_path, **visium)  # read Visium
+            visium = {}
+        if visium_hd is True:
+            defs = dict(dataset_id=library_id, filtered_counts_file=True,
+                        bin_size=None, bins_as_squares=True,
+                        fullres_image_file=None, load_all_images=False)
+            visium = {**defs, **visium}
+            if "hd" in visium:
+                _ = visium.pop("hd")
+            adata = sdio.visium_hd(file_path, **visium)  # read Visium
+        else:
+            adata = sq.read.visium(file_path, **visium)  # read Visium
     else:
-        # sdata = sdio.xenium(file_path, n_jobs=n_jobs)
-        # adata = sdata.table
-        # adata.uns["sdata"] = sdata
-        if library_id is None:
-            print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
-            library_id = str(file_path)
         valid_args = inspect.signature(sc.read_h5ad if os.path.splitext(
             file_path)[1] == ".h5ad" else sdio.xenium).parameters
         kws = {k: v for k, v in kwargs.items() if k in valid_args}
@@ -136,7 +143,8 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
 
 
 def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
-                       spatial_key="spatial", path_xenium=None, **kwargs):
+                       spatial_key="spatial", path_xenium=None,
+                       key_table="table", **kwargs):
     """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
     imgs = {}
     if "images" in dir(adata):
@@ -174,17 +182,14 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
         print("\n\nMorphology images not available to load in objects at "
               "time of import. Check if already present.")
     if rna_only is True:
-        # if col_sample_id in adata.table.obs:
-        #     rna = adata.table[adata.table.obs[col_sample_id] == library_id]
-        rna = adata.table if "table" in dir(adata) else adata
+        rna = adata.tables[key_table] if "tables" in dir(adata) else adata
         rna.uns[spatial_key] = {library_id: {"images": imgs}}
-        # rna.uns[spatial_key]["library_id"] = library_id
         return rna
     else:
-        adata.table.uns[spatial_key] = {library_id: {"images": imgs}}
-        # adata.table.uns[spatial_key]["library_id"] = library_id
-        if col_sample_id not in adata.table.obs:
-            adata.table.obs.loc[:, col_sample_id] = library_id
+        adata.tables[key_table].uns[spatial_key] = {
+            library_id: {"images": imgs}}
+        if col_sample_id not in adata.tables[key_table].obs:
+            adata.tables[key_table].obs.loc[:, col_sample_id] = library_id
         return adata
 
 
@@ -221,7 +226,8 @@ def xenium_explorer_selection(file_coord, pixel_size=0.2125, as_list=False):
 
 
 def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
-                   col_region=None, key_region=None, var_names=None):
+                   col_region=None, key_region=None,
+                   key_table="table", var_names=None):
     """
     Filter a SpatialData object to contain only specified cells.
     (Modified from https://github.com/scverse/spatialdata/issues/556.)
@@ -252,8 +258,9 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
     # reference dataset, so that it can be safely modified.
     assert not sdata_subset.is_backed()
     # Genes
-    var_names = sdata.table.var_names if var_names is None else var_names
-    subs = sdata.table.copy()
+    var_names = sdata.tables[
+        key_table].var_names if var_names is None else var_names
+    subs = sdata.tables[key_table].copy()
     # Preserve order by checking "isin" instead of slicing.
     # Also guarantees no duplicates.
     if key_cell_id is not None:  # optionally, subset by cells

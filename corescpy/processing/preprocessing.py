@@ -111,7 +111,8 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   kws_process_guide_rna=None, assay_gdo=None, raw=False,
-                  gex_only=False, prefix=None, spatial=False, **kwargs):
+                  gex_only=False, prefix=None, spatial=False,
+                  key_table="table", **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
@@ -128,8 +129,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                          col_gene_symbols=col_gene_symbols),
                   **kwargs}  # user-specified + variable keyword arguments
         adata = cr.pp.read_spatial(file_path=file, **kwargs)
-        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
-            adata.table.uns["original_ix"] = adata.table.obs.index.values
 
     # Non-Spatial Data
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
@@ -179,13 +178,15 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
 
     # Formatting & Initial Counts
     try:
-        (adata.table if isinstance(adata, spatialdata.SpatialData) else adata
+        (adata.tables[key_table] if isinstance(
+            adata, spatialdata.SpatialData) else adata
          ).var_names_make_unique()
     except Exception:
         print(traceback.format_exc())
         warn("\n\n\nCould not make var names unique.")
     try:
-        (adata.table if isinstance(adata, spatialdata.SpatialData) else adata
+        (adata.tables[key_table] if isinstance(
+            adata, spatialdata.SpatialData) else adata
          ).obs_names_make_unique()
     except Exception:
         print(traceback.format_exc())
@@ -193,9 +194,9 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     cr.tl.print_counts(adata, title="Initial")
 
     # Gene Symbols -> Index of .var
-    rename_var_index(adata.table if isinstance(
-        adata, spatialdata.SpatialData) else adata,
-                     assay=assay, col_gene_symbols=col_gene_symbols)
+    if not isinstance(adata, spatialdata.SpatialData):
+        rename_var_index(adata, assay=assay,
+                         col_gene_symbols=col_gene_symbols)
 
     # Process Guide RNA
     if kws_process_guide_rna not in [None, False]:
@@ -212,11 +213,12 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
 
     # Initial Counts Layer (If Not Present)
     layers = cr.get_layer_dict()  # standard layer names
-    rna = adata.table if isinstance(adata, spatialdata.SpatialData
-                                    ) else adata[assay] if assay else adata
+    rna = adata.tables[key_table] if isinstance(
+        adata, spatialdata.SpatialData) else adata[assay] if assay else adata
     if layers["counts"] not in rna.layers:
         if isinstance(adata, spatialdata.SpatialData):
-            adata.table.layers[layers["counts"]] = adata.table.X.copy()
+            adata.tables[key_table].layers[layers["counts"]] = adata.tables[
+                key_table].X.copy()
         elif assay:
             adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
         else:

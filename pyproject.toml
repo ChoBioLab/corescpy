@@ -100,9 +100,9 @@ dependencies = [
     "numpyro",
     "statannotations",
     "ott-jax",
-    "sparsecca",
+    # "sparsecca",
     # "numba<=0.57.1",  # stlearn compatibility
-    "numba==0.57.1",  # stlearn compatibility
+    # "numba==0.57.1",  # stlearn compatibility
     "remotezip",
     "openpyxl",
     "pyarrow>=16.0.0"
