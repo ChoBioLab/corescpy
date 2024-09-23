@@ -145,7 +145,7 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
 def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
                        spatial_key="spatial", path_xenium=None,
                        key_table="table", **kwargs):
-    """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
+    """Copy SpatialData.images to .uns (Squidpy-compatible)."""
     imgs = {}
     if "images" in dir(adata):
         for x in adata.images:
@@ -235,12 +235,14 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
     Args:
         sdata (SpatialData): A SpatialData object
         key_cell_id (list): Cells to include. Defaults to all.
-        col_cell_id (str): Name of column in `sdata.table.obs` that has
+        col_cell_id (str): Name of column in
+            `sdata.tables[key_table].obs` that has
             cell IDs. The `regions` argument elements should exist
             in this column.
         key_region (list): Regions/samples/subjects to include.
             Defaults to all.
-        col_region (str): Name of column in `sdata.table.obs` that has
+        col_region (str): Name of column in
+            `sdata.tables[key_table].obs` that has
             region/sample/subject IDs. The `key_regions` argument
             elements should exist in this column. PROVIDE EVEN IF NOT
             SUBSETTING BY REGION.

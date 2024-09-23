@@ -174,7 +174,7 @@ class Omics(object):
                 key_table in self.adata.tables) else self.adata.table) if (
                     isinstance(self.adata, spatialdata.SpatialData)
                     ) else self.adata[self._assay] if (
-                        self._assay) else self.adata
+                        self._assay is not None) else self.adata
         if self._columns["col_cell_type"] in self.rna.obs and not isinstance(
                 self.rna.obs[self._columns["col_cell_type"]], pd.Categorical):
             self.rna.obs[self._columns["col_cell_type"]] = self.rna.obs[

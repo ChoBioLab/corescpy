@@ -44,7 +44,8 @@ class Spatial(cr.Omics):
     """A class for CRISPR analysis and visualization."""
 
     def __init__(self, file_path, col_sample_id="Sample", library_id=None,
-                 key_table="table", visium=False, **kwargs):
+                 key_table="table", visium=False,
+                 col_gene_symbols=None, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -88,6 +89,12 @@ class Spatial(cr.Omics):
             key_table (str, optional): For `spatialdata` objects,
                 `self.adata.tables[key_table]` will be the default
                 used for the `self.rna` attribute.
+            col_gene_symbols (str, optional): If the index of the
+                `.var` attribute of the `AnnData` object
+                (or corresponding `SpatialData` table) isn't the
+                gene symbols, specify the column name here.
+                This default may differ from other classes because of
+                how spatial data files tend to be read in.
             kwargs (dict, optional): Keyword arguments to pass to the
                 Omics class initialization method.
         """
@@ -95,6 +102,7 @@ class Spatial(cr.Omics):
         _ = kwargs.pop("file_path_spatial", None)
         super().__init__(file_path, spatial=True, col_sample_id=col_sample_id,
                          library_id=library_id, visium=visium,
+                         col_gene_symbols=col_gene_symbols,
                          verbose=False, key_table=key_table, **kwargs)
         self._spatial_key = cr.SPATIAL_KEY
         self._kind = "xenium" if visium is False else "visium"
@@ -128,8 +136,9 @@ class Spatial(cr.Omics):
             self.adata.points["transcripts"].qv >= threshold]
 
     def update_from_h5ad(self, file=None, file_path_markers=None,
-                         method_cluster="leiden"):
-        """Update SpatialData object `.table` from h5ad file."""
+                         method_cluster="leiden", key_table=None):
+        """Update SpatialData object `.tables` from h5ad file."""
+        key_table = key_table if key_table else self._keys["key_table"]
         original_ix = self.rna.uns[
             "original_ix"] if "original_ix" in self.rna.uns else None
         ann = sc.read(os.path.splitext(file)[0] + ".h5ad")
@@ -148,12 +157,12 @@ class Spatial(cr.Omics):
             for s in self.rna.obs[csid].unique():
                 self.rna[self.rna.obs[csid] == s] = cr.pp.update_spatial_uns(
                     self.adata, self._library_id, csid, rna_only=True,
-                    spatial_key=self._spatial_key)
+                    spatial_key=self._spatial_key, key_table=key_table)
         elif isinstance(self.adata, spatialdata.SpatialData):  # single-sample
             print("\n\n<<< RESTORING SINGLE-SAMPLE FROM h5ad >>>\n")
             self.rna = cr.pp.update_spatial_uns(
                 self.adata, self._library_id, csid, rna_only=True,
-                spatial_key=self._spatial_key)
+                spatial_key=self._spatial_key, key_table=key_table)
         else:  # if not SpatialData object
             print("\n\n<<< RESTORED FROM h5ad >>>\n")
         if original_ix is not None and ("original_ix" not in self.rna.uns or (
@@ -692,7 +701,7 @@ class Spatial(cr.Omics):
                 save=f"{out}_interaction{ext}" if out else None,
                 **kws_plot)  # plot interaction matrix
         for u, v in zip(["Centrality scores", "Interaction matrix results"], [
-                "centrality_scores", "_interactions"]):
+                "centrality_scores", "interactions"]):
             print(f"\n\n*** {u} stored in `.rna.uns['{cct}_{v}']`\n\n")
         return adata, fig
 
@@ -898,7 +907,8 @@ class Spatial(cr.Omics):
     #         bypass_intra = model == "linear"
     #     adata = self.get_layer(layer=layer, inplace=False)  # get layer copy
     #     if isinstance(adata, spatialdata.SpatialData):
-    #         adata = adata.table.copy()  # AnnData from SpatialData object
+    #         k_t = kwargs.pop("key_table", self._keys["key_table"])
+    #         adata = adata.tables[k_t].copy()
     #     cct = col_cell_type if col_cell_type else self._columns[
     #         "col_cell_type"]  # cell type column
     #     c_cat = dict(zip(adata.obs[cct].unique(), adata.obs[cct].unique()))
@@ -936,8 +946,7 @@ class Spatial(cr.Omics):
         adata = self.get_layer(layer=layer, inplace=False)  # get layer copy
         if isinstance(adata, spatialdata.SpatialData):
             k_t = kwargs.pop("key_table", self._keys["key_table"])
-            adata = adata.tables[k_t].copy() if (
-                "tables" in dir(adata)) else adata.table.copy()  # anndata
+            adata = adata.tables[k_t].copy()  # anndata
         kws = cr.tl.merge(dict(
             n_perms=100, mask_negatives=False, add_categories=True,
             expr_prop=0.2, use_raw=False, verbose=True), kwargs, how="left")

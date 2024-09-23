@@ -44,7 +44,7 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
                  spatial_key="spatial", key_image=None,
                  library_id=None, col_sample_id=None,
                  wspace=0.1, shape=None, cmap=None,
-                 title=None, title_offset=0, **kwargs):
+                 title=None, title_offset=0, fontsize_axis=36, **kwargs):
     """
     Plot spatial by clusters, transcripts, batches, etc.
 
@@ -88,6 +88,12 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     except Exception:
         fig = str(tb.format_exc())
         print(fig)
+    if fontsize_axis is not None:
+        try:
+            for a in (fig.flat if "flat" in dir(fig) else fig):
+                a.set_title(a.get_title(), fontsize=fontsize_axis)
+        except Exception:
+            print(tb.format_exc(), "\n\n*** Failed to set axis title size.")
     return fig
 
 

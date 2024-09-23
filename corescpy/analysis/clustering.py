@@ -142,8 +142,10 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
         key_added=key_added, use_raw=use_raw, **kwargs)  # rank
     if isinstance(kws_plot, dict):
         figs["marker_rankings"] = cr.pl.plot_markers(
-            adata, n_genes=n_genes, key_added=key_added, use_raw=use_raw,
-            key_reference=key_reference, **{"col_wrap": 3, **kws_plot})
+            adata, key_added=key_added, use_raw=use_raw,
+            key_reference=key_reference, **{
+                "col_wrap": 3, "n_genes": min([n_genes, 5]) if isinstance(
+                    n_genes, (int, float)) else 5, **kws_plot})
     ranks = make_marker_genes_df(
         adata, col_cell_type, key_added=key_added, p_threshold=p_threshold,
         log2fc_min=None, log2fc_max=None, gene_symbols=col_gene_symbols)
