@@ -55,6 +55,9 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     ann = adata.copy()
     if isinstance(figsize, (int, float)):
         figsize = (figsize, figsize)
+    title = color if isinstance(color, (
+        list, np.ndarray)) and title is None else None if isinstance(
+            title, bool) and title is False else title
     libid = library_id if library_id else list(ann.uns[
         spatial_key].keys()) if spatial_key in ann.uns else None
     if col_sample_id:
