@@ -460,7 +460,7 @@ class Spatial(cr.Omics):
         return fig
 
     def plot_spatial(self, color=None, kind="dot", key_image=None,
-                     col_sample_id=None, library_id=None, title="",
+                     col_sample_id=None, library_id=None, title=None,
                      shape="hex", figsize=30, cmap="magma", wspace=0,
                      mode="squidpy", layer=None, title_offset=0,
                      out_file=None, **kwargs):

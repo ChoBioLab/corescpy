@@ -44,7 +44,7 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
                  spatial_key="spatial", key_image=None,
                  library_id=None, col_sample_id=None,
                  wspace=0.1, shape=None, cmap=None,
-                 title=None, title_offset=0, fontsize_axis=36, **kwargs):
+                 title=None, title_offset=0, fontsize_axis=42, **kwargs):
     """
     Plot spatial by clusters, transcripts, batches, etc.
 
@@ -55,8 +55,7 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
     ann = adata.copy()
     if isinstance(figsize, (int, float)):
         figsize = (figsize, figsize)
-    title = color if isinstance(color, (
-        list, np.ndarray)) and title is None else None if isinstance(
+    title = color if title is None else "" if isinstance(
             title, bool) and title is False else title
     libid = library_id if library_id else list(ann.uns[
         spatial_key].keys()) if spatial_key in ann.uns else None
