@@ -331,14 +331,22 @@ def get_metadata_cho(directory, file_metadata, panel_id="TUQ97N",
                 direc = directory
             m_f = metadata[metadata[col_sample_id_o] == x][col_data_dir].iloc[
                 0]  # ...to find manually-defined unconventionally-named files
-            m_f = None if pd.isnull(m_f) else m_f if os.path.isdir(
-                m_f) else os.path.join(direc, m_f) if (os.path.isdir(
-                    os.path.join(direc, m_f))) else None
+            if pd.isnull(m_f):
+                m_f = None
+            else:
+                poss = [os.path.join(direc, panel_id, q, m_f)
+                        for q in os.listdir(os.path.join(direc, panel_id))]
+                poss = np.array(poss)[np.where([os.path.exists(
+                    q) for q in poss])[0]] if any([os.path.exists(
+                        q) for q in poss]) else None
+                if poss is not None and len(poss) > 1:
+                    raise ValueError(f"Multiple possible paths ({x})\n{poss}")
+                m_f = None if poss is None or len(poss) == 0 else poss[0]
             # in case relative path or other description
         else:
             m_f = np.nan
         locx = np.where(samps == x)[0] if pd.isnull(
-            m_f) else np.where(bff == m_f)[0]
+            m_f) or m_f is None else np.where(bff == os.path.basename(m_f))[0]
         metadata.loc[metadata[col_sample_id_o] == x, col_data_dir] = fff[
             locx[0]] if (len(locx) > 0) else np.nan  # output file for row
     metadata = metadata.dropna(subset=[col_data_dir]).reset_index(

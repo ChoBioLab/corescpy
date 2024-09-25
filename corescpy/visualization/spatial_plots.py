@@ -92,7 +92,8 @@ def plot_spatial(adata, color="leiden", col_segment=None, figsize=20,
         print(fig)
     if fontsize_axis is not None:
         try:
-            for a in (fig.flat if "flat" in dir(fig) else fig):
+            for a in (fig.flat if "flat" in dir(fig) else fig if isinstance(
+                    fig, (np.ndarray, list)) else [fig]):
                 a.set_title(a.get_title(), fontsize=fontsize_axis)
         except Exception:
             print(tb.format_exc(), "\n\n*** Failed to set axis title size.")

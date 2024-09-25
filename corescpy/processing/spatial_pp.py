@@ -205,23 +205,29 @@ def xenium_explorer_selection(file_coord, pixel_size=0.2125, as_list=False):
     multiple selections are included in any file.
 
     """
-    if isinstance(file_coord, (list, np.ndarray, set, tuple)):
-        poly = [xenium_explorer_selection(
-            f, pixel_size=pixel_size, as_list=True) for f in file_coord]
-        poly = MultiPolygon(functools.reduce(lambda i, j: i + j, poly))
-    else:
-        dff = pd.read_csv(file_coord, skiprows=2)
-        if "Selection" in dff.columns:
-            poly = []
-            for s in dff.Selection.unique():
-                poly += [Polygon(dff[dff.Selection == s].drop(
-                    "Selection", axis=1).values / pixel_size)]
-            if as_list is False:
-                poly = MultiPolygon(poly)
-        else:
-            poly = Polygon(dff.values / pixel_size)
-            if as_list is True:
-                poly = [poly]
+    # if isinstance(file_coord, (list, np.ndarray, set, tuple)):
+    #     poly = [xenium_explorer_selection(
+    #         f, pixel_size=pixel_size, as_list=True) for f in file_coord]
+    #     poly = MultiPolygon(functools.reduce(lambda i, j: i + j, poly))
+    # else:
+    #     dff = pd.read_csv(file_coord, skiprows=2)
+    #     if "Selection" in dff and len(dff["Selection"].unique()) > 1:
+    #         poly = []
+    #         for s in dff.Selection.unique():
+    #             poly += [Polygon(dff[dff.Selection == s].drop(
+    #                 "Selection", axis=1).values / pixel_size)]
+    #         if as_list is False:
+    #             poly = MultiPolygon(poly)
+    #     else:
+    #         if "Selection" in dff.columns:
+    #             dff = dff.drop("Selection", axis=1)
+    #         poly = Polygon(dff.values / pixel_size)
+    #         if as_list is True:
+    #             poly = [poly]
+    poly = sdio.xenium_explorer_selection(
+        file_coord, pixel_size=pixel_size, return_list=as_list)
+    poly = MultiPolygon(poly) if isinstance(poly, (
+        np.ndarray, list)) else Polygon(poly)
     return poly
 
 
