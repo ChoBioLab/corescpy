@@ -18,6 +18,7 @@ import scipy
 import scanpy as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sb
 import pertpy as pt
 # import blitzgsea as blitz
 import liana
@@ -577,7 +578,8 @@ class Omics(object):
         return tx_cts, tx_cl
 
     def quantify_cells(self, genes, threshold=0, min_genes="all", subset=None,
-                       col_cell_type=None, layer="counts", inplace=True):
+                       col_cell_type=None, layer="counts",
+                       plot=True, labelsize=20, inplace=True):
         """
         Return cells counts positive (above the specified threshold)
         for (combinations of) genes, optionally (if `col_cell_type` is
@@ -598,12 +600,16 @@ class Omics(object):
             inplace = False
         if isinstance(genes[0], str):  # just expression, not co-expression
             cts = cr.ax.classify_gex_cells(
-                adata, col_cell_type=cct, genes=genes, layer=None,
+                adata, col_cell_type=cct, genes=genes, layer=layer,
                 threshold=threshold)
         else:  # score co-expression
             cts = cr.ax.classify_coex_cells(
-                adata, col_cell_type=cct, genes=None, layer=None,
-                threshold=threshold, min_genes="all")
+                adata, col_cell_type=cct, genes=genes, layer=layer,
+                threshold=threshold, min_genes=min_genes)
+        if plot is True:
+            sb.catplot(cts, kind="bar", x=cct, y="Percent", col_wrap=3,
+                       col="Gene", hue=cct, height=15, aspect=2)
+            plt.tick_params(axis="x", labelsize=labelsize)
         return cts
 
     def preprocess(self, assay_protein=None, layer_in="counts", copy=False,
@@ -786,8 +792,9 @@ class Omics(object):
             adata.obs.loc[:, col_annotation] = adata.obs.loc[
                 :, col_annotation].replace(res).astype("category")  # annotate
         elif flavor.lower() == "celltypist":  # annotate with CellTypist
+            m_v = kwargs.pop("majority_voting", True)
             adata, res, figs = cr.ax.perform_celltypist(
-                adata, model, majority_voting=True, p_threshold=p_threshold,
+                adata, model, majority_voting=m_v, p_threshold=p_threshold,
                 mode=mode, over_clustering=over_clustering, col_cell_type=c_t,
                 min_proportion=min_proportion, **kwargs)  # annotate
             col_ann = ["majority_voting", "predicted_labels"]  # for writing

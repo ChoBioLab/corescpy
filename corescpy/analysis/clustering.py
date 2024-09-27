@@ -10,6 +10,7 @@ Preprocessing CRISPR experiment data.
 from warnings import warn
 import os
 import re
+import seaborn as sb
 from copy import deepcopy
 import seaborn as sns
 import celltypist
@@ -261,21 +262,17 @@ def perform_celltypist(adata, model, col_cell_type=None,
                              color=list(ccts), wspace=space)  # all 1 plot
 
     # Plot Confidence Scores
-    if "majority_voting" in ann.obs:  # if did over-clustering/majority voting
-        conf = ann.obs[["majority_voting", "predicted_labels", "conf_score"
-                        ]].set_index("conf_score").stack().rename_axis(
-                            ["Confidence Score", "Annotation"]).to_frame(
-                                "Label").reset_index()  # scores ~ label
-
-        aspect = int(len(conf[conf.Annotation == "predicted_labels"
-                              ].Label.unique()) / 15)  # aspect ratio
-        figs["confidence"] = sns.catplot(
-            data=conf, y="Confidence Score", row="Annotation", height=40,
-            aspect=aspect, x="Label", hue="Label", kind="violin")  # plot
-        figs["confidence"].figure.suptitle("CellTypist Confidence Scores")
-        for a in figs["confidence"].axes.flat:
-            _ = a.set_xticklabels(a.get_xticklabels(), rotation=90)
-        figs["confidence"].fig.show()
+    if "majority_voting" in ann.obs and (
+            "conf_score" in ann.obs.columns):  # if did majority voting
+        try:
+            figs["confidence"] = sb.displot(
+                ann.obs, x="conf_score", hue="majority_voting",
+                kind="kde", fill=True, cut=0)
+            print(f"\n\n\n{'=' * 80}\nConfidence Scores\n{'=' * 80}",
+                  "\n\n", ann.obs.groupby("majority_voting").apply(
+                      lambda x: x["conf_score"].describe()).round(2), "\n\n")
+        except Exception:
+            pass
     return ann, res, figs
 
 

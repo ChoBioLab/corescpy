@@ -47,6 +47,8 @@ def plot_gex(adata, col_cell_type=None, title=None,
     if genes is None and marker_genes_dict:  # marker_genes_dict -> genes
         genes = pd.unique(functools.reduce(lambda i, j: i + j, [
             marker_genes_dict[k] for k in marker_genes_dict]))
+    if isinstance(genes, (float, int)):
+        genes = list(pd.Series(adata.var_names).sample(int(genes)))
     if genes is not None:
         if any((g not in adata.var_names for g in genes)):
             warnings.warn("Will not plot " + ", ".join(set(genes).difference(
