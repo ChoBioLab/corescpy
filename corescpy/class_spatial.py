@@ -13,6 +13,7 @@ from copy import deepcopy
 from dask_image.imread import imread
 import matplotlib
 import matplotlib.pyplot as plt
+import seaborn as sb
 from matplotlib.backends.backend_pdf import PdfPages
 import shapely
 from shapely.geometry.multipolygon import MultiPolygon
@@ -633,8 +634,10 @@ class Spatial(cr.Omics):
         if inplace is False:
             self.rna.uns["tangram_object"] = out[0]
             self.rna.obs.loc[:, col_annotation] = out[0].obs[col_annotation]
-            if out_file and os.path.splitext(out_file)[1] != ".csv":
-                self.write(out_file)
+        else:
+            self.rna = out[0]
+        if out_file and os.path.splitext(out_file)[1] != ".csv":
+            self.write(out_file)
         return out
 
     def calculate_centrality(self, col_cell_type=None, delaunay=True,
@@ -872,14 +875,15 @@ class Spatial(cr.Omics):
         if isinstance(genes, int):
             genes = self.rna.uns["moranI"].head(genes).index.values
         # fig, ncols = None, cr.pl.square_grid(len(genes + [cct]))[1]
-        try:
-            fig = self.plot_spatial(
-                genes + [cct], shape=shape, figsize=figsize, title=title,
-                key_image=key_image, library_id=library_id,
-                library_key=csid, out_file=out_plot, **kws_plot)
-        except Exception:
-            fig = str(traceback.format_exc())
-            traceback.print_exc()
+        if kws_plot is not False:
+            try:
+                fig = self.plot_spatial(
+                    genes + [cct], shape=shape, figsize=figsize, title=title,
+                    key_image=key_image, library_id=library_id,
+                    library_key=csid, out_file=out_plot, **kws_plot)
+            except Exception:
+                fig = str(traceback.format_exc())
+                traceback.print_exc()
         # sc.pl.spatial(adata, color=genes, library_id=library_id,
         #               figsize=figsize, **kws_plot)  # SVGs GEX plot
         print("\n\n*** SVG results stored in `.rna.uns['moranI']`\n\n")
@@ -992,3 +996,35 @@ class Spatial(cr.Omics):
         if copy is False:
             self.rna = adata
         return adata
+
+    def plot_neighborhood(self, col_cell_type=None, **kwargs):
+        """Plot results from neighborhood enrichment analysis."""
+        fig = sq.pl.nhood_enrichment(self.rna, col_cell_type if (
+            col_cell_type) else self._columns["col_cell_type"], **kwargs)
+        return fig
+
+    def plot_cooccurrence(self, col_cell_type=None, groups=None, **kwargs):
+        """Plot co-occurrence results."""
+        fig = cr.pl.plot_cooccurrence(
+            self.rna, col_cell_type if col_cell_type else self._columns[
+                "col_cell_type"], cluster_key=groups, **kwargs)
+        return fig
+
+    def plot_svgs(self, metrics="all", height=15, aspect=2,
+                  x_label_rotation=45, key_added="moranI", **kwargs):
+        """Plot SVG results."""
+        if isinstance(metrics, str) or metrics is None:
+            metrics = list(self.rna.uns[key_added].columns) if (
+                metrics == "all") or metrics is None else [metrics]
+        fig = {}
+        print(self.rna.uns[key_added].head(10), "\n\n\n")
+        for x in metrics:
+            if x in self.rna.uns[key_added].columns:
+                fig[x] = sb.catplot(self.rna.uns[key_added].rename_axis(
+                    "Gene")[[x]], kind="bar", x="Gene", hue="Gene", y=x,
+                                    height=height, aspect=aspect, **kwargs)
+                if x_label_rotation not in [None, False]:
+                    fig[x].set_xticklabels(rotation=x_label_rotation)
+                fig[x].fig.suptitle("Spatially Variable Genes: "
+                                    f"{'Moran I' if x == 'I' else x}")
+        return fig

@@ -13,7 +13,7 @@ and `stlearn` tutorials.
 """
 
 import tifffile
-import functools
+# import functools
 import csv
 import os
 import re

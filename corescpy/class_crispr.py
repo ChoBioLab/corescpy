@@ -31,7 +31,7 @@ class Crispr(cr.Omics):
                  col_target_genes=None,
                  key_control="NT", key_treatment="KO", key_nonperturbed="NP",
                  kws_process_guide_rna=None, file_perturbations=None,
-                 kws_multi=None, **kwargs):
+                 kws_multi=None, integrated=False, **kwargs):
         """
         Initialize Crispr class object.
 
@@ -348,7 +348,8 @@ class Crispr(cr.Omics):
             col_gene_symbols=col_gene_symbols, col_sample_id=col_sample_id,
             col_condition=col_condition, key_control=key_control,
             key_treatment=key_treatment, kws_process_guide_rna=kws_pga,
-            kws_multi=kws_multi)  # make adata & process gRNA (if needed)
+            kws_multi=kws_multi,
+            integrated=integrated)  # make adata & process gRNA (if needed)
 
         # Store gRNA Processing Information
         self.info["guide_rna"]["keywords"] = kws_process_guide_rna
@@ -383,12 +384,13 @@ class Crispr(cr.Omics):
             raise ValueError(f"{' or '.join(conds)} must be in `.obs` ")
 
         # Create Binary Perturbation Column (if not yet existent)
-        if col_perturbed not in self.rna.obs:  # binary form of col_condition
-            self.rna.obs = self.rna.obs.join(
-                self.rna.obs[col_target_genes].apply(
-                    lambda x: x if pd.isnull(x) else key_control if (
-                        x == key_control) else key_treatment).to_frame(
-                            col_perturbed), lsuffix="_original")
+        if col_perturbed in self.rna.obs:  # binary form of col_condition
+            warnings.warn(f"\n\nOverwriting {col_perturbed}!\n\n")
+        self.rna.obs = self.rna.obs.join(
+            self.rna.obs[col_target_genes].apply(
+                lambda x: x if pd.isnull(x) else key_control if (
+                    x == key_control) else key_treatment).to_frame(
+                        col_perturbed), lsuffix="_original")
 
         # Store Columns & Keys within Columns as Dictionary Attributes
         self._columns = {
@@ -712,12 +714,13 @@ class Crispr(cr.Omics):
             assay = self._assay
         if assay_protein is None:
             assay_protein = self._assay_protein
-        for x in [self._columns, self._keys, self._layers]:
+        for x in [self._columns, self._keys]:
             for c in x:  # iterate column/key name attributes
                 if c not in kwargs:  # if not passed as argument to method...
                     kwargs.update({c: x[c]})  # & use object attribute
-        if col_split_by is not False:  # unless explicitly forbid split_by
-            col_split_by = self._columns["col_sample_id"]
+        col_split_by = col_split_by if col_split_by not in [
+            None, False] else self._columns["col_sample_id"] if (
+                col_split_by is None) else None
         if layer is None or layer not in self.rna.layers:
             if layer is not None and layer not in self.rna.layers:
                 raise ValueError(f"Layer {layer} not found in adata.layers")
@@ -738,14 +741,11 @@ class Crispr(cr.Omics):
             for x in figs_mix["perturbation_score"]:
                 print(figs_mix["perturbation_score"][x])
         if copy is False:  # store results
-            self.figures.update({"mixscape": figs_mix})
             self.rna = adata_pert
-            return figs_mix
-        else:
-            return adata_pert, figs_mix
+        return adata_pert, figs_mix
 
     def plot_mixscape(self, target_gene_idents=True, protein_of_interest=None,
-                      color="red", subsample_number=100):
+                      color="red", subsample_number=100, **kwargs):
         """Plot the Mixscape score(s) for one or more target genes."""
         g_s = self.info["guide_rna"]["guide_split"] if (
             "keywords" in self.info["guide_rna"] and
@@ -753,19 +753,21 @@ class Crispr(cr.Omics):
         f_s = self.info["guide_rna"]["feature_split"] if (
             "keywords" in self.info["guide_rna"] and
             "feature_split" in self.info["guide_rna"]) else None
+        key_tx = kwargs.pop("key_treatment", self._keys["key_treatment"])
+        col_tgs = kwargs.pop("col_target_genes", self._columns[
+            "col_target_genes"])
+        kws = dict(protein_of_interest=protein_of_interest,
+                   key_control=self._keys["key_control"],
+                   key_nonperturbed=self._keys["key_nonperturbed"],
+                   layer=self._layers["mixscape"],
+                   target_gene_idents=target_gene_idents,
+                   subsample_number=subsample_number, color=color,
+                   col_guide_rna=self._columns["col_guide_rna"],
+                   guide_split=g_s, feature_split=f_s)
         figs = cr.pl.plot_mixscape(
-            self.rna, self._columns["col_target_genes"],
-            self._keys["key_treatment"],
-            adata_protein=self.adata[
-                self._assay_protein] if self._assay_protein else None,
-            protein_of_interest=protein_of_interest,
-            key_control=self._keys["key_control"],
-            key_nonperturbed=self._keys["key_nonperturbed"],
-            layer=self._layers["mixscape"],
-            target_gene_idents=target_gene_idents,
-            subsample_number=subsample_number, color=color,
-            col_guide_rna=self._columns["col_guide_rna"], guide_split=g_s,
-            feature_split=f_s)
+            self.rna, col_tgs, key_tx, adata_protein=self.adata[
+                self._assay_protein] if self._assay_protein else None, **{
+                    **kws, **kwargs})  # plot
         return figs
 
     def run_augur(self, assay=None, layer=None,
@@ -857,8 +859,6 @@ class Crispr(cr.Omics):
             self.rna.uns["augurpy_results"] = data.uns["augurpy_results"]
             self.rna.obs = self.rna.obs.join(data.obs["augur_score"],
                                              lsuffix="_previous")
-            self.results.update({"Augur": {"results": results}})
-            self.figures.update({"Augur": figs_aug})
         return data, results, figs_aug
 
     def compute_distance(self, distance_type="edistance", method="X_pca",
@@ -934,40 +934,7 @@ class Crispr(cr.Omics):
             alpha=alpha, correction=correction,
             key_target_genes=key_condition, col_cell_type=col_cell_type,
             key_cell_type=key_cell_type, **kwargs)  # compute/plot distance
-        if plot is True:
-            for x in [self.results, self.figures]:
-                if "distances" not in x:
-                    x["distances"] = {}
-            self.figures["distances"].update(
-                {f"{distance_type}_{method}": output[-1]})
-            self.results["distances"].update(
-                {f"{distance_type}_{method}": [
-                    output[i] for i in range(len(output) - 1)]})
         return output
-
-    # def save_output(self, directory_path, run_keys="all", overwrite=False):
-    #     """Save figures, results, adata object."""
-    #     # TODO: FINISH
-    #     raise NotImplementedError("Saving output isn't yet implemented.")
-    #     if isinstance(run_keys, (str, float)):
-    #         run_keys = [run_keys]
-    #     elif run_keys == "all":
-    #         run_keys = list(self.figures.keys())
-    #         run_keys += list(self.results.keys())
-    #         run_keys = list(pd.unique(self.results))
-    #     for r in run_keys:
-    #         os.makedirs(os.path.join(directory_path, r), exist_ok=True)
-    #         if r in self.figures:
-    #             for f in self.figures[r]:
-    #                 dirp = os.path.join(directory_path, r, f)
-    #                 os.makedirs(dirp, exist_ok=overwrite)
-    #                 # self.figures[r][f].savefig(
-    #                 #     os.path.join(dirp, f"{f}.pdf"))
-    #         if r in self.results:
-    #             for f in self.results[r]:
-    #                 dirp = os.path.join(directory_path, r)
-    #                 if not os.path.exists(dirp)
-    #                 os.makedirs(dirp, exist_ok=overwrite)
 
     def plot_correlation(self, genes, method="pearson", col_condition=None,
                          figsize=None, **kwargs):

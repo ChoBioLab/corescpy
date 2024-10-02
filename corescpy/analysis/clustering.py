@@ -12,7 +12,6 @@ import os
 import re
 import seaborn as sb
 from copy import deepcopy
-import seaborn as sns
 import celltypist
 from anndata import AnnData
 import scanpy as sc
@@ -125,13 +124,17 @@ def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
 
 
 def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
-                      key_reference="rest", layer="log1p", p_threshold=None,
+                      key_reference="rest", layer="log1p",
+                      p_threshold=None, lfc_threshold=None,
                       col_gene_symbols=None, method="wilcoxon", kws_plot=True,
-                      use_raw=False, key_added="rank_genes_groups", **kwargs):
+                      use_raw=False, key_added="rank_genes_groups",
+                      pts=True, **kwargs):
     """Find cluster gene markers."""
     figs = {}
     if kws_plot is True:
         kws_plot = {}
+    if lfc_threshold is None:
+        lfc_threshold = [None, None]
     if assay:
         adata = adata[assay]
     if layer:
@@ -140,7 +143,7 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
         col_cell_type].astype("category")
     sc.tl.rank_genes_groups(
         adata, col_cell_type, method=method, reference=key_reference,
-        key_added=key_added, use_raw=use_raw, **kwargs)  # rank
+        key_added=key_added, use_raw=use_raw, pts=pts, **kwargs)  # rank
     if isinstance(kws_plot, dict):
         figs["marker_rankings"] = cr.pl.plot_markers(
             adata, key_added=key_added, use_raw=use_raw,
@@ -149,7 +152,7 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
                     n_genes, (int, float)) else 5, **kws_plot})
     ranks = make_marker_genes_df(
         adata, col_cell_type, key_added=key_added, p_threshold=p_threshold,
-        log2fc_min=None, log2fc_max=None, gene_symbols=col_gene_symbols)
+        lfc_threshold=lfc_threshold, gene_symbols=col_gene_symbols)
     return ranks, figs
 
 
@@ -159,8 +162,14 @@ def make_marker_genes_df(adata, col_cell_type, key_added="leiden",
     ranks = sc.get.rank_genes_groups_df(adata, None, key=key_added, **kwargs)
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
-    if lfc_threshold:
-        ranks = ranks[ranks.logfoldchanges >= lfc_threshold]  # filter ~ LFC
+    if lfc_threshold is None:
+        lfc_threshold = [None, None]
+    if isinstance(lfc_threshold, int):
+        lfc_threshold = [lfc_threshold, None]  # assume if 1 # given, maximum
+    if lfc_threshold[0] is not None:
+        ranks = ranks[ranks.logfoldchanges >= lfc_threshold[0]]  # minimum LFC
+    if lfc_threshold[1]:
+        ranks = ranks[ranks.logfoldchanges <= lfc_threshold[1]]  # maximum LFC
     if p_threshold:
         ranks = ranks[ranks.pvals_adj <= p_threshold]  # filter ~ LFC
     return ranks
@@ -295,6 +304,8 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
     if isinstance(data_assignment, (str, os.PathLike)):
         data_assignment = pd.read_excel(data_assignment, index_col=0)
     assign = data_assignment.copy()
+    if assign.shape[1] == 1:
+        col_assignment = assign.columns[0]
     if renaming is True:
         sources = assign[col_assignment].unique()
         rename = dict(zip(sources, [" ".join([i.capitalize() if i and i[

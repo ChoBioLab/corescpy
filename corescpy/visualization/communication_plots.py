@@ -32,7 +32,7 @@ def plot_receptor_ligand(adata=None, liana_res=None, title=None, top_n=20,
     """Plot Liana receptor-ligand analyses (and, optionally, DEA)."""
     if figsize is None:  # auto-calculate figure size if not provided
         # figsize = (len(key_sources) * len(key_targets) / 4, top_n / 4)
-        figsize = (30, 30)
+        figsize = (20, 20)
     size_range = kwargs.pop("size_range", (1, 6))  # size range for dots
     if liana_res is None and adata is not None:
         liana_res = adata.uns[key_added].copy()

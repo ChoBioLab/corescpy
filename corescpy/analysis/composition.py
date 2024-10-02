@@ -15,7 +15,7 @@ import warnings
 import matplotlib.pyplot as plt
 
 
-def analyze_composition(adata, col_condition,  col_cell_type, assay=None,
+def analyze_composition(adata, col_condition, col_cell_type, assay=None,
                         layer=None, copy=False, generate_sample_level=True,
                         plot=True, reference_cell_type="automatic",
                         key_reference_cell_type="automatic",
@@ -64,21 +64,21 @@ def perform_sccoda(adata, col_condition, col_cell_type, assay=None,
                    reference_cell_type="automatic",
                    analysis_type="cell_level",
                    generate_sample_level=True, sample_identifier="batch",
-                   covariates=None, est_fdr=0.05, plot=True, out_file=None):
+                   covariates=None, est_fdr=0.05, out_file=None, plot=True,
+                   plot_zero_covariate=True, plot_zero_cell_type=True):
     """Perform SCCoda compositional analysis."""
     figs, results = {}, {}
+    adata = adata.copy()
     if generate_sample_level is True and sample_identifier is None:
         warnings.warn(
             "Can't generate sample level if `sample_identifier`=None."
             " Setting `generate_sample_level` to False.")
         generate_sample_level = False
     mod, mod_o = "coda", assay if assay else "rna"
-    # covariate_obs = [covariates] + col_condition if isinstance(
-    #     covariates, str) else covariates + [
-    #         col_condition] if covariates else [col_condition]
+    if isinstance(covariates, str):
+        covariates = [covariates]
     covariate_obs = [col_condition] + covariates if covariates else [
         col_condition]
-    adata = adata.copy()
     adata = adata[~adata.obs[col_condition].isnull()].copy()
     adata.obs.index = [adata.obs.index.values[i] + "_" + str(
         adata.obs.iloc[i][col_condition]) + "_" + str(adata.obs.iloc[i][
@@ -96,11 +96,11 @@ def perform_sccoda(adata, col_condition, col_cell_type, assay=None,
     #     [col_cell_type, col_condition]])
     if plot is True:
         try:
-            figs["barplot"] = pt.pl.coda.boxplots(
+            figs["barplot"] = model.plot_boxplots(
                 scodata, modality_key=mod,
                 feature_name=col_condition,
-                figsize=(12, 5), add_dots=True,
-                args_swarmplot={"palette": ["red"]})
+                # args_swarmplot={"palette": ["red"]},
+                figsize=(12, 5), add_dots=True)
             plt.show()
         except Exception as err:
             print(f"{err}\n\nFailed to plot boxplots. Ensure PyQt5 is "
@@ -111,14 +111,14 @@ def perform_sccoda(adata, col_condition, col_cell_type, assay=None,
     if plot is True:
         try:
             figs[
-                "find_reference"] = pt.pl.coda.rel_abundance_dispersion_plot(
+                "find_reference"] = model.plot_rel_abundance_dispersion_plot(
                     scodata, modality_key=mod,
                     abundant_threshold=0.9)  # helps choose rference cell type
         except Exception as err:
             print(f"{err}\n\nFailed to plot reference cell type.\n\n")
             figs["find_reference"] = err
         try:
-            figs["proportions"] = pt.pl.coda.boxplots(
+            figs["proportions"] = model.plot_boxplots(
                 scodata, modality_key=mod,
                 feature_name=col_condition, add_dots=True)
         except Exception as err:
@@ -150,7 +150,7 @@ def perform_sccoda(adata, col_condition, col_cell_type, assay=None,
             scodata.write_h5mu(f"{out_file}_{est_fdr}_fdr")
     if plot is True:
         try:
-            figs["proportions_stacked"] = pt.pl.coda.stacked_barplot(
+            figs["proportions_stacked"] = model.plot_stacked_barplot(
                 scodata, modality_key=mod, feature_name=col_condition)
             plt.show()
         except Exception as err:
@@ -169,12 +169,10 @@ def perform_sccoda(adata, col_condition, col_cell_type, assay=None,
         plt.tight_layout()
         plt.show()
         try:
-            pzc = any((scodata.varm[f"effect_df_{x}"]["Final Parameter"].any(
-                ) for x in scodata.uns["scCODA_params"]["covariate_names"]
-                       )) is False  # don't plot 0 effects if any non-0
-            figs["effects"] = pt.pl.coda.effects_barplot(
+            figs["effects"] = model.plot_effects_barplot(
                 scodata, modality_key=mod, parameter="Final Parameter",
-                plot_zero_cell_type=pzc)
+                plot_zero_cell_type=plot_zero_cell_type,
+                plot_zero_covariate=plot_zero_covariate)
         except Exception as err:
             print(traceback.format_exc(), "\n\nFailed to plot effects.\n\n")
             figs["effects"] = err
@@ -239,12 +237,12 @@ def perform_tasccoda(adata, col_condition, col_cell_type,
         sample_identifier=col_sample_id,
         covariate_obs=covariates + [col_condition],
         levels_orig=col_list_lineage_tree, add_level_name=True)  # load model
-    pt.pl.coda.draw_tree(ts_data["coda"])
+    model.plot_draw_tree(ts_data["coda"])
     ts_data.mod["coda_subset"] = ts_data["coda"][ts_data["coda"].obs[
         col_condition].isin([key_control, key_treatment])]  # subset if needed
     if plot is True:
-        figs["tree"] = pt.pl.coda.draw_tree(ts_data["coda"])
-        figs["descriptives_abundance"] = pt.pl.coda.boxplots(
+        figs["tree"] = model.plot_draw_tree(ts_data["coda"])
+        figs["descriptives_abundance"] = model.plot_boxplots(
             ts_data, modality_key="coda_subset", feature_name=col_condition,
             figsize=(20, 8))
         plt.show()
@@ -260,12 +258,12 @@ def perform_tasccoda(adata, col_condition, col_cell_type,
     results["credible_effects"] = model.credible_effects(
         ts_data, modality_key="coda_subset")  # credible effects
     if plot:
-        figs["credible_effects"] = pt.pl.coda.draw_effects(
+        figs["credible_effects"] = model.plot_draw_effects(
             ts_data, modality_key="coda_subset",
             tree=ts_data["coda_subset"].uns["tree"],
             covariate=f"{col_condition}[T.{key_treatment}]"
             )  # effects as sizes/colors of nodes on the lineage tree
-        figs["credible_effects_dual"] = pt.pl.coda.draw_effects(
+        figs["credible_effects_dual"] = model.plot_draw_effects(
             ts_data, modality_key="coda_subset",
             tree=ts_data["coda_subset"].uns["tree"],
             covariate=f"{col_condition}[T.{key_treatment}]",

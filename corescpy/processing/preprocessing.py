@@ -717,7 +717,7 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
         if isinstance(cell_filter_prb, (int, float)):  # if just 1 # for MT %
             cell_filter_prb = [0, cell_filter_prb]  # ...assume for maximum %
         print("\n<<< PERFORMING THRESHOLD-BASED FILTERING >>>")
-        print(f"\nTotal Cell Count: {ann.n_obs}")
+        print(f"\n\tTotal Cell Count: {ann.n_obs}")
         if cell_filter_pmt is not None:
             print("\n\t*** Filtering cells by mitochondrial gene %...")
             min_mt, max_mt = cell_filter_pmt
