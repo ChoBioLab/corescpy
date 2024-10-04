@@ -485,13 +485,21 @@ class Spatial(cr.Omics):
         ann = self.rna.copy()
         kws = cr.tl.merge(dict(figsize=figsize, shape=shape, cmap=cmap,
                                return_ax=True, library_key=col_sample_id,
-                               library_id=libid, color=color, alt_var=cgs,
+                               library_id=libid, alt_var=cgs,
                                wspace=wspace), kwargs)  # keyword arguments
         kws["img_res_key"] = key_image if key_image else None if len(
             self.rna.uns[self._spatial_key][libid]["images"]) == 0 else list(
                 self.rna.uns[self._spatial_key][libid]["images"].keys())[0]
-        fig = cr.pl.plot_spatial(ann, col_segment=seg, title=title,
-                                 save=out_file, **kws)
+        if isinstance(color, str) or len(color) == 1:
+            color = color if isinstance(color, str) else color[0]
+            fig = cr.pl.plot_spatial(ann, col_segment=seg, title=title,
+                                     save=out_file, color=color, **kws)
+            return fig
+        else:
+            fig = {}
+            for c in color:
+                fig[c] = cr.pl.plot_spatial(ann, col_segment=seg, title=title,
+                                            save=out_file, color=c, **kws)
         return fig
 
     def plot_clusters(self, col_cell_type=None, key_cell_type=None,

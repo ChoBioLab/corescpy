@@ -246,8 +246,8 @@ class Omics(object):
         """Write clusters (and, if `n_top` != False, markers)."""
         key = kwargs.pop("key_added", f"rank_genes_groups_{col_cell_type}")
         pre = "" if file_prefix is None else f"{file_prefix}_"
-        outs = [out_directory, os.path.join(out_directory, n_top) if (
-            isinstance(n_top, str)) else out_directory]  # n_top=subdirectory?
+        outs = [out_directory, n_top if (
+            isinstance(n_top, str)) else out_directory]  # n_top=directory?
         file_grp, file_mks = [os.path.join(
             outs[i], f"{pre}{col_cell_type}{s}.csv") for i, s in enumerate(
                 ["", "_markers"])]  # file names

@@ -10,6 +10,7 @@ Preprocessing CRISPR experiment data.
 from warnings import warn
 import os
 import re
+import traceback
 import seaborn as sb
 from copy import deepcopy
 import celltypist
@@ -92,6 +93,11 @@ def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
             ann = cr.tl.merge_pca_subset(ann, ann_use, retain_cols=False)
         else:  # if used full gene set
             ann = ann_use
+        try:
+            sc.pl.pca_variance_ratio(ann, n_pcs=50, log=True)
+        except Exception:
+            traceback.print_exc()
+            warn("\nPlotting PCA variance ratio failed!")
 
     # Neighborhood Graph
     print(f"\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n{kws_neighbors}\n")

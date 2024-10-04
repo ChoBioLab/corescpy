@@ -333,7 +333,6 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     figs = {}
     layers = cr.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
-    print(ann)
     if layers["counts"] not in ann.layers:
         if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(
