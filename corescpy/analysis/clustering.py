@@ -94,7 +94,9 @@ def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
         else:  # if used full gene set
             ann = ann_use
         try:
-            sc.pl.pca_variance_ratio(ann, n_pcs=50, log=True)
+            sc.pl.pca_variance_ratio(ann, n_pcs=kws_pca[
+                "n_comps"] if "n_comps" in kws_pca and isinstance(
+                    kws_pca["n_comps"], (int, float)) else 50, log=True)
         except Exception:
             traceback.print_exc()
             warn("\nPlotting PCA variance ratio failed!")
