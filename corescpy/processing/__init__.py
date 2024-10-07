@@ -1,6 +1,5 @@
 from .preprocessing import (create_object,
                             create_object_multi,
-                            get_layer_dict,
                             process_data,
                             check_normalization,
                             z_normalize_by_reference,
@@ -16,10 +15,10 @@ from .spatial_pp import (describe_tiff, extract_tiff, command_cellpose,
                          _get_control_probe_names, impute_spatial,
                          construct_obs_spatial_imputation, create_spot_grid,
                          subset_spatial, xenium_explorer_selection,
-                         SPATIAL_KEY, SPATIAL_IMAGE_KEY_SEP)
+                         SPATIAL_IMAGE_KEY_SEP)
 
 __all__ = [
-    "create_object", "create_object_multi", "get_layer_dict", "process_data",
+    "create_object", "create_object_multi", "process_data",
     "check_normalization", "z_normalize_by_reference",
     "perform_qc", "filter_qc",
     "process_guide_rna", "combine_matrix_protospacer",

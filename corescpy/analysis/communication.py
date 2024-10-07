@@ -26,6 +26,8 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
     """Perform receptor-ligand analysis."""
     if copy is True:
         adata = adata.copy()
+    if figsize is None:
+        figsize = (20, 20)
     res_keys = ["squidpy", "liana_res", "lr_dea_res", "dea_results", "dea_df"]
     figs, res = {}, dict(zip(res_keys, [None] * len(res_keys)))  # for output
     kws_plot = {} if kws_plot is None else {**kws_plot}
@@ -72,7 +74,7 @@ def analyze_receptor_ligand(adata, method="liana", n_jobs=4, seed=1618,
             print(traceback.format_exc(), "Liana + DEA failed!\n\n",)
 
     # Plotting
-    if plot is True:
+    if plot is True and method != "squidpy":
         try:
             figs["lr"] = plot_receptor_ligand(
                 adata=adata, lr_dea_res=res["lr_dea_res"], **kws)  # plots

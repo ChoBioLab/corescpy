@@ -16,7 +16,7 @@ import traceback
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage
 import os
-# import blitzgsea as blitz
+import blitzgsea as blitz
 # from copy import deepcopy
 import corescpy as cr
 import pandas as pd
@@ -31,6 +31,33 @@ ifn_pathways_default = [
     "REACTOME_INTERFERON_GAMMA_SIGNALING"]
 
 
+def calculate_deg_covariates(pdata, layer=None, inplace=False,
+                             col_condition=None, key_control=None,
+                             key_treatment=None, col_covariate=None,
+                             design=None, log2fc_thresh=0, method="deseq"):
+    """Use edgeR to calculate differential expression."""
+    if inplace is False:
+        pdata = pdata.copy()
+    if layer is not None:
+        pdata.X = pdata.layers[layer].copy()
+    col_covariate = [col_covariate] if isinstance(
+        col_covariate, str) else col_covariate
+    if design is None:
+        design = "+".join([col_condition] + col_covariate) if (
+            col_covariate is not None) else str(col_condition)
+    model = (pt.tl.PyDESeq2 if "deseq" in method else pt.tl.EdgeR)(
+        pdata, design=design)
+    model.fit()
+    if "deseq" in method:
+        res = model.test_contrasts([col_condition, key_control, key_treatment])
+    else:
+        res = model.test_contrasts(model.contrast(
+            column=col_condition, baseline=key_control,
+            group_to_compare=key_treatment))
+    model.plot_volcano(res, log2fc_thresh=log2fc_thresh)
+    return model, res
+
+
 def perform_mixscape(adata, assay=None, assay_protein=None, layer=None,
                      protein_of_interest=None, col_perturbed="perturbation",
                      key_control="NT", key_treatment="perturbed",
@@ -40,7 +67,7 @@ def perform_mixscape(adata, assay=None, assay_protein=None, layer=None,
                      logfc_threshold=0.25, subsample_number=300,
                      n_comps_lda=10, guide_split="-", feature_split="|",
                      target_gene_idents=None, kws_perturbation_signature=None,
-                     plot=True, **kwargs):
+                     plot=True, key_mixscape="mixscape_class", **kwargs):
     """
     Identify perturbed cells based on target genes
     (`adata.obs['mixscape_class']`,
@@ -131,7 +158,8 @@ def perform_mixscape(adata, assay=None, assay_protein=None, layer=None,
         print(f"\nUn-used Keyword Arguments: {kwargs}")
     if kws_perturbation_signature is None:
         kws_perturbation_signature = {}
-    key_nonperturbed = "NP"
+    kws_perturbation_signature = {"n_iters": iter_num,
+                                  **kws_perturbation_signature}
 
     # Perturbation Signature
     adata_pert = (adata[assay] if assay else adata).copy()
@@ -156,56 +184,59 @@ def perform_mixscape(adata, assay=None, assay_protein=None, layer=None,
 
     # Mixscape Classification & Perturbation Scoring
     print("\n<<< RUNNING MIXSCAPE ROUTINE >>>")
-    mix.mixscape(adata=adata_pert,
-                 # adata=adata_pert,
-                 labels=col_target_genes, control=key_control,
-                 layer=layer,
-                 perturbation_type=key_treatment,
+    mix.mixscape(adata_pert, col_target_genes, key_control,
+                 new_class_name=key_mixscape,
+                 layer=layer, perturbation_type=key_treatment,
                  min_de_genes=min_de_genes, pval_cutoff=pval_cutoff,
                  iter_num=iter_num)  # Mixscape classification
     if target_gene_idents is True:  # to plot all target genes
         target_gene_idents = list(adata_pert.uns["mixscape"].keys())
     if plot is True:
-        figs = cr.pl.plot_mixscape(
-            adata_pert, col_target_genes,
-            key_treatment, key_control=key_control,
-            key_nonperturbed=key_nonperturbed, layer=layer,
-            target_gene_idents=target_gene_idents,
-            subsample_number=subsample_number,
-            col_guide_rna=col_guide_rna, guide_split=guide_split)
+        try:
+            figs["mixscape"] = cr.pl.plot_mixscape(
+                adata_pert, col_target_genes,
+                key_treatment, key_control=key_control,
+                key_nonperturbed=key_nonperturbed, layer=layer,
+                target_gene_idents=target_gene_idents,
+                subsample_number=subsample_number, key_mixscape=key_mixscape,
+                col_guide_rna=col_guide_rna, guide_split=guide_split)
+        except Exception:
+            traceback.print_exc()
+            print("\n\nMixscape plot failed!")
 
     # Perturbation-Specific Cell Clusters
     print("\n<<< RUNNING LINEAR DISCRIMINANT ANALYSIS (CLUSTERING) >>>")
     try:
-        mix.lda(adata=adata_pert,
-                # adata=adata_pert,
-                labels=col_target_genes,
-                layer=layer, control=key_control,
-                min_de_genes=min_de_genes,
-                split_by=col_split_by,
-                copy=False,
+        mix.lda(adata_pert, col_target_genes, key_control,
+                layer=layer, min_de_genes=min_de_genes,
+                split_by=col_split_by, copy=False,
                 perturbation_type=key_treatment,
-                mixscape_class_global="mixscape_class_global",
+                mixscape_class_global=f"{key_mixscape}_global",
                 n_comps=n_comps_lda, logfc_threshold=logfc_threshold,
                 pval_cutoff=pval_cutoff)  # linear discriminant analysis (LDA)
     except Exception as error:
         warn(f"{error}\n\nCouldn't perform perturbation-specific clustering!")
         figs["lda"] = error
     if assay_protein:
-        adata[assay_protein].obs[:, "mixscape_class_global"] = adata_pert[
-            assay].obs["mixscape_class_global"].loc[
+        adata[assay_protein].obs[:, f"{key_mixscape}_global"] = adata_pert[
+            assay].obs[f"{key_mixscape}_global"].loc[
                 adata[assay_protein].index]  # classification -> protein assay
 
     # Perturbation Score Plotting
     if plot is True and target_gene_idents is not None:  # G/P EX
-        fff = cr.pl.plot_mixscape(
-            adata_pert, col_target_genes, key_treatment,
-            adata_protein=adata[assay_protein] if assay_protein else None,
-            key_control=key_control, key_nonperturbed=key_nonperturbed,
-            layer=layer, target_gene_idents=target_gene_idents,
-            subsample_number=subsample_number, col_guide_rna=col_guide_rna,
-            guide_split=guide_split, feature_split=feature_split)
-        figs = {**figs, **fff}
+        try:
+            fff = cr.pl.plot_mixscape(
+                adata_pert, col_target_genes, key_treatment,
+                adata_protein=adata[assay_protein] if assay_protein else None,
+                key_control=key_control, key_nonperturbed=key_nonperturbed,
+                layer=layer, target_gene_idents=target_gene_idents,
+                subsample_number=subsample_number,
+                col_guide_rna=col_guide_rna, key_mixscape=key_mixscape,
+                guide_split=guide_split, feature_split=feature_split)
+            figs = {**figs, **fff}
+        except Exception:
+            traceback.print_exc()
+            print("\n\nMixscape plot failed!")
     else:
         figs = None
     return figs, adata_pert
@@ -261,6 +292,7 @@ def perform_augur(adata, assay=None, layer=None, augur_mode="default",
     """
     if n_jobs is True:
         n_jobs = os.cpu_count() - 1  # use available CPUs - 1
+    return_ag = kwargs.pop("return_ag", False)
     if select_variance_features == "both":
         # both methods: select genes based on...
         # - original Augur (True)
@@ -268,7 +300,7 @@ def perform_augur(adata, assay=None, layer=None, augur_mode="default",
         data, results = [[None, None]] * 2  # to store results
         figs = {}
         for i, x in enumerate([True, False]):  # iterate over methods
-            data[i], results[i], figs[str(i)] = perform_augur(
+            ag_rfc, data[i], results[i], figs[str(i)] = perform_augur(
                 adata.copy(), assay=assay,
                 layer=layer,
                 select_variance_features=x, classifier=classifier,
@@ -277,9 +309,9 @@ def perform_augur(adata, assay=None, layer=None, augur_mode="default",
                 col_cell_type=col_cell_type, col_perturbed=col_perturbed,
                 col_gene_symbols=col_gene_symbols,
                 key_control=key_control, key_treatment=key_treatment,
-                seed=seed, plot=plot, **kwargs,
+                seed=seed, plot=plot, return_ag=True, **kwargs,
                 **kws_augur_predict)  # recursive -- run function both ways
-        figs[f"vs_select_variance_feats_{x}"] = pt.pl.ag.scatterplot(
+        figs[f"vs_select_variance_feats_{x}"] = ag_rfc.scatterplot(
             results[0], results[1])  # compare  methods (diagonal=same)
     else:
         # Setup
@@ -328,7 +360,7 @@ def perform_augur(adata, assay=None, layer=None, augur_mode="default",
             figs["perturbation_score_umap"] = sc.pl.umap(
                 data, color=["augur_score", col_cell_type],
                 cmap=cmap, vcenter=0, vmax=1)
-            figs["perturbation_effect_by_cell_type"] = pt.pl.ag.lollipop(
+            figs["perturbation_effect_by_cell_type"] = ag_rfc.plot_lollipop(
                 results)  # how affected each cell type is
             # TO DO: More Augur UMAP preprocessing options?
             kws_umap = kwargs.pop("kws_umap", {})
@@ -346,9 +378,15 @@ def perform_augur(adata, assay=None, layer=None, augur_mode="default",
             except Exception as err:
                 figs["perturbation_effect_umap"] = err
                 warn(f"{err}\n\nCould not plot perturbation effects on UMAP!")
-            figs["important_features"] = pt.pl.ag.important_features(
-                results)  # most important genes for prioritization
-            figs["perturbation_scores"] = {}
+            try:
+                figs["important_features"] = ag_rfc.plot_important_features(
+                    results)  # most important genes for prioritization
+                figs["perturbation_scores"] = {}
+            except Exception as err:
+                figs["important_features"] = err
+                warn(f"{err}\n\nCould not plot perturbation features!")
+    if return_ag is True:
+        return ag_rfc, data, results, figs
     return data, results, figs
 
 
@@ -434,7 +472,7 @@ def perform_differential_prioritization(adata, col_perturbed="perturbation",
         n_subsamples=n_subsamples, n_permutations=n_permutations,
         )
     if plot is True:
-        figs["diff_pvals"] = pt.pl.ag.dp_scatter(pvals)
+        figs["diff_pvals"] = ag_rfc.plot_dp_scatter(pvals)
     return pvals, figs
 
 
@@ -485,6 +523,8 @@ def compute_distance(adata, distance_type="edistance",
 def perform_gsea(pdata, adata_sc=None,
                  col_cell_type=None, col_sample_id=None,
                  col_condition="leiden", key_condition="0",
+                 resource="MSigDB",
+                 query_string="collection == 'reactome_pathways'",
                  col_label_new=None, ifn_pathways=True,
                  layer=None, p_threshold=0.0001, use_raw=False,
                  kws_pseudobulk=None, seed=1618, kws_run_gsea=None,
@@ -553,8 +593,8 @@ def perform_gsea(pdata, adata_sc=None,
     print(t_stats)
 
     # Retrieve Reactome Pathways
-    msigdb = decoupler.get_resource("MSigDB")
-    rxome = msigdb.query("collection == 'reactome_pathways'")
+    msigdb = decoupler.get_resource(resource)
+    rxome = msigdb.query(query_string)
     rxome = rxome[~rxome.duplicated(("geneset", "genesymbol"))]  # -duplicate
 
     # Filter Gene Sets for Compatibility
@@ -606,56 +646,69 @@ def perform_gsea(pdata, adata_sc=None,
 
 
 def perform_gsea_pt(adata, col_condition, key_condition=None, layer=None,
-                    correction="benjamini-hochberg",
-                    absolute=False, library_blitz=None, **kwargs):
-    raise NotImplementedError("Pertpy GSEA not yet released.")
+                    correction="benjamini-hochberg", set_plot=None,
+                    absolute=False, n_top=15, library_blitz=None,
+                    interactive_plot=True, compact_plot=True, **kwargs):
     """Perform GSEA (Pertpy-style)."""
-    # res, fig, key_add = {}, {}, "pertpy_enrichment"  # for results
-    # ref = "rest" if key_condition is None else key_condition if (
-    #     isinstance(key_condition, str)) else None  # 1st key=reference
-    # if isinstance(key_condition, (list, np.ndarray)):  # if condition subset
-    #     adata = adata[adata.obs[col_condition].isin(key_condition)
-    #                     ]  # only keep conditions specified in key_condition
-    # if layer:
-    #     adata.X = adata.layers[layer].copy()
-    # rgg = "rank_genes_groups"  # rank genes key (cell types RGG)
-    # rgo = "rank_genes_groups_o"  # original rank genes key
-    # if rgg in adata.uns:  # preserve original rank genes
-    #     adata.uns[rgo] = adata.uns[rgg]
-    # model = pt.tl.Enrichment()
-    # kws = cr.tl.merge(dict(
-    #     nested=False, categories=None, method="mean", n_bins=25,
-    #     ctrl_size=50), {**kwargs, "key_added": key_add}, how="left")
-    # kws["targets"] = blitz.enrichr.get_library(
-    #     library_blitz) if library_blitz else None  # custom resource?
-    # model.score(adata, layer=layer, key_added=key_add, **kws)  # ~ cell
-    # sc.tl.rank_genes_groups(adata, method="wilcoxon", reference=ref,
-    #                         groupby=col_condition)  # rank genes ~ condition
-    # model.plot_dotplot(adata, groupby=col_condition)  # GEX dotplot
-    # res["gsea"] = model.gsea(absolute=absolute)  # run blitzgsea GSEA
-    # model.plot_gsea(adata, res["gsea"], interactive_plot=True)  # plot
-    # fig["gsea"] = plt.gcf()
-    # geo = model.hypergeometric(adata, absolute=absolute,
-    #                            corr_method=correction)  # significance test
-    # res["hypergeometric"] = model.gsea(adata)
-    # model.plot_gsea(adata, res["hypergeometric"], interactive_plot=True)
-    # fig["hypergeometric"] = plt.gcf()
-    # fig["blitz"] = {}
-    # for x in adata.obs[col_condition].unique():  # iterate cell types
-    #     try:
-    #         fig["blitz"][x] = blitz.plot.running_sum(
-    #             signature=adata.uns[f"{key_add}_gsea"]["scores"][x],
-    #             library=adata.uns["{key_add}_gsea"]["targets"],
-    #             geneset="MHC class II receptor activity (GO:0032395)",
-    #             result=res[x], interactive_plot=True)
-    #         fig["blitz"].show()
-    #     except:
-    #         print(traceback.format_exc(), "\n\nGSEA plot failed!")
-    # adata.uns[f"{rgg}_{col_condition}"] = adata.uns[rgg]  # new rank genes
-    # if rgo in adata.uns:  # if originally had rank ~ cluster...
-    #     adata.uns[rgg] = adata.uns[f"{rgg}_o"]  # restore original ranks
-    #     _ = adata.uns.pop(rgo)  # remove placeholder rank genes from `.uns`
-    # return adata, res, fig
+    res, fig, key_add = {}, {}, "pertpy_enrichment"  # for results
+    ref = "rest" if key_condition is None else key_condition if (
+        isinstance(key_condition, str)) else None  # 1st key=reference
+    if isinstance(key_condition, (list, np.ndarray)):  # if condition subset
+        adata = adata[adata.obs[col_condition].isin(key_condition)
+                      ]  # only keep conditions specified in key_condition
+    if layer:
+        adata.X = adata.layers[layer].copy()
+    rgg = "rank_genes_groups"  # rank genes key (cell types RGG)
+    rgo = "rank_genes_groups_o"  # original rank genes key
+    if rgg in adata.uns:  # preserve original rank genes
+        adata.uns[rgo] = adata.uns[rgg]
+    model = pt.tl.Enrichment()
+    kws = cr.tl.merge(dict(
+        nested=False, categories=None, method="mean", n_bins=25,
+        ctrl_size=50), {**kwargs, "key_added": key_add}, how="left")
+    kws["targets"] = blitz.enrichr.get_library(
+        library_blitz) if library_blitz else None  # custom resource?
+    model.score(adata, layer=layer, key_added=key_add, **kws)  # ~ cell
+    sc.tl.rank_genes_groups(adata, method="wilcoxon", reference=ref,
+                            groupby=col_condition)  # rank genes ~ condition
+    model.plot_dotplot(adata, groupby=col_condition)  # GEX dotplot
+    res["gsea"] = model.gsea(adata, absolute=absolute)  # run blitzgsea GSEA
+    model.plot_gsea(adata, res["gsea"], interactive_plot=True)  # plot
+    fig["gsea"] = plt.gcf()
+    geo = model.hypergeometric(
+        adata, corr_method=correction)  # significance test
+    res["geo"] = geo
+    res["hypergeometric"] = model.gsea(adata)
+    model.plot_gsea(adata, res["hypergeometric"], interactive_plot=True)
+    fig["hypergeometric"] = plt.gcf()
+    fig["blitz"], fig["blitz_table"] = {}, {}
+    for x in adata.obs[col_condition].unique():  # iterate cell types
+        if set_plot is not None:
+            try:
+                fig["blitz"][x] = blitz.plot.running_sum(
+                    signature=adata.uns[f"{key_add}_gsea"]["scores"][x],
+                    library=adata.uns[f"{key_add}_gsea"]["targets"],
+                    geneset=set_plot,
+                    result=res["gsea"][x], interactive_plot=interactive_plot,
+                    compact=compact_plot)
+                fig["blitz"][x].show()
+            except Exception:
+                traceback.print_exc()
+                print("\n\nGSEA running sum plot failed!")
+        try:
+            fig["blitz_table"][x] = blitz.plot.top_table(
+                adata.uns[f"{key_add}_gsea"]["scores"][x], adata.uns[
+                    f"{key_add}_gsea"]["targets"], res["gsea"][x],
+                interactive_plot=interactive_plot, n=n_top)
+            fig["blitz_table"][x].show()
+        except Exception:
+            traceback.print_exc()
+            print("\n\nGSEA table plot failed!")
+    adata.uns[f"{rgg}_{col_condition}"] = adata.uns[rgg]  # new rank genes
+    if rgo in adata.uns:  # if originally had rank ~ cluster...
+        adata.uns[rgg] = adata.uns[f"{rgg}_o"]  # restore original ranks
+        _ = adata.uns.pop(rgo)  # remove placeholder rank genes from `.uns`
+    return adata, res, fig
 
 
 def perform_pathway_interference(adata, layer=None, n_top=500, copy=True,
@@ -748,6 +801,7 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition, key_control,
             lambda x: np.nan if any((sum(x[col_condition] == k) < 2 for k in [
                 key_treatment, key_control])) else False).dropna(
                     ).index.values.tolist()  # types w/ enough N/condition
+    print(cts)
 
     # Run DEA for Each Cell Type
     for t in cts:  # iterate cell types from above: w/ both conditions & n > 3
@@ -805,9 +859,11 @@ def calculate_dea_deseq2(pdata, col_cell_type, col_condition, key_control,
                     lFCs_limit=None, dpi=200, ax=axs.ravel()[i])  # plot
                 axs.ravel()[i].set_title(x)
             except Exception:
-                print(traceback.format_exc(), f"\n\nDEA volcano failed ({x})")
+                traceback.print_exc()
+                print(f"\n\nDEA volcano failed ({x})")
         fig.tight_layout()
     except Exception:
         fig = None
-        print(traceback.format_exc(), "\n\nDEA volcano plotting failed!")
+        traceback.print_exc()
+        print("\n\nDEA volcano plotting failed!")
     return dea, dea_df, fig

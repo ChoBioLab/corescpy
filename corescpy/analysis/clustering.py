@@ -10,8 +10,9 @@ Preprocessing CRISPR experiment data.
 from warnings import warn
 import os
 import re
+import traceback
+import seaborn as sb
 from copy import deepcopy
-import seaborn as sns
 import celltypist
 from anndata import AnnData
 import scanpy as sc
@@ -92,6 +93,13 @@ def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
             ann = cr.tl.merge_pca_subset(ann, ann_use, retain_cols=False)
         else:  # if used full gene set
             ann = ann_use
+        try:
+            sc.pl.pca_variance_ratio(ann, n_pcs=kws_pca[
+                "n_comps"] if "n_comps" in kws_pca and isinstance(
+                    kws_pca["n_comps"], (int, float)) else 50, log=True)
+        except Exception:
+            traceback.print_exc()
+            warn("\nPlotting PCA variance ratio failed!")
 
     # Neighborhood Graph
     print(f"\n\n<<< COMPUTING NEIGHBORHOOD GRAPH >>>\n{kws_neighbors}\n")
@@ -124,13 +132,17 @@ def cluster(adata, layer=None, method_cluster="leiden", key_added=None,
 
 
 def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
-                      key_reference="rest", layer="log1p", p_threshold=None,
+                      key_reference="rest", layer="log1p",
+                      p_threshold=None, lfc_threshold=None,
                       col_gene_symbols=None, method="wilcoxon", kws_plot=True,
-                      use_raw=False, key_added="rank_genes_groups", **kwargs):
+                      use_raw=False, key_added="rank_genes_groups",
+                      pts=True, **kwargs):
     """Find cluster gene markers."""
     figs = {}
     if kws_plot is True:
         kws_plot = {}
+    if lfc_threshold is None:
+        lfc_threshold = [None, None]
     if assay:
         adata = adata[assay]
     if layer:
@@ -139,14 +151,16 @@ def find_marker_genes(adata, assay=None, col_cell_type="leiden", n_genes=5,
         col_cell_type].astype("category")
     sc.tl.rank_genes_groups(
         adata, col_cell_type, method=method, reference=key_reference,
-        key_added=key_added, use_raw=use_raw, **kwargs)  # rank
+        key_added=key_added, use_raw=use_raw, pts=pts, **kwargs)  # rank
     if isinstance(kws_plot, dict):
         figs["marker_rankings"] = cr.pl.plot_markers(
-            adata, n_genes=n_genes, key_added=key_added, use_raw=use_raw,
-            key_reference=key_reference, **{"col_wrap": 3, **kws_plot})
+            adata, key_added=key_added, use_raw=use_raw,
+            key_reference=key_reference, **{
+                "col_wrap": 3, "n_genes": min([n_genes, 5]) if isinstance(
+                    n_genes, (int, float)) else 5, **kws_plot})
     ranks = make_marker_genes_df(
         adata, col_cell_type, key_added=key_added, p_threshold=p_threshold,
-        log2fc_min=None, log2fc_max=None, gene_symbols=col_gene_symbols)
+        lfc_threshold=lfc_threshold, gene_symbols=col_gene_symbols)
     return ranks, figs
 
 
@@ -156,8 +170,14 @@ def make_marker_genes_df(adata, col_cell_type, key_added="leiden",
     ranks = sc.get.rank_genes_groups_df(adata, None, key=key_added, **kwargs)
     ranks = ranks.rename({"group": col_cell_type}, axis=1).set_index(
         [col_cell_type, "names"])  # format ranking dataframe
-    if lfc_threshold:
-        ranks = ranks[ranks.logfoldchanges >= lfc_threshold]  # filter ~ LFC
+    if lfc_threshold is None:
+        lfc_threshold = [None, None]
+    if isinstance(lfc_threshold, int):
+        lfc_threshold = [lfc_threshold, None]  # assume if 1 # given, maximum
+    if lfc_threshold[0] is not None:
+        ranks = ranks[ranks.logfoldchanges >= lfc_threshold[0]]  # minimum LFC
+    if lfc_threshold[1]:
+        ranks = ranks[ranks.logfoldchanges <= lfc_threshold[1]]  # maximum LFC
     if p_threshold:
         ranks = ranks[ranks.pvals_adj <= p_threshold]  # filter ~ LFC
     return ranks
@@ -259,21 +279,17 @@ def perform_celltypist(adata, model, col_cell_type=None,
                              color=list(ccts), wspace=space)  # all 1 plot
 
     # Plot Confidence Scores
-    if "majority_voting" in ann.obs:  # if did over-clustering/majority voting
-        conf = ann.obs[["majority_voting", "predicted_labels", "conf_score"
-                        ]].set_index("conf_score").stack().rename_axis(
-                            ["Confidence Score", "Annotation"]).to_frame(
-                                "Label").reset_index()  # scores ~ label
-
-        aspect = int(len(conf[conf.Annotation == "predicted_labels"
-                              ].Label.unique()) / 15)  # aspect ratio
-        figs["confidence"] = sns.catplot(
-            data=conf, y="Confidence Score", row="Annotation", height=40,
-            aspect=aspect, x="Label", hue="Label", kind="violin")  # plot
-        figs["confidence"].figure.suptitle("CellTypist Confidence Scores")
-        for a in figs["confidence"].axes.flat:
-            _ = a.set_xticklabels(a.get_xticklabels(), rotation=90)
-        figs["confidence"].fig.show()
+    if "majority_voting" in ann.obs and (
+            "conf_score" in ann.obs.columns):  # if did majority voting
+        try:
+            figs["confidence"] = sb.displot(
+                ann.obs, x="conf_score", hue="majority_voting",
+                kind="kde", fill=True, cut=0)
+            print(f"\n\n\n{'=' * 80}\nConfidence Scores\n{'=' * 80}",
+                  "\n\n", ann.obs.groupby("majority_voting").apply(
+                      lambda x: x["conf_score"].describe()).round(2), "\n\n")
+        except Exception:
+            pass
     return ann, res, figs
 
 
@@ -296,6 +312,8 @@ def annotate_by_markers(adata, data_assignment, method="overlap_count",
     if isinstance(data_assignment, (str, os.PathLike)):
         data_assignment = pd.read_excel(data_assignment, index_col=0)
     assign = data_assignment.copy()
+    if assign.shape[1] == 1:
+        col_assignment = assign.columns[0]
     if renaming is True:
         sources = assign[col_assignment].unique()
         rename = dict(zip(sources, [" ".join([i.capitalize() if i and i[

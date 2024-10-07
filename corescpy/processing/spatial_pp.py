@@ -13,6 +13,7 @@ and `stlearn` tutorials.
 """
 
 import tifffile
+# import functools
 import csv
 import os
 import re
@@ -24,6 +25,11 @@ import scanpy as sc
 import squidpy as sq
 # import stlearn as st
 import spatialdata_io as sdio
+from spatialdata_io.experimental import from_legacy_anndata
+from spatialdata_io._constants._constants import XeniumKeys
+from spatialdata_io.readers.xenium import _get_images
+from spatialdata_io.readers._utils._utils import (
+    _initialize_raster_models_kwargs)
 import scipy.sparse as sparse
 import scipy.io as sio
 import subprocess
@@ -33,20 +39,18 @@ import tangram as tg
 from anndata import AnnData
 # from spatialdata import SpatialData
 from spatialdata.models import TableModel
-from spatialdata_plot.pp import PreprocessingAccessor
+# from spatialdata_plot.pp import PreprocessingAccessor
 import pandas as pd
 import numpy as np
-# from corescpy.visualization import plot_integration_spatial
+from corescpy.visualization import plot_integration_spatial
 # from corescpy.utils import merge
-import corescpy as cr
+# import corescpy as cr
 
 # Define constant.
 # z-slices are 3 microns apart
 Z_SLICE_MICRON = 3
-SPATIAL_KEY = "spatial"
-SPATIAL_IMAGE_KEY_SEP = "___"
 STORE_UNS_SQUIDPY = True  # for back-compatibility with Squidpy
-# store images from SpatialData object in SpatialData.table.uns (AnnData.uns)
+SPATIAL_IMAGE_KEY_SEP = "___"
 
 
 def _get_control_probe_names():
@@ -57,7 +61,8 @@ def _get_control_probe_names():
 def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
                  visium=False, spatial_key="spatial", library_id=None,
                  col_gene_symbols="gene_symbols", prefix=None, gex_only=False,
-                 col_sample_id="library_key_spatial", n_jobs=1, **kwargs):
+                 col_sample_id="library_key_spatial", n_jobs=1,
+                 path_xenium=None, **kwargs):
     """Read Xenium or Visium spatial data into an AnnData object."""
     # missing_fps = file_path_spatial is None and visium is False
     # uns_spatial = kwargs.pop("uns_spatial", None)
@@ -100,27 +105,47 @@ def read_spatial(file_path, file_path_spatial=None, file_path_image=None,
     #             }},  uns_spatial)}  # default .uns merge w/ specified
     # if col_sample_id not in adata.obs:
     #     adata.obs.loc[:, col_sample_id] = library_id
-    if isinstance(visium, dict) or visium is True:
+    if library_id is None:
+        print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
+        library_id = str(file_path)
+    if isinstance(visium, dict) or visium is True or visium == "hd":
+        visium_hd = (isinstance(visium, str) and visium == "hd") or (
+            isinstance(visium, dict) and "hd" in visium and visium["hd"])
         if not isinstance(visium, dict):
-            visium = {}  # unpack file path & arguments
-        adata = sq.read.visium(file_path, **visium)  # read Visium
+            visium = {}
+        if visium_hd is True:
+            defs = dict(dataset_id=library_id, filtered_counts_file=True,
+                        bin_size=None, bins_as_squares=True,
+                        fullres_image_file=None, load_all_images=False)
+            visium = {**defs, **visium}
+            if "hd" in visium:
+                _ = visium.pop("hd")
+            adata = sdio.visium_hd(file_path, **visium)  # read Visium
+        else:
+            adata = sq.read.visium(file_path, **visium)  # read Visium
     else:
-        # sdata = sdio.xenium(file_path, n_jobs=n_jobs)
-        # adata = sdata.table
-        # adata.uns["sdata"] = sdata
-        if library_id is None:
-            print(f"\n*** USING FILE PATH {file_path} as library ID.\n")
-            library_id = str(file_path)
-        valid_args = inspect.signature(sdio.xenium).parameters
+        valid_args = inspect.signature(sc.read_h5ad if os.path.splitext(
+            file_path)[1] == ".h5ad" else sdio.xenium).parameters
         kws = {k: v for k, v in kwargs.items() if k in valid_args}
-        adata = sdio.xenium(file_path, n_jobs=n_jobs, **kws)
+        if os.path.splitext(file_path)[1] == ".h5ad":
+            adata = sc.read_h5ad(file_path, **kws)
+            try:
+                adata = from_legacy_anndata(adata)
+            except Exception:
+                print(traceback.format_exc(),
+                      "\n\n*** Failed to convert anndata to spatialdata.\n\n")
+        else:
+            adata = sdio.xenium(file_path, n_jobs=n_jobs, **kws)
         if STORE_UNS_SQUIDPY:
-            adata = update_spatial_uns(adata, library_id, col_sample_id)
+            adata = update_spatial_uns(adata, library_id, col_sample_id,
+                                       path_xenium=path_xenium)
     return adata
 
 
-def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
-    """Copy SpatialData.images to .table.uns (Squidpy-compatible)."""
+def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False,
+                       spatial_key="spatial", path_xenium=None,
+                       key_table="table", **kwargs):
+    """Copy SpatialData.images to .uns (Squidpy-compatible)."""
     imgs = {}
     if "images" in dir(adata):
         for x in adata.images:
@@ -133,22 +158,42 @@ def update_spatial_uns(adata, library_id, col_sample_id, rna_only=False):
                 if len(scales) > 0 and "scale" in i and str(i.split(
                         "scale")[1]) == str(min(scales)):
                     imgs["hires"] = imgs[key]  # Squidpy-compatible
+    elif path_xenium is not None:
+        imread_kwargs = kwargs.pop("imread_kwargs", {})
+        kws_img_mods = kwargs.pop("image_models_kwargs", {})
+        kws_img_mods, _ = _initialize_raster_models_kwargs(kws_img_mods, {})
+        morph_dir = os.path.join(path_xenium,
+                                 XeniumKeys.MORPHOLOGY_FOCUS_DIR)
+        files = {f for f in os.listdir(morph_dir) if f.endswith(".ome.tif")}
+        if len(files) == 1:
+            channel_names = {0: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_0.value}
+        else:
+            channel_names = {0: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_0.value,
+                             1: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_1.value,
+                             2: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_2.value,
+                             3: XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_3.value,
+                             4: "dummy"}
+        kws_img_mods = dict(kws_img_mods)
+        kws_img_mods["c_coords"] = list(channel_names.values())
+        imgs["morphology_focus"] = _get_images(
+            morph_dir, XeniumKeys.MORPHOLOGY_FOCUS_CHANNEL_IMAGE.format(0),
+            imread_kwargs, kws_img_mods)
+    else:
+        print("\n\nMorphology images not available to load in objects at "
+              "time of import. Check if already present.")
     if rna_only is True:
-        # if col_sample_id in adata.table.obs:
-        #     rna = adata.table[adata.table.obs[col_sample_id] == library_id]
-        rna = adata.table if "table" in dir(adata) else adata
-        rna.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-        # rna.uns[SPATIAL_KEY]["library_id"] = library_id
+        rna = adata.tables[key_table] if "tables" in dir(adata) else adata
+        rna.uns[spatial_key] = {library_id: {"images": imgs}}
         return rna
     else:
-        adata.table.uns[SPATIAL_KEY] = {library_id: {"images": imgs}}
-        # adata.table.uns[SPATIAL_KEY]["library_id"] = library_id
-        if col_sample_id not in adata.table.obs:
-            adata.table.obs.loc[:, col_sample_id] = library_id
+        adata.tables[key_table].uns[spatial_key] = {
+            library_id: {"images": imgs}}
+        if col_sample_id not in adata.tables[key_table].obs:
+            adata.tables[key_table].obs.loc[:, col_sample_id] = library_id
         return adata
 
 
-def xenium_explorer_selection(file_coord, pixel_size=0.2125):
+def xenium_explorer_selection(file_coord, pixel_size=0.2125, as_list=False):
     """
     Read Xenium Explorer selection file & return polygon object.
 
@@ -160,23 +205,35 @@ def xenium_explorer_selection(file_coord, pixel_size=0.2125):
     multiple selections are included in any file.
 
     """
-    dff = pd.read_csv(file_coord, skiprows=2)
-    if isinstance(file_coord, (list, np.ndarray, set, tuple)):
-        poly = MultiPolygon([xenium_explorer_selection(f, pixel_size)
-                             for f in file_coord])
-    elif "Selection" in dff.columns:
-        poly = []
-        for s in dff.Selection.unique():
-            poly += [Polygon(dff[dff.Selection == s].drop(
-                "Selection", axis=1).values / pixel_size)]
-        poly = MultiPolygon(poly)
-    else:
-        poly = Polygon(dff.values / pixel_size)
+    # if isinstance(file_coord, (list, np.ndarray, set, tuple)):
+    #     poly = [xenium_explorer_selection(
+    #         f, pixel_size=pixel_size, as_list=True) for f in file_coord]
+    #     poly = MultiPolygon(functools.reduce(lambda i, j: i + j, poly))
+    # else:
+    #     dff = pd.read_csv(file_coord, skiprows=2)
+    #     if "Selection" in dff and len(dff["Selection"].unique()) > 1:
+    #         poly = []
+    #         for s in dff.Selection.unique():
+    #             poly += [Polygon(dff[dff.Selection == s].drop(
+    #                 "Selection", axis=1).values / pixel_size)]
+    #         if as_list is False:
+    #             poly = MultiPolygon(poly)
+    #     else:
+    #         if "Selection" in dff.columns:
+    #             dff = dff.drop("Selection", axis=1)
+    #         poly = Polygon(dff.values / pixel_size)
+    #         if as_list is True:
+    #             poly = [poly]
+    poly = sdio.xenium_explorer_selection(
+        file_coord, pixel_size=pixel_size, return_list=as_list)
+    poly = MultiPolygon(poly) if isinstance(poly, (
+        np.ndarray, list)) else Polygon(poly)
     return poly
 
 
 def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
-                   col_region=None, key_region=None, var_names=None):
+                   col_region=None, key_region=None,
+                   key_table="table", var_names=None):
     """
     Filter a SpatialData object to contain only specified cells.
     (Modified from https://github.com/scverse/spatialdata/issues/556.)
@@ -184,12 +241,14 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
     Args:
         sdata (SpatialData): A SpatialData object
         key_cell_id (list): Cells to include. Defaults to all.
-        col_cell_id (str): Name of column in `sdata.table.obs` that has
+        col_cell_id (str): Name of column in
+            `sdata.tables[key_table].obs` that has
             cell IDs. The `regions` argument elements should exist
             in this column.
         key_region (list): Regions/samples/subjects to include.
             Defaults to all.
-        col_region (str): Name of column in `sdata.table.obs` that has
+        col_region (str): Name of column in
+            `sdata.tables[key_table].obs` that has
             region/sample/subject IDs. The `key_regions` argument
             elements should exist in this column. PROVIDE EVEN IF NOT
             SUBSETTING BY REGION.
@@ -199,7 +258,7 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
     Returns:
         A new SpatialData instance
     """
-    sdata.pp: PreprocessingAccessor  # noqa: F401
+    # sdata.pp: PreprocessingAccessor  # noqa: F401
     # sdata_subset = copy.deepcopy(sdata)
     sdata_subset = sdata.subset(element_names=[
         x[1] for x in sdata.gen_elements()], filter_tables=True)
@@ -207,8 +266,9 @@ def subset_spatial(sdata, key_cell_id=None, col_cell_id="cell_id",
     # reference dataset, so that it can be safely modified.
     assert not sdata_subset.is_backed()
     # Genes
-    var_names = sdata.table.var_names if var_names is None else var_names
-    subs = sdata.table.copy()
+    var_names = sdata.tables[
+        key_table].var_names if var_names is None else var_names
+    subs = sdata.tables[key_table].copy()
     # Preserve order by checking "isin" instead of slicing.
     # Also guarantees no duplicates.
     if key_cell_id is not None:  # optionally, subset by cells
@@ -422,7 +482,7 @@ def impute_spatial(adata_sp, adata_sc, col_cell_type,
     # Plot
     if plot is True:  # plotting
         try:
-            figs = cr.pp.plot_integration_spatial(
+            figs = plot_integration_spatial(
                 adata_sp, adata_sp_new, adata_sc=None,
                 col_cell_type=[col_cell_type, col_cell_type_sp],
                 col_annotation=col_annotation, plot_density=plot_density,

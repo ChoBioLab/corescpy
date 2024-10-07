@@ -13,16 +13,15 @@ import os
 import scanpy as sc
 import pandas as pd
 import numpy as np
-from corescpy.processing import get_layer_dict
-
-layers = get_layer_dict()
 
 
 def create_pseudobulk(adata, col_cell_type, col_sample_id=None,
-                      layer=layers["counts"], mode="sum",
+                      layer="counts", mode="sum",
                       kws_process=True, **kwargs):
     """Get pseudo-bulk of scRNA-seq data."""
     import decoupler as dc  # noqa: E402
+    from corescpy import get_layer_dict
+    layers = get_layer_dict()
     if kws_process is True:
         kws_process = dict(target_sum=1e6, max_value=10, n_comps=10)
     if layer and layer not in adata.layers:

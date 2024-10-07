@@ -34,20 +34,6 @@ REGRESS_OUT_VARS = None  # default variables to regress out
 #                    gene_filter_ncounts=None)  # can call using 1 arguments
 
 
-def get_layer_dict():
-    """Retrieve layer name conventions."""
-    lays = {"preprocessing": "preprocessing",
-            "perturbation": "X_pert",
-            "unnormalized": "unnormalized",
-            "norm_total_counts": "norm_total_counts",
-            "log1p": "log1p",
-            "unscaled": "unscaled",
-            "scaled": "scaled",
-            "unregressed": "unregressed",
-            "counts": "counts"}
-    return lays
-
-
 def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
                         kws_cluster=None, kws_harmony=True, **kwargs):
     """Create objects, then preprocess, cluster, & integrate them."""
@@ -125,7 +111,8 @@ def create_object_multi(file_path, kws_init=None, kws_pp=None, spatial=False,
 
 def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                   kws_process_guide_rna=None, assay_gdo=None, raw=False,
-                  gex_only=False, prefix=None, spatial=False, **kwargs):
+                  gex_only=False, prefix=None, spatial=False,
+                  key_table="table", **kwargs):
     """
     Create object from Scanpy- or Muon-compatible file(s) or object.
     """
@@ -135,8 +122,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                          muon.MuData)):  # if already data object
         print("\n\n<<< LOADING OBJECT >>>")
         adata = file.copy() if "copy" in dir(file) else file
-        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
-            adata.table.uns["original_ix"] = adata.table.obs.index.values
 
     # Spatial Data
     elif spatial not in [None, False]:
@@ -144,8 +129,6 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
                          col_gene_symbols=col_gene_symbols),
                   **kwargs}  # user-specified + variable keyword arguments
         adata = cr.pp.read_spatial(file_path=file, **kwargs)
-        if "table" in dir(adata) and "original_ix" not in adata.table.uns:
-            adata.table.uns["original_ix"] = adata.table.obs.index.values
 
     # Non-Spatial Data
     elif isinstance(file, (str, os.PathLike)) and os.path.splitext(
@@ -195,13 +178,15 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
 
     # Formatting & Initial Counts
     try:
-        (adata.table if isinstance(adata, spatialdata.SpatialData) else adata
+        (adata.tables[key_table] if isinstance(
+            adata, spatialdata.SpatialData) else adata
          ).var_names_make_unique()
     except Exception:
         print(traceback.format_exc())
         warn("\n\n\nCould not make var names unique.")
     try:
-        (adata.table if isinstance(adata, spatialdata.SpatialData) else adata
+        (adata.tables[key_table] if isinstance(
+            adata, spatialdata.SpatialData) else adata
          ).obs_names_make_unique()
     except Exception:
         print(traceback.format_exc())
@@ -209,9 +194,9 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
     cr.tl.print_counts(adata, title="Initial")
 
     # Gene Symbols -> Index of .var
-    rename_var_index(adata.table if isinstance(
-        adata, spatialdata.SpatialData) else adata,
-                     assay=assay, col_gene_symbols=col_gene_symbols)
+    if not isinstance(adata, spatialdata.SpatialData):
+        rename_var_index(adata, assay=assay,
+                         col_gene_symbols=col_gene_symbols)
 
     # Process Guide RNA
     if kws_process_guide_rna not in [None, False]:
@@ -227,12 +212,13 @@ def create_object(file, col_gene_symbols="gene_symbols", assay=None,
         cr.tl.print_counts(adata, title="Post-gRNA Processing", group_by=cct)
 
     # Initial Counts Layer (If Not Present)
-    layers = cr.pp.get_layer_dict()  # standard layer names
-    rna = adata.table if isinstance(adata, spatialdata.SpatialData
-                                    ) else adata[assay] if assay else adata
+    layers = cr.get_layer_dict()  # standard layer names
+    rna = adata.tables[key_table] if isinstance(
+        adata, spatialdata.SpatialData) else adata[assay] if assay else adata
     if layers["counts"] not in rna.layers:
         if isinstance(adata, spatialdata.SpatialData):
-            adata.table.layers[layers["counts"]] = adata.table.X.copy()
+            adata.tables[key_table].layers[layers["counts"]] = adata.tables[
+                key_table].X.copy()
         elif assay:
             adata[assay].layers[layers["counts"]] = adata[assay].X.copy()
         else:
@@ -345,9 +331,8 @@ def process_data(adata, col_gene_symbols=None, col_cell_type=None,
     """
     # Setup Object
     figs = {}
-    layers = cr.pp.get_layer_dict()  # layer names
+    layers = cr.get_layer_dict()  # layer names
     ann = adata.copy()  # copy so passed AnnData object not altered inplace
-    print(ann)
     if layers["counts"] not in ann.layers:
         if ann.X.min() < 0:  # if any data < 0, can't be gene read counts
             raise ValueError(
@@ -548,7 +533,7 @@ def z_normalize_by_reference(adata, col_reference="Perturbation",
     if kwargs:
         print(f"\nUn-Used Keyword Arguments: {kwargs}\n\n")
     if layer is None:
-        layer = cr.pp.get_layer_dict()["counts"]  # raw counts layer
+        layer = cr.get_layer_dict()["counts"]  # raw counts layer
     if layer is not None:
         adata.X = adata.layers[layer].copy()  # reset to raw counts
     if layer:
@@ -571,7 +556,7 @@ def perform_qc(adata, log1p=True, hue=None, patterns=None, layer="counts"):
     figs = {}
     if layer is not None:
         adata.X = adata.layers[layer if (
-            layer in adata.layers) else cr.pp.get_layer_dict()[layer]].copy()
+            layer in adata.layers) else cr.get_layer_dict()[layer]].copy()
     if patterns is None:
         patterns = [("MT-", "mt-"), ("RPS", "RPL", "rps", "rpl"), (
             "^HB[^(P)]", "^hb[^(p)]")]  # pattern matching for gene symbols
@@ -731,7 +716,7 @@ def filter_qc(adata, outlier_mads=None, drop_outliers=True,
         if isinstance(cell_filter_prb, (int, float)):  # if just 1 # for MT %
             cell_filter_prb = [0, cell_filter_prb]  # ...assume for maximum %
         print("\n<<< PERFORMING THRESHOLD-BASED FILTERING >>>")
-        print(f"\nTotal Cell Count: {ann.n_obs}")
+        print(f"\n\tTotal Cell Count: {ann.n_obs}")
         if cell_filter_pmt is not None:
             print("\n\t*** Filtering cells by mitochondrial gene %...")
             min_mt, max_mt = cell_filter_pmt

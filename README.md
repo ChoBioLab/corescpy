@@ -16,28 +16,31 @@ Correspondence: elizabeth.aslinger@aya.yale.edu
 with desired environment name):
 `conda create -n corescpy python=3.10.4  # create python environment`
 
-3. Activate the conda environment with `conda activate corescpy`.
+1. Activate the conda environment with `conda activate corescpy`.
 
 4. Clone the repository to your local computer:
 `git clone git@github.com:ChoBioLab/corescpy.git`,
 `git clone https://github.com/ChoBioLab/corescpy.git`, or
 look above for the green "Code" button and press it for instructions.
 
-5. Navigate to the repository directory (replace <DIRECTORY> with your path):
+1. Navigate to the repository directory (replace <DIRECTORY> with your path):
 `cd <DIRECTORY>`
 
-6. Install the package with pip. (Ensure you have pip installed.)
+2. Install 
+
+1. Install the package with pip. (Ensure you have pip installed.)
 `pip install .`
 
-7. If you have issues with resolving/finding the most up-to-date version of the `spatialdata` and/or `spatialdata-io` packages, try running:
+1. If you have issues with resolving/finding the most up-to-date version of the `spatialdata` and/or `spatialdata-io` packages, try running:
 ```
 pip install git+https://github.com/scverse/spatialdata
 pip install git+https://github.com/scverse/spatialdata-io
 ```
-in your terminal while in your conda environment, then re-try step (6).
+in your terminal while in your conda environment, then re-try step (6). If you have an M1 Mac, [see this thread about known compatibility issues](https://github.com/scverse/pertpy/issues/201#issuecomment-1431621313) with `pertpy` if you have issues with the install.
 
 8. If you're planning to use this environment with Jupyter notebooks, run `conda install nb_conda_kernels`, then `pip install ipykernel`.
 
+If you have issues importing modules or functions (particularly if it only happens if you don't run the import after launching `python` while you are in the `corescpy` directory), try `mv <CONDA_ENV_PATH>/site-packages/_corescpy.pth <CONDA_ENV_PATH>/_corescpy.pth.bak` (replacing <CONDA_ENV_PATH> with your conda site-packages path, e.g., `/home/elizabeth/elizabeth/miniconda3/envs/corescpy/lib/python3.10/site-packages`), then `pip uninstall corescpy` then `cd corescpy` (replace "corescpy" with path to your corescpy top-level directory if needed) then `pip install -e .`. Then try `cd` to return to your home directory, then `python -c "import corescpy; print(dir(corescpy))"` from your terminal. Make sure it prints out submodules (e.g., `analysis`), and not just the base attributes (e.g., `__doc__`).
 
 ** Note: To use GPU resources, use `conda install -c rapidsai -c nvidia -c conda-forge cugraph cuml cudf` and install the gpu version of coreSCpy (which should `pip install scanpy[rapids]`).
 

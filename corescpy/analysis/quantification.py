@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=no-member
 """
-Analyses focused on cell type composition analyses.
+Analyses focused on quantification of transcripts and cell types.
 
 @author: E. N. Aslinger
 """
@@ -42,9 +42,9 @@ def classify_gex_cells(adata, col_cell_type=None, genes=None,
         result = grouped.agg(["sum", "count"])
         result.columns = ["N_Cells_Positive", "N_Cluster"]
         result.loc[:, "Percent"] = 100 * result["N_Cells_Positive"] / result[
-            "N_Cluster"]
+            "N_Cluster"]  # DO NOT CHANGE THESE NAMES!
         quants[gene] = result
-    quants = pd.concat(quants, names=["Gene"])
+    quants = pd.concat(quants, names=["Gene"])  # DO NOT CHANGE AXIS NAME!
     quants.loc[:, "N_Sample"] = adata.obs.shape[0]
     quants = quants.assign(threshold=threshold)
     return quants
@@ -81,7 +81,7 @@ def classify_coex_cells(adata, col_cell_type=None, genes=None,
         coex = coex.toarray()
     coex = pd.DataFrame(coex, index=adata.obs.index, columns=genes)
     coex = coex.sum(axis=1) >= min_genes
-    adata.obs["coexpressed"] = coex
+    adata.obs.loc[:, "coexpressed"] = coex
     grouped = adata.obs.groupby(col_cell_type)["coexpressed"]
     quants = grouped.agg(["sum", "count"])
     quants.columns = ["N_Cells_Positive", "N_Cluster"]
